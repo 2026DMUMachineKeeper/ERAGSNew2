@@ -11,9 +11,11 @@ module.exports = {
       colors: {
         red: '#FF3B3B',
         background: '#1A1D24',
+        white: '#FFFFFF',
+        gray: '#525D6D',
+        lightGray: '#4A5B65',
       },
       fontFamily: {
-  
         pretendardRegular: ['Pretendard-Regular', 'System'],
         pretendardMedium: ['Pretendard-Medium', 'System'],
         pretendardSemiBold: ['Pretendard-SemiBold', 'System'],
@@ -21,7 +23,7 @@ module.exports = {
       },
       fontSize,
       spacing: {
-        '15': '60px',
+        15: '60px',
       },
       letterSpacing: {
         erags: 2.4,
