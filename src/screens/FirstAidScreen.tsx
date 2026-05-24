@@ -18,21 +18,26 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
   const [selectedLabel, setSelectedLabel] = React.useState<string | null>(null);
 
   return (
-    <SafeAreaView className="flex-1 bg-background px-4 justify-between">
-      <View className="mt-15" />
-      <TouchableOpacity onPress={() => navigation.goBack()}>
-        <BackIcon width={24} height={24} />
-      </TouchableOpacity>
-      <View className="mt-2">
-        <Text className=" tracking-erags text-title text-white">
-          응급처치 시작
-        </Text>
-        <Text className="tracking-erags text-body text-gray mt-2">
+    <SafeAreaView className="flex-1 bg-background">
+      <View className="px-4 pt-10">
+        <View className="flex-row items-center">
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <BackIcon width={24} height={24} />
+          </TouchableOpacity>
+
+          <Text className="ml-3 text-body text-white tracking-erags font-suitBold">
+            응급처치 시작
+          </Text>
+        </View>
+
+        <Text className="mt-2 text-lightGray text-body tracking-erags font-suitBold">
           해당되는 유형을 선택해주세요
         </Text>
+
+        <View className="h-[1px] bg-lightGray rounded-full mt-2" />
       </View>
-      <View className="h-[1px] bg-lightGray rounded-full mt-2" />
-      <View className="mt-3 flex-1">
+
+      <View className="px-4 mt-3 flex-1">
         <FlatList
           style={{ flex: 1 }}
           data={[
@@ -61,7 +66,7 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
             return (
               <TouchableOpacity
                 className={`h-[140px] w-[176px] bg-[#22262E] rounded-2xl items-center justify-center border-2 ${
-                  selected ? 'border-[#2ECC71]' : 'border-[#363C46]'
+                  selected ? 'border-[#FF3B3B]' : 'border-[#363C46]'
                 }`}
                 style={{ marginBottom: 0 }}
                 onPress={() => {
@@ -72,7 +77,9 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
                 <View className="mb-3">
                   <Icon width={40} height={40} />
                 </View>
-                <Text className="text-body text-white">{item.label}</Text>
+                <Text className="text-body text-white font-suitBold">
+                  {item.label}
+                </Text>
               </TouchableOpacity>
             );
           }}
@@ -80,19 +87,19 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
       </View>
       <View className="mt-4 mb-5">
         <TouchableOpacity
-          className="h-16 bg-[#2ECC71] rounded-lg justify-center items-center"
+          className={`mx-4 h-16 rounded-lg justify-center items-center ${
+            selectedId ? 'bg-[#FF3B3B]' : 'bg-[#6B6F76]'
+          }`}
+          disabled={!selectedId}
           onPress={() => {
-            if (selectedId && selectedLabel) {
-              navigation.navigate('FirstAidDetail', {
-                mainId: selectedId,
-                mainLabel: selectedLabel,
-              });
-            } else {
-              navigation.navigate('FirstAidDetail', {
-                mainId: '1',
-                mainLabel: '화상',
-              });
+            if (!selectedId || !selectedLabel) {
+              return;
             }
+
+            navigation.navigate('FirstAidDetail', {
+              mainId: selectedId,
+              mainLabel: selectedLabel,
+            });
           }}
         >
           <Text className="text-white font-bold">다음 단계</Text>

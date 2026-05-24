@@ -121,12 +121,11 @@ export function MedicinesStockScreen({
             <BackIcon width={24} height={24} />
           </TouchableOpacity>
 
-          <Text className="ml-3 text-body text-white tracking-erags">
+          <Text className="ml-3 text-body text-white tracking-erags font-suitBold">
             약품 재고
           </Text>
         </View>
-
-        <Text className="mt-2 text-lightGray text-body tracking-erags">
+        <Text className="mt-2 text-lightGray text-body tracking-erags font-suitBold">
           총 {medicines.length}개 품목
         </Text>
 
@@ -151,7 +150,9 @@ export function MedicinesStockScreen({
                 <MedicinesIcon2 width={40} height={40} />
 
                 <View className="ml-3">
-                  <Text className="text-white text-body">{m.name}</Text>
+                  <Text className="text-white text-body font-suitBold">
+                    {m.name}
+                  </Text>
 
                   <Text className="text-lightGray text-sm mt-2">{m.info}</Text>
                 </View>
@@ -188,7 +189,9 @@ export function MedicinesStockScreen({
               elevation: 8,
             }}
           >
-            <Text className="text-white text-title">약품 추가</Text>
+            <Text className="text-white text-title font-suitBold">
+              약품 추가
+            </Text>
           </TouchableOpacity>
         </View>
       )}
