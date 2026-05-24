@@ -16,7 +16,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </Text>
       </View>
       <View className="mt-14">
-        <TouchableOpacity className="h-[132px] bg-red rounded-2xl">
+        <TouchableOpacity
+          className="h-[132px] bg-red rounded-2xl"
+          onPress={() => navigation.navigate('FirstAid')}
+        >
           <Text className="text-white text-title text-center mt-8">
             응급처치 시작
           </Text>
