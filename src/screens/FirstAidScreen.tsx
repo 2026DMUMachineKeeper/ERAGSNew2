@@ -41,7 +41,7 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
         <FlatList
           style={{ flex: 1 }}
           data={[
-            { id: '1', label: '화상', icon: 'med' },
+            { id: '1', label: '출혈', icon: 'med' },
             { id: '2', label: '화상(오른쪽)', icon: 'med2' },
             { id: '3', label: '화상', icon: 'mic' },
             { id: '4', label: '화상(오른쪽)', icon: 'cam' },
@@ -66,7 +66,7 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
             return (
               <TouchableOpacity
                 className={`h-[140px] w-[176px] bg-[#22262E] rounded-2xl items-center justify-center border-2 ${
-                  selected ? 'border-[#FF3B3B]' : 'border-[#363C46]'
+                  selected ? 'border-[#12B76A]' : 'border-[#363C46]'
                 }`}
                 style={{ marginBottom: 0 }}
                 onPress={() => {
