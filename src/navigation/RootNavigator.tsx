@@ -19,6 +19,7 @@ export type RootStackParamList = {
         totalSteps?: number;
       }
     | undefined;
+  QRCode: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -48,6 +49,10 @@ export function RootNavigator() {
         component={
           require('../screens/EmergencyCompleteScreen').EmergencyCompleteScreen
         }
+      />
+      <Stack.Screen
+        name="QRCode"
+        component={require('../screens/QRCodeScreen').QRCodeScreen}
       />
     </Stack.Navigator>
   );

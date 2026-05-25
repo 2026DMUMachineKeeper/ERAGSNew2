@@ -11,9 +11,9 @@ type DetailProps = NativeStackScreenProps<RootStackParamList, 'FirstAidDetail'>;
 export function FirstAidDetail({ navigation, route }: DetailProps) {
   const main = route.params?.mainLabel ?? '항목';
   const subtypes = [
-    { id: 'a', label: `${main} - 경미한` },
-    { id: 'b', label: `${main} - 중간` },
-    { id: 'c', label: `${main} - 심한` },
+    { id: 'a', label: `${main} - 경미한 출혈` },
+    { id: 'b', label: `${main} - 일반 출혈` },
+    { id: 'c', label: `${main} - 대량 출혈` },
   ];
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 

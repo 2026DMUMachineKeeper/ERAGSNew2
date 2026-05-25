@@ -62,7 +62,7 @@ export function EmergencyCompleteScreen({ navigation, route }: Props) {
       <View style={{ paddingHorizontal: 16, paddingBottom: 20 }}>
         <EmergencyCompleteActionButton
           title="완료"
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.navigate('QRCode')}
         />
       </View>
     </SafeAreaView>

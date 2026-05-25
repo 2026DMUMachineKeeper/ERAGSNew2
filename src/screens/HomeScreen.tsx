@@ -24,14 +24,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text className="text-coment text-[#7F8389] mt-1 z-10">
               EMERGENCY RESPONSE AID GUIDANCE
             </Text>
-            <View className=" mt-10 z-10">
-              <Text className="  text-comment text-[#D3D5D5] tracking-erags font-sultRegular z-10">
-                안녕하세요, OOO님
-              </Text>
-              <Text className="text-comment text-[#7F8389] tracking-erags font-sultRegular z-10">
-                정확한 응급처치 방법을 알려드릴게요.
-              </Text>
-            </View>
+            <View className=" mt-10 z-10"></View>
           </View>
 
           <View className="absolute right-[-18px] top-2 z-0 pointer-events-none">
