@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -6,6 +6,7 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon, MedicinesIcon2 } from '../assets';
 import AddMedicineBottomSheet from '../components/AddMedicineBottomSheet';
 import BarcodeScanModal from '../components/BarcodeScanModal';
+import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
 
 type MedicinesStockScreenProps = NativeStackScreenProps<
   RootStackParamList,
@@ -15,67 +16,49 @@ type MedicinesStockScreenProps = NativeStackScreenProps<
 export function MedicinesStockScreen({
   navigation,
 }: MedicinesStockScreenProps) {
-  const [medicines, setMedicines] = useState([
-    {
-      id: '43',
-      name: '아세트아미노펜',
-      info: '설명이나 추가 정보',
-      qty: 12,
-      expiry: '2026-12-31',
-    },
-    {
-      id: '23',
-      name: '이부프로펜',
-      info: '통증 완화',
-      qty: 5,
-      expiry: '2025-10-10',
-    },
-    {
-      id: '341',
-      name: '아스피린',
-      info: '혈액응고방지',
-      qty: 3,
-      expiry: '2024-08-15',
-    },
-    {
-      id: '14',
-      name: '아세트아미노펜',
-      info: '설명이나 추가 정보',
-      qty: 12,
-      expiry: '2026-12-31',
-    },
-    {
-      id: '233',
-      name: '이부프로펜',
-      info: '통증 완화',
-      qty: 5,
-      expiry: '2025-10-10',
-    },
-    {
-      id: '34',
-      name: '아스피린',
-      info: '혈액응고방지',
-      qty: 3,
-      expiry: '2024-08-15',
-    },
-    {
-      id: '342',
-      name: '아스피린',
-      info: '혈액응고방지',
-      qty: 3,
-      expiry: '2024-08-15',
-    },
-    {
-      id: '334',
-      name: '아스피린',
-      info: '혈액응고방지',
-      qty: 3,
-      expiry: '2024-08-15',
-    },
-  ]);
+  const [medicines, setMedicines] = useState<MedicineItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showScanModal, setShowScanModal] = useState(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadMedicines = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+
+        const fetchedMedicines = await fetchMedicines();
+
+        if (!isActive) {
+          return;
+        }
+
+        setMedicines(fetchedMedicines);
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        console.error('[MedicinesStockScreen] 약품 조회 실패:', error);
+        setLoadError('약품 데이터를 불러오지 못했습니다.');
+        setMedicines([]);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadMedicines();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const handleScannedBarcode = (barcode: string) => {
     console.log('[MedicinesStockScreen] 바코드 스캔됨:', barcode);
@@ -87,6 +70,10 @@ export function MedicinesStockScreen({
         info: `바코드 ${barcode}`,
         qty: 1,
         expiry: '미지정',
+        threshold: 0,
+        barcode,
+        usage: '정보 없음',
+        efficacy: '정보 없음',
       },
       ...current,
     ]);
@@ -126,8 +113,12 @@ export function MedicinesStockScreen({
           </Text>
         </View>
         <Text className="mt-2 text-lightGray text-body tracking-erags font-suitBold">
-          총 {medicines.length}개 품목
+          {isLoading ? '약품 데이터를 불러오는 중...' : `총 ${medicines.length}개 품목`}
         </Text>
+
+        {loadError ? (
+          <Text className="mt-2 text-red text-sm font-suitBold">{loadError}</Text>
+        ) : null}
 
         <View className="h-[1px] bg-lightGray rounded-full mt-2" />
       </View>
