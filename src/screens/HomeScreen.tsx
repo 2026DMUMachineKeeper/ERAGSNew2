@@ -2,55 +2,130 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CameraIcon, MedicinesIcon, MicIcon } from '../assets/icons';
+import {
+  CameraIcon,
+  MedicinesIcon,
+  MicIcon,
+  MainIcon,
+  MainIcon2,
+  EragsLogo,
+} from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   return (
-    <SafeAreaView className="flex-1 bg-background px-4">
-      <View className="mt-15 items-center">
-        <Text className="text-center tracking-erags text-display text-red">
-          ERAGS
-        </Text>
-      </View>
-      <View className="mt-14">
-        <TouchableOpacity className="h-[132px] bg-red rounded-2xl">
-          <Text className="text-white text-title text-center mt-8">
-            응급처치 시작
-          </Text>
-          <Text className="text-white text-body text-center mt-4">
-            유형을 선택해주세요!
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View className="flex-row mt-6 justify-betwee  gap-x-3">
-        <TouchableOpacity className="h-[120px] bg-[#22262E] border-2 border-[#363C46] rounded-xl flex-1 items-center ">
-          <View className="mt-7">
-            <MicIcon />
+    <SafeAreaView className="flex-1 bg-background">
+      <View className=" mt-15 px-4 pt-6">
+        <View className="flex-row items-center mt-3 relative overflow-visible">
+          <View className="z-10 flex-1">
+            <EragsLogo />
+            <Text className="text-coment text-[#7F8389] mt-1 z-10">
+              EMERGENCY RESPONSE AID GUIDANCE
+            </Text>
+            <View className=" mt-10 z-10"></View>
           </View>
-          <Text className="mt-3 text-body text-white">음성으로 입력</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity className="h-[120px] bg-[#22262E] border-2 border-[#363C46] rounded-xl flex-1 items-center">
-          <View className="mt-7">
-            <CameraIcon />
+          <View className="absolute right-[-18px] top-2 z-0 pointer-events-none">
+            <MainIcon width={200} height={100} />
           </View>
-          <Text className="mt-3 text-body text-white">사진으로 입력</Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        className="h-[150px] bg-[#22262E] border-2 border-[#363C46] rounded-2xl items-center mt-6"
-        onPress={() => navigation.navigate('MedicinesStock')}
-      >
-        <View className="mt-7">
-          <MedicinesIcon height={40} width={40} />
         </View>
-        <Text className="mt-3 text-title text-white">약품 재고</Text>
-      </TouchableOpacity>
+      </View>
+
+      <View className="px-4 mt-6">
+        <TouchableOpacity
+          className="h-[120px] rounded-2xl bg-[#AF2E26] overflow-hidden flex-row items-center px-4"
+          onPress={() => navigation.navigate('FirstAid')}
+        >
+          <View className="w-24 items-start justify-center">
+            <MainIcon2 width={72} height={72} />
+          </View>
+
+          <View className="flex-1 pl-2">
+            <Text className="text-title text-white font-suitBold">
+              응급 처치 시작
+            </Text>
+            <Text className="text-coment text-white mt-2">
+              사고 유형 선택 후 맞춤형 가이드를 시작합니다.
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View className="px-4 mt-5">
+        <View className="flex-row justify-between gap-x-3">
+          <TouchableOpacity
+            className="flex-1 h-[170px] bg-[#22262E] border border-[#363C46] rounded-2xl px-2 py-4 overflow-hidden"
+            onPress={() => console.log('voice')}
+          >
+            <View className="items-center mt-2">
+              <MicIcon width={40} height={40} />
+            </View>
+            <View className="mt-4 items-center">
+              <Text className="text-body text-white text-center font-suitBold">
+                음성으로 설명
+              </Text>
+            </View>
+            <View className="mt-2 items-center w-full px-4">
+              <Text
+                numberOfLines={2}
+                ellipsizeMode="tail"
+                className="text-coment text-gray text-center"
+              >
+                다친 부분을 음성으로 설명해주세요.
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="flex-1 h-[170px] bg-[#22262E] border border-[#363C46] rounded-2xl px-2 py-4 overflow-hidden"
+            onPress={() => console.log('photo')}
+          >
+            <View className="items-center mt-2">
+              <CameraIcon width={40} height={40} />
+            </View>
+            <View className="mt-4 items-center">
+              <Text className="text-body text-white text-center font-suitBold">
+                사진 촬영
+              </Text>
+            </View>
+
+            <View className="mt-2 items-center w-full px-4">
+              <Text
+                numberOfLines={2}
+                ellipsizeMode="tail"
+                className="text-coment text-gray text-center"
+              >
+                다친 부분을 촬영해주세요.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          className="h-[110px] bg-[#22262E] border border-[#363C46] rounded-2xl justify-center mt-4 px-4"
+          onPress={() => navigation.navigate('MedicinesStock')}
+        >
+          <View className="flex-row items-center justify-between w-full">
+            <View className="flex-row items-center flex-1">
+              <MedicinesIcon width={40} height={40} />
+              <View className="ml-3 flex-1">
+                <Text className="text-title2 text-white font-sultBold">
+                  약품 재고 확인
+                </Text>
+                <Text
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                  className="mt-1 text-coment text-gray"
+                >
+                  보유중인 약품목록과 재고 현황을 확인합니다.
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
