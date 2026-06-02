@@ -34,19 +34,25 @@ export type MedicineItem = {
   efficacy: string;
 };
 
-const getBaseUrl = () => (Config.Base_URL ?? '').replace(/\/$/, '');
+const getBaseUrl = () => {
+  const configuredBaseUrl =
+    Config.Base_URL ?? Config.BASE_URL ?? Config.base_url ?? '';
+
+  return configuredBaseUrl.replace(/\/$/, '');
+};
 
 const buildUrl = (path: string) => {
   const baseUrl = getBaseUrl();
 
-  // 개발용 런타임 확인 로그
   try {
     // eslint-disable-next-line no-console
-    console.log('[medicineApi] Config.Base_URL =>', Config.Base_URL);
+    console.log('[medicineApi] buildUrl', { baseUrl, path });
   } catch (e) {}
 
   if (!baseUrl) {
-    throw new Error('Base_URL이 설정되지 않았습니다.');
+    throw new Error(
+      'Base_URL이 설정되지 않았습니다. .env에 Base_URL을 넣고 앱을 재빌드했는지 확인하세요.',
+    );
   }
 
   return `${baseUrl}${path}`;
@@ -84,7 +90,11 @@ const readOptionalString = (record: MedicineApiRecord, keys: string[]) => {
   return null;
 };
 
-const readNumber = (record: MedicineApiRecord, keys: string[], fallback: number) => {
+const readNumber = (
+  record: MedicineApiRecord,
+  keys: string[],
+  fallback: number,
+) => {
   for (const key of keys) {
     const value = record[key];
 
@@ -107,13 +117,15 @@ const readNumber = (record: MedicineApiRecord, keys: string[], fallback: number)
 export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
   id: String(record.id),
   name: readString(record, ['name', 'medicineName', 'itemName'], '이름 없음'),
-  info: readString(record, ['info', 'description', 'detail', 'memo'], '').trim()
-    || [
+  info:
+    readString(record, ['info', 'description', 'detail', 'memo'], '').trim() ||
+    [
       readString(record, ['usage'], '').trim(),
       readString(record, ['efficacy'], '').trim(),
     ]
       .filter(Boolean)
-      .join(' · ') || '설명 없음',
+      .join(' · ') ||
+    '설명 없음',
   qty: readNumber(record, ['qty', 'quantity', 'count', 'stock'], 0),
   expiry: readString(
     record,
@@ -142,8 +154,59 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   const records = Array.isArray(payload)
     ? payload
     : Array.isArray(payload?.data)
-      ? payload.data
-      : [];
+    ? payload.data
+    : [];
 
   return records.map(normalizeMedicine);
+}
+
+export type MedicineVisionUploadResult = {
+  [key: string]: unknown;
+};
+
+export async function postMedicineVision(params: {
+  imageBase64: string;
+  quantityToAdd?: number;
+}): Promise<MedicineVisionUploadResult> {
+  // eslint-disable-next-line no-console
+  console.log('[medicineApi] postMedicineVision start', {
+    imageBase64Length: params.imageBase64.length,
+    quantityToAdd: params.quantityToAdd ?? 1,
+  });
+
+  const response = await fetch(buildUrl('/api/medicines/vision'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      imageBase64: params.imageBase64,
+      quantityToAdd: params.quantityToAdd ?? 1,
+    }),
+  });
+
+  // eslint-disable-next-line no-console
+  console.log('[medicineApi] postMedicineVision response', {
+    ok: response.ok,
+    status: response.status,
+  });
+
+  if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error(
+        '의약품 비전 업로드 실패: 이미지 용량이 너무 큽니다. 더 작게 촬영해서 다시 시도해 주세요.',
+      );
+    }
+
+    throw new Error(`의약품 비전 업로드 실패: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  // eslint-disable-next-line no-console
+  console.log('[medicineApi] postMedicineVision payload keys', {
+    keys: Object.keys(payload ?? {}),
+  });
+
+  return payload as MedicineVisionUploadResult;
 }

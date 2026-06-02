@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon, MedicinesIcon2 } from '../assets';
 import AddMedicineBottomSheet from '../components/AddMedicineBottomSheet';
-import BarcodeScanModal from '../components/BarcodeScanModal';
 import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
 
 type MedicinesStockScreenProps = NativeStackScreenProps<
@@ -20,7 +20,6 @@ export function MedicinesStockScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [showScanModal, setShowScanModal] = useState(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
 
   useEffect(() => {
@@ -60,25 +59,6 @@ export function MedicinesStockScreen({
     };
   }, []);
 
-  const handleScannedBarcode = (barcode: string) => {
-    console.log('[MedicinesStockScreen] 바코드 스캔됨:', barcode);
-
-    setMedicines(current => [
-      {
-        id: `barcode-${Date.now()}`,
-        name: '스캔된 약품',
-        info: `바코드 ${barcode}`,
-        qty: 1,
-        expiry: '미지정',
-        threshold: 0,
-        barcode,
-        usage: '정보 없음',
-        efficacy: '정보 없음',
-      },
-      ...current,
-    ]);
-  };
-
   const openAdd = () => {
     console.log('[MedicinesStockScreen] 약품 추가 버튼 눌림');
     setShowAddSheet(true);
@@ -88,19 +68,10 @@ export function MedicinesStockScreen({
     console.log('[MedicinesStockScreen] 약품 추가 시트 닫기');
     setShowAddSheet(false);
   };
+  const insets = useSafeAreaInsets();
 
-  const openScanModal = () => {
-    console.log('[MedicinesStockScreen] 스캔 모달 열기');
-    setShowAddSheet(false);
-    setShowScanModal(true);
-  };
-
-  const closeScanModal = () => {
-    console.log('[MedicinesStockScreen] 바코드 스캔 모달 닫기');
-    setShowScanModal(false);
-  };
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       {/* Header */}
       <View className="px-4 pt-10">
         <View className="flex-row items-center">
@@ -113,11 +84,15 @@ export function MedicinesStockScreen({
           </Text>
         </View>
         <Text className="mt-2 text-lightGray text-body tracking-erags font-suitBold">
-          {isLoading ? '약품 데이터를 불러오는 중...' : `총 ${medicines.length}개 품목`}
+          {isLoading
+            ? '약품 데이터를 불러오는 중...'
+            : `총 ${medicines.length}개 품목`}
         </Text>
 
         {loadError ? (
-          <Text className="mt-2 text-red text-sm font-suitBold">{loadError}</Text>
+          <Text className="mt-2 text-red text-sm font-suitBold">
+            {loadError}
+          </Text>
         ) : null}
 
         <View className="h-[1px] bg-lightGray rounded-full mt-2" />
@@ -131,31 +106,38 @@ export function MedicinesStockScreen({
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: 140,
+          paddingBottom: 140 + insets.bottom,
         }}
         renderItem={({ item: m }) => (
-          <View className="mb-4 bg-[#1C2F2C] border-2 border-[#2ECC71] rounded-3xl p-4 h-[100px]">
+          <View className="mb-4 bg-[#1C2F2C] border-2 border-[#2ECC71] rounded-3xl p-4 h-[100px]" style={{ overflow: 'hidden' }}>
             <View className="flex-row items-start justify-between h-full">
               {/* Left */}
-              <View className="flex-row items-center">
+              <View className="flex-row items-center flex-1">
                 <MedicinesIcon2 width={40} height={40} />
-
                 <View className="ml-3">
-                  <Text className="text-white text-body font-suitBold">
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    className="text-white text-body font-suitBold"
+                    style={{ flexShrink: 1 }}
+                  >
                     {m.name}
                   </Text>
 
-                  <Text className="text-lightGray text-sm mt-2">{m.info}</Text>
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    className="text-lightGray text-sm mt-2"
+                    style={{ flexShrink: 1 }}
+                  >
+                    {m.info}
+                  </Text>
                 </View>
               </View>
 
               {/* Right */}
               <View className="items-end">
                 <Text className="text-white font-semibold">수량 {m.qty}</Text>
-
-                <Text className="text-lightGray text-xs mt-2">
-                  유통기한 {m.expiry}
-                </Text>
               </View>
             </View>
           </View>
@@ -163,13 +145,13 @@ export function MedicinesStockScreen({
       />
 
       {/* Floating Add Button */}
-      {!showScanModal && !showAddSheet && (
+      {!showAddSheet && (
         <View
           style={{
             position: 'absolute',
             left: 16,
             right: 16,
-            bottom: 24,
+            bottom: 24 + insets.bottom,
           }}
         >
           <TouchableOpacity
@@ -191,13 +173,6 @@ export function MedicinesStockScreen({
         visible={showAddSheet}
         onClose={closeAddSheet}
         medicines={medicines}
-        onOpenScanModal={openScanModal}
-      />
-
-      <BarcodeScanModal
-        visible={showScanModal}
-        onClose={closeScanModal}
-        onScanned={handleScannedBarcode}
       />
     </SafeAreaView>
   );

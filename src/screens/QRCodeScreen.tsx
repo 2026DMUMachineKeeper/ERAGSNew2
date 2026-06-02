@@ -19,7 +19,7 @@ export function QRCodeScreen({ navigation }: Props) {
   ];
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0F1116]">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-[#0F1116]">
       <View className="mt-10" />
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         <View className="px-4">
