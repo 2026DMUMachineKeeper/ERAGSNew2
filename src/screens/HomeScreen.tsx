@@ -1,7 +1,21 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  PermissionsAndroid,
+  Platform,
+  View,
+  Text,
+  TouchableOpacity,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {
+  launchCamera,
+  type Asset,
+  type CameraOptions,
+  type ImagePickerResponse,
+} from 'react-native-image-picker';
 import {
   CameraIcon,
   MedicinesIcon,
@@ -11,12 +25,116 @@ import {
   EragsLogo,
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { postMedicineVision } from '../services';
 
 type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
+  const [isVisionUploading, setIsVisionUploading] = React.useState(false);
+  const [visionStatus, setVisionStatus] = React.useState<string | null>(null);
+
+  const requestCameraPermission = async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+      {
+        title: '카메라 권한 필요',
+        message:
+          '사진을 찍어 약품 비전 분석을 하려면 카메라 권한이 필요합니다.',
+        buttonPositive: '허용',
+        buttonNegative: '취소',
+      },
+    );
+
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  };
+
+  const uploadMedicineVision = async (asset: Asset) => {
+    const base64Image = asset.base64;
+
+    if (!base64Image) {
+      Alert.alert(
+        '업로드 실패',
+        '촬영한 사진에서 base64 데이터를 가져오지 못했습니다.',
+      );
+      return;
+    }
+
+    const result = await postMedicineVision({
+      imageBase64: base64Image,
+    });
+
+    // eslint-disable-next-line no-console
+    console.log('[HomeScreen] /api/medicines/vision result:', result);
+    Alert.alert('전송 완료', '사진을 서버로 전송했습니다.');
+    setVisionStatus('사진을 서버로 전송했습니다.');
+  };
+
+  const handlePhotoPress = async () => {
+    if (isVisionUploading) {
+      return;
+    }
+
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) {
+      Alert.alert(
+        '권한 필요',
+        '카메라 권한이 있어야 사진을 촬영할 수 있습니다.',
+      );
+      return;
+    }
+
+    const options: CameraOptions = {
+      mediaType: 'photo',
+      includeBase64: true,
+      saveToPhotos: false,
+      quality: 0.9,
+      cameraType: 'back',
+    };
+
+    setIsVisionUploading(true);
+    setVisionStatus('사진을 서버로 전송하는 중입니다.');
+
+    try {
+      const response: ImagePickerResponse = await launchCamera(options);
+
+      if (response.didCancel) {
+        return;
+      }
+
+      if (response.errorCode) {
+        Alert.alert('촬영 실패', response.errorMessage ?? response.errorCode);
+        return;
+      }
+
+      const asset = response.assets?.[0];
+      if (!asset) {
+        Alert.alert('촬영 실패', '카메라 결과를 가져오지 못했습니다.');
+        setVisionStatus('카메라 결과를 가져오지 못했습니다.');
+        return;
+      }
+
+      await uploadMedicineVision(asset);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[HomeScreen] 사진 전송 실패:', error);
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : '사진을 서버로 전송하지 못했습니다. 네트워크와 서버 상태를 확인해 주세요.';
+
+      setVisionStatus(message);
+      Alert.alert('전송 실패', message);
+    } finally {
+      setIsVisionUploading(false);
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <View className=" mt-15 px-4 pt-6">
         <View className="flex-row items-center mt-3 relative overflow-visible">
           <View className="z-10 flex-1">
@@ -80,10 +198,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
           <TouchableOpacity
             className="flex-1 h-[170px] bg-[#22262E] border border-[#363C46] rounded-2xl px-2 py-4 overflow-hidden"
-            onPress={() => console.log('photo')}
+            onPress={handlePhotoPress}
+            disabled={isVisionUploading}
           >
             <View className="items-center mt-2">
-              <CameraIcon width={40} height={40} />
+              {isVisionUploading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <CameraIcon width={40} height={40} />
+              )}
             </View>
             <View className="mt-4 items-center">
               <Text className="text-body text-white text-center font-suitBold">
@@ -97,7 +220,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 ellipsizeMode="tail"
                 className="text-coment text-gray text-center"
               >
-                다친 부분을 촬영해주세요.
+                {visionStatus ??
+                  (isVisionUploading
+                    ? '사진을 분석 서버로 전송하고 있습니다.'
+                    : '다친 부분을 촬영해주세요.')}
               </Text>
             </View>
           </TouchableOpacity>

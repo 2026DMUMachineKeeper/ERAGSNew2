@@ -34,7 +34,7 @@ export function EmergencyCompleteScreen({ navigation, route }: Props) {
   const completedSteps = route.params?.completedSteps ?? totalSteps;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0F1116]">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-[#0F1116]">
       <View className="flex-1 px-4 pt-4 pb-5">
         <View className="mt-6">
           <EmergencyCompleteHeaderCard

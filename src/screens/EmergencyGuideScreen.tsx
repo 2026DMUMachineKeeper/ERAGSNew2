@@ -77,7 +77,7 @@ export function EmergencyGuideScreen({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <GuideHeader
         centerLabel="응급처치 종류"
         centerValue={`${mainLabel} / ${subtypeLabel}`}

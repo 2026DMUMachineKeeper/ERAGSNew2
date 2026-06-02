@@ -18,7 +18,7 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <View className="px-4 pt-10">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => navigation.goBack()}>
