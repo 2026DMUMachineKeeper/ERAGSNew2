@@ -1,14 +1,35 @@
-import { classifyVoice } from '../classifier/voiceInputHandler';
+// 상태머신을 React hook으로 감싼 파일. 음성입력, 직접선택, next, confirm 같은 함수 제공
+import {
+  classifyVoice,
+  inferBleedingLevel,
+} from '../classifier/voiceInputHandler';
 import { useMachine } from '@xstate/react';
 import {
   treatmentMachine,
   type TreatmentMachineInput,
 } from '../machine/treatmentMachine';
-import type { AccidentType, PatientContext } from '../machine/types';
-import type { SttService } from '../ports';
+import type {
+  AccidentClassification,
+  AccidentType,
+  PatientContext,
+} from '../machine/types';
+import type { SttService, VoiceTriageService } from '../ports';
+
+type VoiceInferenceSource = 'KEYWORD' | 'AI';
+
+type VoiceInference = {
+  accident: AccidentClassification;
+  patientContext: PatientContext;
+  source: VoiceInferenceSource;
+};
 
 type AudioInputResult =
-  | { ok: true; text: string; accidentType: AccidentType }
+  | {
+      ok: true;
+      text: string;
+      accidentType: AccidentType;
+      source: VoiceInferenceSource;
+    }
   | {
       ok: false;
       reason:
@@ -21,9 +42,86 @@ type AudioInputResult =
     };
 
 export const useTreatmentMachine = (
-  ports: TreatmentMachineInput & { stt?: SttService },
+  ports: TreatmentMachineInput & {
+    stt?: SttService;
+    triage?: VoiceTriageService;
+  },
 ) => {
   const [state, send] = useMachine(treatmentMachine, { input: ports });
+
+  const startFromAccident = (
+    accident: AccidentClassification,
+    patientContext: PatientContext,
+  ) => {
+    send({
+      type: 'START',
+      accident,
+      patientContext,
+    });
+
+    return accident;
+  };
+
+  const startFromInference = (inference: VoiceInference) => { // 추론 결과 나오면 상태머신에 START 보냄
+    startFromAccident(inference.accident, inference.patientContext);
+    return inference.accident;
+  };
+
+  const inferPatientContext = (
+    text: string,
+    accident: AccidentClassification,
+    patientContext: PatientContext,
+  ): PatientContext => {
+    if (accident.type !== 'BLEEDING') {
+      return patientContext;
+    }
+
+    return {
+      ...patientContext,
+      bleedingLevel: inferBleedingLevel(text) ?? patientContext.bleedingLevel,
+    };
+  };
+
+  const inferFromText = async (
+    text: string,
+    patientContext: PatientContext,
+  ): Promise<VoiceInference | null> => {
+    if (ports.triage) {
+      console.log('[ERAGS TRIAGE] AI inference requested:', text);
+      try {
+        const aiResult = await ports.triage.classify(text, patientContext);
+        if (aiResult) {
+          console.log('[ERAGS TRIAGE] AI inference selected:', aiResult);
+          return {
+            accident: aiResult.accident,
+            patientContext: aiResult.patientContext,
+            source: 'AI',
+          };
+        }
+
+        console.log('[ERAGS TRIAGE] AI returned no classification');
+      } catch (error) {
+        console.warn('[ERAGS TRIAGE] AI inference failed; using keyword fallback', error);
+      }
+    } else {
+      console.warn('[ERAGS TRIAGE] AI service is not configured; using keyword fallback');
+    }
+
+    const keywordResult = classifyVoice(text);
+    if (!keywordResult) {
+      return null;
+    }
+
+    return {
+      accident: keywordResult,
+      patientContext: inferPatientContext(
+        text,
+        keywordResult,
+        patientContext,
+      ),
+      source: 'KEYWORD',
+    };
+  };
 
   const startFromText = (text: string, patientContext: PatientContext) => {
     const result = classifyVoice(text);
@@ -32,12 +130,13 @@ export const useTreatmentMachine = (
       return null;
     }
 
-    send({
-      type: 'START',
+    const inference: VoiceInference = {
       accident: result,
-      patientContext,
-    });
+      patientContext: inferPatientContext(text, result, patientContext),
+      source: 'KEYWORD',
+    };
 
+    startFromInference(inference);
     return result;
   };
 
@@ -69,17 +168,38 @@ export const useTreatmentMachine = (
       return { ok: false, reason: 'EMPTY_TEXT' };
     }
 
-    const result = startFromText(text, patientContext);
-    if (!result) {
+    const inference = await inferFromText(text, patientContext);
+    if (!inference) {
       return { ok: false, reason: 'NO_CLASSIFICATION', text };
     }
 
-    return { ok: true, text, accidentType: result.type };
+    startFromInference(inference);
+
+    return {
+      ok: true,
+      text,
+      accidentType: inference.accident.type,
+      source: inference.source,
+    };
   };
 
   return {
     state: state.value,
     context: state.context,
+
+    manualInput: (
+      accidentType: AccidentType,
+      patientContext: PatientContext,
+    ) => {
+      startFromAccident(
+        {
+          type: accidentType,
+          confidence: 1,
+          rawInputType: 'MANUAL',
+        },
+        patientContext,
+      );
+    },
 
     voiceInput: (text: string, patientContext: PatientContext) =>
       startFromText(text, patientContext) !== null,
@@ -105,8 +225,6 @@ export const useTreatmentMachine = (
       }),
 
     confirm: () => send({ type: 'CONFIRM' }),
-
-    saved: () => send({ type: 'SAVED' }),
 
     emergency: () =>
       send({

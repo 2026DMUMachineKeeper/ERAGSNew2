@@ -18,8 +18,7 @@ import {
   EragsLogo,
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { useTreatmentMachine } from '../erags-sm1/hooks/useTreatmentMachine';
-import { createDefaultPortsWithStt } from '../erags-sm1/ports';
+import { useTreatment } from '../erags-sm1/context/TreatmentContext';
 import type {
   AccidentType,
   PatientContext,
@@ -44,11 +43,9 @@ const getSubtypeLabel = (patientContext: PatientContext) => {
   if (patientContext.bleedingLevel === 'HIGH') {
     return '중증';
   }
-
   if (patientContext.bleedingLevel === 'LOW') {
     return '경증';
   }
-
   return '중등도';
 };
 
@@ -71,9 +68,9 @@ const requestMicrophonePermission = async () => {
 };
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
-  const treatmentPorts = React.useMemo(() => createDefaultPortsWithStt(), []); // 여기서 STT 포함된 ports 만들고
-  const treatment = useTreatmentMachine(treatmentPorts);
+  const treatment = useTreatment();
   const handledSessionIdRef = React.useRef<string | null>(null);
+  const voiceRequestInFlightRef = React.useRef(false);
   const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
   const [isListening, setIsListening] = React.useState(false);
   const isVoiceBusy =
@@ -94,8 +91,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     handledSessionIdRef.current = session.sessionId;
     setVoiceStatus(null);
     navigation.navigate('EmergencyGuide', {
-      mainLabel: accidentLabelByType[session.accidentType],
+      mainLabel: accidentLabelByType[session.accidentType as AccidentType],
       subtypeLabel: getSubtypeLabel(session.patientContext),
+      source: 'machine',
     });
   }, [navigation, treatment.context.session, treatment.state]);
 
@@ -109,22 +107,30 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [treatment.context.lastError, treatment.state]);
 
   const handleVoicePress = React.useCallback(async () => {
+    if (voiceRequestInFlightRef.current) {
+      return;
+    }
+
+    voiceRequestInFlightRef.current = true;
+
     if (treatment.state === 'serverUnavailable') {
       setVoiceStatus('응급처치 세션을 다시 준비하고 있습니다.');
       treatment.retry();
+      voiceRequestInFlightRef.current = false;
       return;
     }
 
     const hasPermission = await requestMicrophonePermission();
     if (!hasPermission) {
       setVoiceStatus('마이크 권한이 필요합니다.');
+      voiceRequestInFlightRef.current = false;
       return;
     }
 
     setVoiceStatus('음성을 듣고 있습니다.');
     setIsListening(true);
     try {
-      const result = await treatment.audioInputResult( // 여기서 음성 입력 실행
+      const result = await treatment.audioInputResult(
         undefined,
         defaultPatientContext,
       );
@@ -134,17 +140,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           setVoiceStatus(`인식됨: ${result.text}`);
           return;
         }
-
         if (result.reason === 'EMPTY_TEXT') {
           setVoiceStatus('음성이 비어 있습니다. 조금 더 길게 말해 주세요.');
           return;
         }
-
         if (result.reason === 'STT_UNAVAILABLE') {
-          setVoiceStatus('태블릿 음성 인식 서비스가 꺼져 있거나 없습니다.');
+          setVoiceStatus('음성 인식 서비스가 꺼져 있거나 없습니다.');
           return;
         }
-
         setVoiceStatus('음성을 인식하지 못했습니다. 다시 시도해 주세요.');
         return;
       }
@@ -152,6 +155,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setVoiceStatus('응급처치 가이드를 준비하고 있습니다.');
     } finally {
       setIsListening(false);
+      voiceRequestInFlightRef.current = false;
     }
   }, [treatment]);
 

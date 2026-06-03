@@ -166,20 +166,31 @@ export const treatmentMachine = setup({
     qrPayload: null,
     emergencyNote: null,
   }),
+  on: {
+    START: {
+      target: '.loadingSession',
+      actions: assign({
+        session: () => null,
+        steps: () => [],
+        currentIndex: () => 0,
+        plan: () => null,
+        isChecked: () => false,
+        pendingAccident: ({ event }) => event.accident,
+        patientContext: ({ event }) => event.patientContext,
+        pendingPlan: () => null,
+        pendingPlanNote: () => null,
+        inventoryConsumedForStep: () => false,
+        lastError: () => null,
+        qrPayload: () => null,
+        emergencyNote: () => null,
+      }),
+    },
+  },
   states: {
     idle: {
-      on: {
-        START: {
-          target: 'loadingSession',
-          actions: assign({
-            pendingAccident: ({ event }) => event.accident,
-            patientContext: ({ event }) => event.patientContext,
-            lastError: () => null,
-          }),
-        },
-      },
+      on: {},
     },
-    loadingSession: {
+    loadingSession: { // loadingSession에서 ml.createSession() 호출
       invoke: {
         src: 'createTreatmentSession',
         input: ({ context }) => ({
