@@ -1,24 +1,25 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity } from 'react-native';
-
-import type { EmergencyGuideStep } from '../../constants/emergencyGuideData';
+import type { TreatmentStep } from '../../erags-sm1/machine/types';
 
 type Props = {
-  step: EmergencyGuideStep;
+  step: TreatmentStep;
+  isChecked: boolean;
+  showCheckpoint: boolean;
+  onToggle: (checked: boolean) => void;
   onStopPress?: () => void;
 };
 
-export function StepDetail({ step, onStopPress }: Props) {
+export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPress }: Props) {
   const [showStopModal, setShowStopModal] = React.useState(false);
-  const [label, subtitle] = step.title.split(':').map(s => s.trim());
 
   return (
     <View className="flex-1 px-4 pt-2">
       <View className="relative min-h-[84px] justify-center items-center">
         <View className="items-center justify-center">
-          <Text className="text-xl text-[#FF3B3B]">{label}</Text>
+          <Text className="text-xl text-[#FF3B3B]">{step.stepNo}단계</Text>
           <Text className="text-2xl font-bold text-white mt-2 text-center">
-            {subtitle}
+            {step.instruction}
           </Text>
         </View>
 
@@ -26,9 +27,7 @@ export function StepDetail({ step, onStopPress }: Props) {
           className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-[#FF3B3B] bg-[#2A1D1D]"
           onPress={() => setShowStopModal(true)}
         >
-          <Text className="text-[#FF6B6B] text-xs font-bold">
-            응급처치 중단
-          </Text>
+          <Text className="text-[#FF6B6B] text-xs font-bold">응급처치 중단</Text>
         </TouchableOpacity>
       </View>
 
@@ -69,26 +68,26 @@ export function StepDetail({ step, onStopPress }: Props) {
         </View>
       </Modal>
 
-      <View className="mt-4">
-        <Text className="text-white text-base leading-6">
-          {step.description}
-        </Text>
-      </View>
-
-      <View className="mt-6 items-center">
-        <View className="w-[260px] h-[200px] bg-[#E6E6E6] rounded-lg items-center justify-center">
-          <Text className="text-gray-500">이미지</Text>
+      {showCheckpoint && (
+        <View className="mt-6 p-4 bg-[#1E2530] rounded-xl border border-[#2B303A]">
+          <Text className="text-white text-base">{step.checkpointQuestion}</Text>
+          <TouchableOpacity
+            className="flex-row items-center mt-3"
+            onPress={() => onToggle(!isChecked)}
+          >
+            <View
+              className={`w-6 h-6 rounded border-2 items-center justify-center mr-3 ${
+                isChecked ? 'bg-[#2ECC71] border-[#2ECC71]' : 'border-[#555]'
+              }`}
+            >
+              {isChecked && (
+                <Text className="text-white text-xs font-bold">✓</Text>
+              )}
+            </View>
+            <Text className="text-white">확인했습니다</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View className="mt-6">
-        <Text className="text-white text-sm">필요한 약품</Text>
-        <View className="flex-row items-center mt-3">
-          <View className="bg-[#FF3B3B] px-4 py-2 rounded-full">
-            <Text className="text-white">붕대</Text>
-          </View>
-        </View>
-      </View>
+      )}
     </View>
   );
 }
