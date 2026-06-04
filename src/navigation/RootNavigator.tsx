@@ -1,3 +1,4 @@
+// 상태머신 결과를 어떤 화면으로 보낼지 연결하려고 화면 이름/params 타입을 한 곳에 정리한 것 (상태머신->화면 전환)
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -9,7 +10,13 @@ export type RootStackParamList = {
   TestFont: undefined;
   FirstAid: undefined;
   FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
-  EmergencyGuide: { mainLabel?: string; subtypeLabel?: string } | undefined;
+  EmergencyGuide:
+    | {
+        mainLabel?: string;
+        subtypeLabel?: string;
+        source?: 'manual' | 'machine';
+      }
+    | undefined;
   EmergencyComplete:
     | {
         mainLabel?: string;
