@@ -9,6 +9,7 @@ import { useTreatment } from '../erags-sm1/context/TreatmentContext';
 import type {
   AccidentType,
   BleedingLevel,
+  Plan,
   PatientContext,
 } from '../erags-sm1/machine/types';
 
@@ -43,10 +44,15 @@ const getBleedingLevel = (selectedId: string | null): BleedingLevel => {
   return 'MEDIUM';
 };
 
+const getPlanType = (_selectedId: string | null): Plan => {
+  return 'A';
+};
+
 export function FirstAidDetail({ navigation, route }: DetailProps) {
   const treatment = useTreatment();
   const handledSessionIdRef = React.useRef<string | null>(null);
   const startedManualRef = React.useRef(false);
+  const [manualStartRequested, setManualStartRequested] = React.useState(false);
   const main = route.params?.mainLabel ?? '항목';
   const subtypes = [
     { id: 'a', label: `${main} - 경미한 출혈` },
@@ -57,10 +63,30 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
   const selectedLabel =
     subtypes.find(item => item.id === selectedId)?.label ?? subtypes[0].label;
   const subtypeLabel = selectedLabel.replace(`${main} - `, '');
-  const isStarting = treatment.state === 'loadingSession';
+  const isStarting =
+    manualStartRequested ||
+    treatment.state === 'loadingSession' ||
+    treatment.state === 'checkingPlanInventory' ||
+    treatment.state === 'switchingPlan';
 
   React.useEffect(() => {
+    console.log('[ERAGS FirstAidDetail] effect', {
+      startedManual: startedManualRef.current,
+      state: treatment.state,
+      hasSession: Boolean(treatment.context.session),
+      sessionId: treatment.context.session?.sessionId ?? null,
+      stepsLength: treatment.context.session?.steps?.length ?? 0,
+    });
+
     if (!startedManualRef.current) {
+      return;
+    }
+
+    if (
+      treatment.state === 'serverUnavailable' ||
+      treatment.state === 'inventorySaveFailed'
+    ) {
+      setManualStartRequested(false);
       return;
     }
 
@@ -74,6 +100,7 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
     }
 
     handledSessionIdRef.current = session.sessionId;
+    setManualStartRequested(false);
     navigation.navigate('EmergencyGuide', {
       mainLabel: main,
       subtypeLabel,
@@ -140,11 +167,30 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
             title={isStarting ? '가이드 준비 중...' : '다음 단계'}
             disabled={!selectedId || isStarting}
             onPress={() => {
+              if (manualStartRequested) {
+                return;
+              }
+
               startedManualRef.current = true;
-              treatment.manualInput(getAccidentType(main), {
-                ...defaultPatientContext,
-                bleedingLevel: getBleedingLevel(selectedId),
+              setManualStartRequested(true);
+              const bleedingLevel = getBleedingLevel(selectedId);
+
+              console.log('[ERAGS FirstAidDetail] manualInput', {
+                main,
+                selectedId,
+                bleedingLevel,
+                planType: getPlanType(selectedId),
+                accidentType: getAccidentType(main),
               });
+
+              treatment.manualInput(
+                getAccidentType(main),
+                {
+                  ...defaultPatientContext,
+                  bleedingLevel,
+                },
+                getPlanType(selectedId),
+              );
             }}
           />
         </View>

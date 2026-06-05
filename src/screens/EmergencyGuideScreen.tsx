@@ -1,5 +1,11 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -8,9 +14,18 @@ import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 
-type EmergencyGuideProps = NativeStackScreenProps<RootStackParamList, 'EmergencyGuide'>;
+type EmergencyGuideProps = NativeStackScreenProps<
+  RootStackParamList,
+  'EmergencyGuide'
+>;
 
-const LOADING_STATES = ['savingInventory', 'savingLog', 'finalizing', 'switchingPlan'];
+const LOADING_STATES = [
+  'checkingPlanInventory',
+  'savingInventory',
+  'savingLog',
+  'finalizing',
+  'switchingPlan',
+];
 const ERROR_STATES = [
   'serverUnavailable',
   'logSaveFailed',
@@ -20,7 +35,10 @@ const ERROR_STATES = [
   'emergencyQrFailed',
 ];
 
-export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps) {
+export function EmergencyGuideScreen({
+  navigation,
+  route,
+}: EmergencyGuideProps) {
   const treatment = useTreatment();
   const mainLabel = route.params?.mainLabel ?? '응급';
   const subtypeLabel = route.params?.subtypeLabel ?? '';
@@ -48,10 +66,25 @@ export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps)
         totalSteps: steps.length,
       });
     }
-  }, [elapsedSeconds, mainLabel, navigation, subtypeLabel, treatment.context, treatment.state]);
+  }, [
+    elapsedSeconds,
+    mainLabel,
+    navigation,
+    subtypeLabel,
+    treatment.context,
+    treatment.state,
+  ]);
 
   const { steps, currentIndex, isChecked } = treatment.context;
-  const currentStep = steps[currentIndex];
+  const currentStep = steps[currentIndex] ??
+    steps[0] ?? {
+      stepNo: 1,
+      instruction: '응급처치 단계를 불러오는 중입니다.',
+      checkpointQuestion: '',
+      requiredItemId: null,
+      requiredSlotId: null,
+      imageResource: '',
+    };
   const progress = steps.length ? (currentIndex + 1) / steps.length : 0;
   const elapsedLabel = formatElapsed(elapsedSeconds);
 
@@ -61,15 +94,45 @@ export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps)
   const isShowStep = treatment.state === 'showStep';
   const isLastStep = currentIndex >= steps.length - 1;
 
-  // 단계 정보가 아직 없으면 로딩 표시 (race condition 방어)
-  if (!currentStep) {
-    return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator color="#FFFFFF" />
-      </SafeAreaView>
-    );
-  }
+  const hasRealSteps = steps.length > 0;
 
+  React.useEffect(() => {
+    console.log('[ERAGS EmergencyGuideScreen] render', {
+      state: treatment.state,
+      sessionId: treatment.context.session?.sessionId ?? null,
+      stepsLength: steps.length,
+      currentIndex,
+      currentStepNo: currentStep.stepNo,
+      currentStepInstruction: currentStep.instruction,
+    });
+  }, [
+    currentIndex,
+    currentStep.instruction,
+    currentStep.stepNo,
+    steps.length,
+    treatment.context.session,
+    treatment.state,
+  ]);
+  React.useEffect(() => {
+    console.log('[Treatment Debug]', {
+      state: treatment.state,
+      lastError: treatment.context.lastError,
+
+      currentStep,
+
+      requiredItemId: currentStep?.requiredItemId,
+      requiredSlotId: currentStep?.requiredSlotId,
+
+      stepsLength: steps.length,
+      currentIndex,
+    });
+  }, [
+    treatment.state,
+    treatment.context.lastError,
+    currentStep,
+    steps.length,
+    currentIndex,
+  ]);
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <GuideHeader
@@ -93,6 +156,14 @@ export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps)
           onToggle={checked => treatment.toggle(checked)}
           onStopPress={() => navigation.goBack()}
         />
+
+        {!hasRealSteps && (
+          <View className="mt-4 p-4 rounded-xl border border-[#2B303A] bg-[#1E2530]">
+            <Text className="text-sm text-[#BFE8D0] text-center">
+              가이드 단계를 불러오지 못했거나 아직 응답을 기다리는 중입니다.
+            </Text>
+          </View>
+        )}
 
         {isLoading && (
           <View className="mt-6 items-center">
