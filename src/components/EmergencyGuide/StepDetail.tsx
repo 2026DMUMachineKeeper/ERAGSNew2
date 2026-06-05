@@ -1,5 +1,13 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity } from 'react-native';
+import {
+  Image,
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import Config from 'react-native-config';
 import type { TreatmentStep } from '../../erags-sm1/machine/types';
 
 type Props = {
@@ -10,8 +18,73 @@ type Props = {
   onStopPress?: () => void;
 };
 
-export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPress }: Props) {
+const getBaseUrl = () => {
+  const configuredBaseUrl =
+    Config.Base_URL ?? Config.BASE_URL ?? Config.base_url ?? '';
+
+  return configuredBaseUrl.replace(/\/$/, '');
+};
+
+const resolveImageUris = (imageResource: string) => {
+  const value = imageResource.trim();
+
+  if (!value) {
+    return [];
+  }
+
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(value) && value.length > 100) {
+    return [`data:image/jpeg;base64,${value}`];
+  }
+
+  if (/^(https?:|data:|file:|content:)/i.test(value)) {
+    return [value];
+  }
+
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    return [];
+  }
+
+  const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+  const candidates = [`${baseUrl}${normalizedPath}`];
+
+  if (!normalizedPath.startsWith('/uploads/')) {
+    candidates.push(`${baseUrl}/uploads${normalizedPath}`);
+  }
+
+  if (!normalizedPath.startsWith('/images/')) {
+    candidates.push(`${baseUrl}/images${normalizedPath}`);
+  }
+
+  return candidates;
+};
+
+export function StepDetail({
+  step,
+  isChecked,
+  showCheckpoint,
+  onToggle,
+  onStopPress,
+}: Props) {
   const [showStopModal, setShowStopModal] = React.useState(false);
+  const [imageUriIndex, setImageUriIndex] = React.useState(0);
+  const imageUris = React.useMemo(
+    () => resolveImageUris(step.imageResource),
+    [step.imageResource],
+  );
+  const imageUri = imageUris[imageUriIndex] ?? null;
+
+  React.useEffect(() => {
+    setImageUriIndex(0);
+  }, [step.imageResource]);
+
+  React.useEffect(() => {
+    console.log('[ERAGS StepDetail] image', {
+      stepNo: step.stepNo,
+      imageResource: step.imageResource,
+      imageUris,
+    });
+  }, [imageUris, step.imageResource, step.stepNo]);
 
   return (
     <View className="flex-1 px-4 pt-2">
@@ -30,6 +103,24 @@ export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPr
           <Text className="text-[#FF6B6B] text-xs font-bold">응급처치 중단</Text>
         </TouchableOpacity>
       </View>
+
+      {imageUri && (
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.stepImage}
+          resizeMode="cover"
+          onError={error => {
+            console.warn('[ERAGS StepDetail] image load failed', {
+              uri: imageUri,
+              error: error.nativeEvent,
+            });
+
+            setImageUriIndex(index =>
+              index < imageUris.length - 1 ? index + 1 : index,
+            );
+          }}
+        />
+      )}
 
       <Modal
         visible={showStopModal}
@@ -91,3 +182,13 @@ export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPr
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  stepImage: {
+    width: '100%',
+    height: 208,
+    marginTop: 20,
+    borderRadius: 8,
+    backgroundColor: '#1E2530',
+  },
+});

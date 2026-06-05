@@ -12,6 +12,7 @@ import type {
   AccidentClassification,
   AccidentType,
   PatientContext,
+  Plan,
 } from '../machine/types';
 import type { SttService, VoiceTriageService } from '../ports';
 
@@ -52,17 +53,20 @@ export const useTreatmentMachine = (
   const startFromAccident = (
     accident: AccidentClassification,
     patientContext: PatientContext,
+    planType?: Plan,
   ) => {
     send({
       type: 'START',
       accident,
       patientContext,
+      planType,
     });
 
     return accident;
   };
 
-  const startFromInference = (inference: VoiceInference) => { // 추론 결과 나오면 상태머신에 START 보냄
+  const startFromInference = (inference: VoiceInference) => {
+    // 추론 결과 나오면 상태머신에 START 보냄
     startFromAccident(inference.accident, inference.patientContext);
     return inference.accident;
   };
@@ -101,10 +105,15 @@ export const useTreatmentMachine = (
 
         console.log('[ERAGS TRIAGE] AI returned no classification');
       } catch (error) {
-        console.warn('[ERAGS TRIAGE] AI inference failed; using keyword fallback', error);
+        console.warn(
+          '[ERAGS TRIAGE] AI inference failed; using keyword fallback',
+          error,
+        );
       }
     } else {
-      console.warn('[ERAGS TRIAGE] AI service is not configured; using keyword fallback');
+      console.warn(
+        '[ERAGS TRIAGE] AI service is not configured; using keyword fallback',
+      );
     }
 
     const keywordResult = classifyVoice(text);
@@ -114,11 +123,7 @@ export const useTreatmentMachine = (
 
     return {
       accident: keywordResult,
-      patientContext: inferPatientContext(
-        text,
-        keywordResult,
-        patientContext,
-      ),
+      patientContext: inferPatientContext(text, keywordResult, patientContext),
       source: 'KEYWORD',
     };
   };
@@ -190,6 +195,7 @@ export const useTreatmentMachine = (
     manualInput: (
       accidentType: AccidentType,
       patientContext: PatientContext,
+      planType?: Plan,
     ) => {
       startFromAccident(
         {
@@ -198,6 +204,7 @@ export const useTreatmentMachine = (
           rawInputType: 'MANUAL',
         },
         patientContext,
+        planType,
       );
     },
 
