@@ -39,9 +39,7 @@ export default function AddMedicineBottomSheet({
   medicines: MedicineItem[];
   onSave?: () => void;
 }) {
-  const [expiryDate, setExpiryDate] = React.useState<Date | undefined>(
-    undefined,
-  );
+  const [expiryDate, setExpiryDate] = React.useState<Date | undefined>(undefined);
   const [showDatePicker, setShowDatePicker] = React.useState(false);
   const [name, setName] = React.useState('');
   const [barcode, setBarcode] = React.useState('');
@@ -113,7 +111,16 @@ export default function AddMedicineBottomSheet({
             value={name}
             onChangeText={setName}
           />
-        </View>{' '}
+        </View>
+        <View className="bg-gray border border-white rounded-lg p-3 mb-3">
+          <TextInput
+            placeholder="바코드"
+            placeholderTextColor="#9CA3AF"
+            className="text-white"
+            value={barcode}
+            onChangeText={setBarcode}
+          />
+        </View>
         <View className="bg-gray border border-white rounded-lg p-3 mb-3">
           <TextInput
             placeholder="수량"
@@ -124,24 +131,24 @@ export default function AddMedicineBottomSheet({
             keyboardType="number-pad"
           />
         </View>
-        <View className="bg-gray border border-white rounded-lg p-3 mb-3">
-          <TextInput
-            placeholder="효능"
-            placeholderTextColor="#9CA3AF"
-            className="text-white"
-            value={barcode}
-            onChangeText={setBarcode}
+        <TouchableOpacity
+          onPress={() => setShowDatePicker(true)}
+          activeOpacity={0.8}
+          className="bg-gray border border-white rounded-lg p-3 mb-6"
+        >
+          <Text style={{ color: expiryDate ? '#FFFFFF' : '#9CA3AF' }}>
+            {expiryDate ? expiryDate.toLocaleDateString('ko-KR') : '유통기한 선택'}
+          </Text>
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={expiryDate ?? new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onChangeDate}
+            maximumDate={new Date(2100, 12, 31)}
           />
-        </View>
-        <View className="bg-gray border border-white rounded-lg p-3 mb-3">
-          <TextInput
-            placeholder="사용방법"
-            placeholderTextColor="#9CA3AF"
-            className="text-white"
-            value={barcode}
-            onChangeText={setBarcode}
-          />
-        </View>
+        )}
         <TouchableOpacity
           onPress={async () => {
             if (uploading) return;
@@ -175,10 +182,7 @@ export default function AddMedicineBottomSheet({
               });
 
               if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-                Alert.alert(
-                  '권한 필요',
-                  '카메라 권한이 필요합니다. 설정에서 권한을 허용해주세요.',
-                );
+                Alert.alert('권한 필요', '카메라 권한이 필요합니다. 설정에서 권한을 허용해주세요.');
                 return;
               }
             }
@@ -187,6 +191,7 @@ export default function AddMedicineBottomSheet({
               mediaType: 'photo',
               includeBase64: true,
               saveToPhotos: false,
+              quality: 0.35,
               maxWidth: 1024,
               maxHeight: 1024,
               cameraType: 'back',
@@ -217,10 +222,7 @@ export default function AddMedicineBottomSheet({
                   errorCode: response.errorCode,
                   errorMessage: response.errorMessage ?? null,
                 });
-                Alert.alert(
-                  '촬영 실패',
-                  response.errorMessage ?? response.errorCode,
-                );
+                Alert.alert('촬영 실패', response.errorMessage ?? response.errorCode);
                 return;
               }
 
@@ -231,10 +233,7 @@ export default function AddMedicineBottomSheet({
                   hasAsset: Boolean(asset),
                   hasBase64: Boolean(asset?.base64),
                 });
-                Alert.alert(
-                  '업로드 실패',
-                  '촬영한 사진에서 데이터를 가져오지 못했습니다.',
-                );
+                Alert.alert('업로드 실패', '촬영한 사진에서 데이터를 가져오지 못했습니다.');
                 return;
               }
 
@@ -250,17 +249,11 @@ export default function AddMedicineBottomSheet({
               const quantityToAdd = Number(qty);
               const payload = await postMedicineVision({
                 imageBase64: asset.base64,
-                quantityToAdd:
-                  Number.isFinite(quantityToAdd) && quantityToAdd > 0
-                    ? quantityToAdd
-                    : 1,
+                quantityToAdd: Number.isFinite(quantityToAdd) && quantityToAdd > 0 ? quantityToAdd : 1,
               });
 
               // eslint-disable-next-line no-console
-              console.log(
-                '[AddMedicineBottomSheet] 비전 API 응답 수신',
-                payload,
-              );
+              console.log('[AddMedicineBottomSheet] 비전 API 응답 수신', payload);
 
               // 가능한 여러 필드명에 대해 안전하게 읽어서 폼을 채움
               const pickString = (obj: any, keys: string[]) => {
@@ -274,8 +267,7 @@ export default function AddMedicineBottomSheet({
               const pickNumber = (obj: any, keys: string[]) => {
                 for (const k of keys) {
                   const v = obj?.[k];
-                  if (typeof v === 'number' && Number.isFinite(v))
-                    return String(v);
+                  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
                   if (typeof v === 'string') {
                     const n = Number(v);
                     if (Number.isFinite(n)) return String(n);
@@ -286,30 +278,10 @@ export default function AddMedicineBottomSheet({
 
               const result = payload as Record<string, unknown>;
 
-              const detectedName = pickString(result, [
-                'name',
-                'medicineName',
-                'itemName',
-                'title',
-              ]);
-              const detectedBarcode = pickString(result, [
-                'barcode',
-                'code',
-                'barcodeValue',
-              ]);
-              const detectedQty = pickNumber(result, [
-                'qty',
-                'quantity',
-                'count',
-                'stock',
-              ]);
-              const detectedExpiry = pickString(result, [
-                'expiry',
-                'expire_date',
-                'expiryDate',
-                'expirationDate',
-                'expiredAt',
-              ]);
+              const detectedName = pickString(result, ['name', 'medicineName', 'itemName', 'title']);
+              const detectedBarcode = pickString(result, ['barcode', 'code', 'barcodeValue']);
+              const detectedQty = pickNumber(result, ['qty', 'quantity', 'count', 'stock']);
+              const detectedExpiry = pickString(result, ['expiry', 'expire_date', 'expiryDate', 'expirationDate', 'expiredAt']);
 
               // eslint-disable-next-line no-console
               console.log('[AddMedicineBottomSheet] 자동 채움 값', {

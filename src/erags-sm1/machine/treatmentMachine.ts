@@ -15,7 +15,6 @@ import {
   type TreatmentContext,
   type TreatmentEvent,
   type TreatmentSession,
-  type TreatmentStep,
 } from './types';
 
 const sessionErrorCodes: SessionErrorCode[] = [
@@ -40,7 +39,6 @@ interface CreateSessionInput {
   ml: MlSessionPort;
   accident: AccidentClassification;
   patientContext: PatientContext;
-  planType?: Plan;
 }
 
 interface SwitchPlanInput {
@@ -53,19 +51,7 @@ interface SwitchPlanInput {
 interface InventoryInput {
   inventory: InventoryPort;
   itemId: number;
-  slotId: number | null;
 }
-
-interface VerifyPlanInventoryInput {
-  inventory: InventoryPort;
-  steps: TreatmentStep[];
-}
-
-type RequiredInventoryItem = {
-  itemId: number;
-  slotId: number | null;
-  amount: number;
-};
 
 interface LogStepInput {
   ml: MlSessionPort;
@@ -115,49 +101,6 @@ function runtimeEventContext(context: MachineContext): RuntimeEventContext {
   };
 }
 
-function nextInventoryFallbackPlan(plan: Plan | null): Plan | null {
-  if (plan === 'A') {
-    return 'B';
-  }
-
-  if (plan === 'B') {
-    return 'C';
-  }
-
-  return null;
-}
-
-function requiredInventoryForSteps(
-  steps: TreatmentStep[],
-): RequiredInventoryItem[] {
-  const requiredByKey = new Map<string, RequiredInventoryItem>();
-
-  for (const step of steps) {
-    if (typeof step.requiredItemId !== 'number') {
-      continue;
-    }
-
-    const key =
-      typeof step.requiredSlotId === 'number'
-        ? `slot:${step.requiredSlotId}`
-        : `item:${step.requiredItemId}`;
-    const current = requiredByKey.get(key);
-
-    if (current) {
-      current.amount += 1;
-      continue;
-    }
-
-    requiredByKey.set(key, {
-      itemId: step.requiredItemId,
-      slotId: step.requiredSlotId,
-      amount: 1,
-    });
-  }
-
-  return Array.from(requiredByKey.values());
-}
-
 export const treatmentMachine = setup({
   types: {
     context: {} as MachineContext,
@@ -167,11 +110,7 @@ export const treatmentMachine = setup({
   actors: {
     createTreatmentSession: fromPromise(
       async ({ input }: { input: CreateSessionInput }) =>
-        input.ml.createSession(
-          input.accident,
-          input.patientContext,
-          input.planType,
-        ),
+        input.ml.createSession(input.accident, input.patientContext),
     ),
     switchTreatmentPlan: fromPromise(
       async ({ input }: { input: SwitchPlanInput }) =>
@@ -179,40 +118,7 @@ export const treatmentMachine = setup({
     ),
     decreaseInventory: fromPromise(
       async ({ input }: { input: InventoryInput }) => {
-        if (input.inventory.decreaseRequiredItem) {
-          return input.inventory.decreaseRequiredItem({
-            itemId: input.itemId,
-            slotId: input.slotId,
-          });
-        }
-
-        const useId = input.slotId ?? input.itemId;
-        await input.inventory.decreaseQuantity(useId);
-        return useId;
-      },
-    ),
-    verifyPlanInventory: fromPromise(
-      async ({ input }: { input: VerifyPlanInventoryInput }) => {
-        if (!input.inventory.canUseRequiredItem) {
-          return;
-        }
-
-        const requiredItems = requiredInventoryForSteps(input.steps);
-
-        for (const item of requiredItems) {
-          const canUse = await input.inventory.canUseRequiredItem({
-            itemId: item.itemId,
-            slotId: item.slotId,
-            amount: item.amount,
-          });
-
-          if (!canUse) {
-            throw new SessionError(
-              'INSUFFICIENT_QUANTITY',
-              'Required medicine quantity is insufficient',
-            );
-          }
-        }
+        await input.inventory.decreaseQuantity(input.itemId);
       },
     ),
     saveStepLog: fromPromise(async ({ input }: { input: LogStepInput }) => {
@@ -240,9 +146,6 @@ export const treatmentMachine = setup({
       event.type === 'MANUAL_OVERRIDE' &&
       context.session !== null &&
       event.nextPlan !== context.plan,
-    canFallbackPlanForInsufficientInventory: ({ context }) =>
-      context.session !== null &&
-      nextInventoryFallbackPlan(context.plan ?? context.session.plan) !== null,
   },
 }).createMachine({
   id: 'treatment',
@@ -259,7 +162,6 @@ export const treatmentMachine = setup({
     pendingPlan: null,
     pendingPlanNote: null,
     inventoryConsumedForStep: false,
-    inventoryConsumedSlotId: null,
     lastError: null,
     qrPayload: null,
     emergencyNote: null,
@@ -275,10 +177,9 @@ export const treatmentMachine = setup({
         isChecked: () => false,
         pendingAccident: ({ event }) => event.accident,
         patientContext: ({ event }) => event.patientContext,
-        pendingPlan: ({ event }) => event.planType ?? null,
+        pendingPlan: () => null,
         pendingPlanNote: () => null,
         inventoryConsumedForStep: () => false,
-        inventoryConsumedSlotId: () => null,
         lastError: () => null,
         qrPayload: () => null,
         emergencyNote: () => null,
@@ -289,18 +190,16 @@ export const treatmentMachine = setup({
     idle: {
       on: {},
     },
-    loadingSession: {
-      // loadingSession에서 ml.createSession() 호출
+    loadingSession: { // loadingSession에서 ml.createSession() 호출
       invoke: {
         src: 'createTreatmentSession',
         input: ({ context }) => ({
           ml: context.ports.ml,
           accident: context.pendingAccident as AccidentClassification,
           patientContext: context.patientContext as PatientContext,
-          planType: context.pendingPlan ?? undefined,
         }),
         onDone: {
-          target: 'checkingPlanInventory',
+          target: 'showStep',
           actions: assign({
             session: ({ event }) => event.output,
             steps: ({ event }) => event.output.steps,
@@ -310,7 +209,6 @@ export const treatmentMachine = setup({
             pendingPlan: () => null,
             pendingPlanNote: () => null,
             inventoryConsumedForStep: () => false,
-            inventoryConsumedSlotId: () => null,
             lastError: () => null,
           }),
         },
@@ -320,53 +218,6 @@ export const treatmentMachine = setup({
             lastError: ({ event }) => normalizeError(event.error),
           }),
         },
-      },
-    },
-    checkingPlanInventory: {
-      invoke: {
-        src: 'verifyPlanInventory',
-        input: ({ context }) => ({
-          inventory: context.ports.inventory,
-          steps: context.steps,
-        }),
-        onDone: {
-          target: 'showStep',
-          actions: assign({
-            lastError: () => null,
-          }),
-        },
-        onError: [
-          {
-            guard: ({ context, event }) =>
-              normalizeError(event.error).code === 'INSUFFICIENT_QUANTITY' &&
-              nextInventoryFallbackPlan(
-                context.plan ?? context.session?.plan ?? null,
-              ) !== null,
-            target: 'switchingPlan',
-            actions: assign({
-              pendingPlan: ({ context }) =>
-                nextInventoryFallbackPlan(
-                  context.plan ?? context.session?.plan ?? null,
-                ),
-              pendingPlanNote: () => 'Plan inventory unavailable',
-              lastError: ({ event }) => normalizeError(event.error),
-            }),
-          },
-          {
-            guard: ({ event }) =>
-              normalizeError(event.error).code === 'INSUFFICIENT_QUANTITY',
-            target: 'inventoryInsufficient',
-            actions: assign({
-              lastError: ({ event }) => normalizeError(event.error),
-            }),
-          },
-          {
-            target: 'serverUnavailable',
-            actions: assign({
-              lastError: ({ event }) => normalizeError(event.error),
-            }),
-          },
-        ],
       },
     },
     serverUnavailable: {
@@ -432,36 +283,14 @@ export const treatmentMachine = setup({
         input: ({ context }) => ({
           inventory: context.ports.inventory,
           itemId: context.steps[context.currentIndex]?.requiredItemId as number,
-          slotId: context.steps[context.currentIndex]?.requiredSlotId ?? null,
         }),
         onDone: {
           target: 'savingLog',
           actions: assign({
             inventoryConsumedForStep: () => true,
-            inventoryConsumedSlotId: ({ event }) => event.output,
           }),
         },
         onError: [
-          {
-            guard: ({ context, event }) =>
-              normalizeError(event.error).code === 'INSUFFICIENT_QUANTITY' &&
-              nextInventoryFallbackPlan(
-                context.plan ?? context.session?.plan ?? null,
-              ) !== null,
-
-            target: 'switchingPlan',
-
-            actions: assign({
-              pendingPlan: ({ context }) =>
-                nextInventoryFallbackPlan(
-                  context.plan ?? context.session?.plan ?? null,
-                ),
-              pendingPlanNote: () => 'Insufficient inventory fallback',
-              inventoryConsumedForStep: () => false,
-              inventoryConsumedSlotId: () => null,
-              lastError: ({ event }) => normalizeError(event.error),
-            }),
-          },
           {
             guard: ({ event }) =>
               normalizeError(event.error).code === 'INSUFFICIENT_QUANTITY',
@@ -535,7 +364,7 @@ export const treatmentMachine = setup({
           note: context.pendingPlanNote as string,
         }),
         onDone: {
-          target: 'checkingPlanInventory',
+          target: 'showStep',
           actions: assign({
             session: ({ event }) => event.output,
             steps: ({ event }) => event.output.steps,
@@ -545,7 +374,6 @@ export const treatmentMachine = setup({
             pendingPlan: () => null,
             pendingPlanNote: () => null,
             inventoryConsumedForStep: () => false,
-            inventoryConsumedSlotId: () => null,
             lastError: () => null,
           }),
         },
@@ -566,9 +394,7 @@ export const treatmentMachine = setup({
             ...runtimeEventContext(context),
             stepNo: context.steps[context.currentIndex].stepNo,
             itemUsedId: context.steps[context.currentIndex].requiredItemId,
-            slotId:
-              context.steps[context.currentIndex].requiredSlotId ??
-              context.inventoryConsumedSlotId,
+            slotId: context.steps[context.currentIndex].requiredSlotId,
           },
         }),
         onDone: [
@@ -579,7 +405,6 @@ export const treatmentMachine = setup({
               currentIndex: ({ context }) => context.currentIndex + 1,
               isChecked: () => false,
               inventoryConsumedForStep: () => false,
-              inventoryConsumedSlotId: () => null,
               lastError: () => null,
             }),
           },
@@ -615,9 +440,7 @@ export const treatmentMachine = setup({
             itemUsedId:
               context.steps[context.currentIndex]?.requiredItemId ?? null,
 
-            slotId:
-              context.steps[context.currentIndex]?.requiredSlotId ??
-              context.inventoryConsumedSlotId,
+            slotId: context.steps[context.currentIndex]?.requiredSlotId ?? null,
           },
         }),
         onDone: {
@@ -681,10 +504,10 @@ export const treatmentMachine = setup({
       },
     },
     completed: {
-      on: {},
+      type: 'final',
     },
     emergencyOverride: {
-      on: {},
+      type: 'final',
     },
   },
 });

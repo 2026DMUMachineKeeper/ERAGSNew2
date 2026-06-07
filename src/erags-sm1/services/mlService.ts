@@ -27,7 +27,6 @@ export interface MlSessionPort {
   createSession(
     accident: AccidentClassification,
     patientContext: PatientContext,
-    planType?: Plan,
   ): Promise<TreatmentSession>;
   switchPlan(
     session: TreatmentSession,
