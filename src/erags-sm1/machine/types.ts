@@ -68,7 +68,6 @@ export interface TreatmentContext {
   pendingPlan: Plan | null;
   pendingPlanNote: string | null;
   inventoryConsumedForStep: boolean;
-  inventoryConsumedSlotId: number | null;
   lastError: SessionError | null;
   qrPayload: QRPayload | null;
   emergencyNote: string | null;
@@ -79,7 +78,6 @@ export type TreatmentEvent =
       type: 'START';
       accident: AccidentClassification;
       patientContext: PatientContext;
-      planType?: Plan;
     }
   | {
       type: 'VOICE_INPUT';

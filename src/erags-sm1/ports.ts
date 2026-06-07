@@ -6,10 +6,7 @@ import Voice, {
   type SpeechResultsEvent,
 } from '@react-native-voice/voice'; // 라이브러리 호출 STT 코드
 import Config from 'react-native-config';
-import {
-  ServerInventoryService,
-  type InventoryPort,
-} from './services/dbService';
+import { ServerInventoryService, type InventoryPort } from './services/dbService';
 import type { MlSessionPort } from './services/mlService';
 import type {
   AccidentClassification,
@@ -20,119 +17,18 @@ import type {
   PatientContext,
   Plan,
   QRPayload,
-  TreatmentStep,
   TreatmentSession,
 } from './machine/types';
-import { SessionError } from './machine/types';
 
-const derivePlanType = (_patientContext: PatientContext): Plan => {
-  return 'A';
-};
-
-const getBaseUrl = () => {
-  const configuredBaseUrl =
-    Config.Base_URL ?? Config.BASE_URL ?? Config.base_url ?? '';
-
-  return configuredBaseUrl.replace(/\/$/, '');
-};
-
-const buildUrl = (path: string) => {
-  const baseUrl = getBaseUrl();
-
-  if (!baseUrl) {
-    throw new Error(
-      'Base_URL이 설정되지 않았습니다. .env에 Base_URL을 넣고 앱을 재빌드했는지 확인하세요.',
-    );
-  }
-
-  return `${baseUrl}${path}`;
-};
-
-const toTreatmentStep = (record: any, index: number): TreatmentStep => ({
-  stepNo: Number(record?.stepNo ?? record?.step_no ?? record?.no ?? index + 1),
-  instruction:
-    typeof record?.instruction === 'string'
-      ? record.instruction
-      : typeof record?.text === 'string'
-      ? record.text
-      : typeof record?.title === 'string'
-      ? record.title
-      : '',
-  checkpointQuestion:
-    typeof record?.checkpointQuestion === 'string'
-      ? record.checkpointQuestion
-      : typeof record?.checkpoint_question === 'string'
-      ? record.checkpoint_question
-      : typeof record?.question === 'string'
-      ? record.question
-      : typeof record?.instruction === 'string'
-      ? '완료 후 다음 단계로 진행하세요.'
-      : '완료 여부를 확인하세요.',
-  requiredItemId:
-    typeof record?.requiredItemId === 'number'
-      ? record.requiredItemId
-      : typeof record?.requiredItemId === 'string'
-      ? Number(record.requiredItemId)
-      : typeof record?.required_item_id === 'number'
-      ? record.required_item_id
-      : typeof record?.required_item_id === 'string'
-      ? Number(record.required_item_id)
-      : null,
-  requiredSlotId:
-    typeof record?.requiredSlotId === 'number'
-      ? record.requiredSlotId
-      : typeof record?.requiredSlotId === 'string'
-      ? Number(record.requiredSlotId)
-      : typeof record?.required_slot_id === 'number'
-      ? record.required_slot_id
-      : typeof record?.required_slot_id === 'string'
-      ? Number(record.required_slot_id)
-      : null,
-  imageResource:
-    typeof record?.imageResource === 'string'
-      ? record.imageResource
-    : typeof record?.image_resource === 'string'
-      ? record.image_resource
-      : typeof record?.image === 'string'
-      ? record.image
-      : typeof record?.image_url === 'string'
-      ? record.image_url
-      : typeof record?.imageUrl === 'string'
-      ? record.imageUrl
-      : typeof record?.url === 'string'
-      ? record.url
-      : '',
-});
-
-const extractTreatmentSteps = (payload: unknown): TreatmentStep[] => {
-  const records = Array.isArray(payload)
-    ? payload
-    : Array.isArray((payload as any)?.steps)
-    ? (payload as any).steps
-    : Array.isArray((payload as any)?.data)
-    ? (payload as any).data
-    : Array.isArray((payload as any)?.result)
-    ? (payload as any).result
-    : [];
-
-  return records.map((record: any, index: number) =>
-    toTreatmentStep(record, index),
-  );
-};
-
-class FakeMlService implements MlSessionPort {
-  // ML/session 서버 역할을 임시로 흉내냄. 테스트용
+class FakeMlService implements MlSessionPort { // ML/session 서버 역할을 임시로 흉내냄. 테스트용
   async createSession(
     accident: AccidentClassification,
     patientContext: PatientContext,
-    planType?: Plan,
   ): Promise<TreatmentSession> {
-    const selectedPlan = planType ?? derivePlanType(patientContext);
-
     return {
       sessionId: `mock-${Date.now()}`,
       accidentType: accident.type,
-      plan: selectedPlan,
+      plan: 'A',
       steps: [
         {
           stepNo: 1,
@@ -169,135 +65,12 @@ class FakeMlService implements MlSessionPort {
   }
 }
 
-class TreatmentApiService extends FakeMlService {
-  constructor(private readonly fetcher: typeof fetch = fetch) {
-    super();
-  }
-
-  override async createSession(
-    accident: AccidentClassification,
-    patientContext: PatientContext,
-    planType?: Plan,
-  ): Promise<TreatmentSession> {
-    const selectedPlan = planType ?? derivePlanType(patientContext);
-    const requestPath = `/api/treatment/steps?accident_type=${encodeURIComponent(
-      accident.type,
-    )}&plan_type=${encodeURIComponent(selectedPlan)}`;
-
-    console.log('[ERAGS treatment] request', {
-      accidentType: accident.type,
-      planType: selectedPlan,
-      requestPath,
-    });
-
-    let response: Response;
-    try {
-      response = await this.fetcher(buildUrl(requestPath), {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-      });
-    } catch {
-      throw new SessionError(
-        'SERVER_UNAVAILABLE',
-        'Could not connect to treatment guide server',
-      );
-    }
-
-    console.log('[ERAGS treatment] response', {
-      ok: response.ok,
-      status: response.status,
-      url: response.url,
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new SessionError(
-          'PLAN_STEPS_UNAVAILABLE',
-          'Treatment guide steps were not found for the selected plan',
-        );
-      }
-
-      throw new SessionError(
-        'SERVER_UNAVAILABLE',
-        `Treatment guide request failed with HTTP ${response.status}`,
-      );
-    }
-
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new SessionError(
-        'INVALID_RESPONSE',
-        'Treatment guide server returned invalid JSON',
-      );
-    }
-
-    console.log('[ERAGS treatment] payload', payload);
-
-    const steps = extractTreatmentSteps(payload);
-    console.log('[ERAGS treatment] normalized steps', steps);
-    if (!steps.length) {
-      throw new SessionError(
-        'PLAN_STEPS_UNAVAILABLE',
-        'Treatment guide server returned no steps',
-      );
-    }
-
-    const responseSessionId =
-      typeof (payload as any)?.sessionId === 'string' &&
-      (payload as any).sessionId.trim().length > 0
-        ? (payload as any).sessionId
-        : `session-${Date.now()}`;
-
-    return {
-      sessionId: responseSessionId,
-      accidentType: accident.type,
-      plan: selectedPlan,
-      steps,
-      patientContext,
-      startedAt: Date.now(),
-    };
-  }
-
-  override async switchPlan(
-    session: TreatmentSession,
-    nextPlan: Plan,
-    note: string,
-  ): Promise<TreatmentSession> {
-    console.log('[ERAGS treatment] switch plan', {
-      sessionId: session.sessionId,
-      fromPlan: session.plan,
-      nextPlan,
-      note,
-    });
-
-    const nextSession = await this.createSession(
-      {
-        type: session.accidentType,
-        confidence: 1,
-        rawInputType: 'MANUAL',
-      },
-      session.patientContext,
-      nextPlan,
-    );
-
-    return {
-      ...nextSession,
-      sessionId: session.sessionId,
-      startedAt: session.startedAt,
-    };
-  }
-}
-
 export function createDefaultPorts(): {
   ml: MlSessionPort;
   inventory: InventoryPort;
 } {
   const inventory = new ServerInventoryService();
-  const ml = new TreatmentApiService();
+  const ml = new FakeMlService();
 
   return { ml, inventory };
 }
@@ -308,8 +81,7 @@ export type SttService = {
   transcribe(audioUri?: string): Promise<string>;
 };
 
-export type VoiceTriageResult = {
-  // 나중에 AI 분류 꽂을 타입 추가
+export type VoiceTriageResult = { // 나중에 AI 분류 꽂을 타입 추가
   accident: AccidentClassification;
   patientContext: PatientContext;
 };
@@ -481,7 +253,8 @@ class OnDeviceSttService implements SttService {
     }
 
     return (
-      candidates.find(value => this.hasEmergencyKeyword(value)) ?? candidates[0]
+      candidates.find(value => this.hasEmergencyKeyword(value)) ??
+      candidates[0]
     );
   }
 
@@ -509,9 +282,7 @@ class OnDeviceSttService implements SttService {
 
   private async transcribeOnce(audioUri?: string): Promise<string> {
     if (audioUri) {
-      throw new Error(
-        'File-based transcription is not supported on this device',
-      );
+      throw new Error('File-based transcription is not supported on this device');
     }
 
     const isAvailable = await Voice.isAvailable().catch(() => false);
@@ -589,10 +360,7 @@ class OnDeviceSttService implements SttService {
 
         partialFallbackId = setTimeout(() => {
           if (lastText) {
-            console.log(
-              '[ERAGS STT] using delayed partial fallback:',
-              lastText,
-            );
+            console.log('[ERAGS STT] using delayed partial fallback:', lastText);
             finish(lastText);
           }
         }, 1200);
@@ -620,27 +388,20 @@ class OnDeviceSttService implements SttService {
         // entering an error state.
         const code = (error as any)?.error?.code?.toString?.();
         if (code === '7' || code === '7/No match') {
-          console.warn(
-            '[ERAGS STT] recognizer returned No match; resolving empty string',
-          );
+          console.warn('[ERAGS STT] recognizer returned No match; resolving empty string');
           finish('');
           return;
         }
 
         if (lastText) {
-          console.warn(
-            '[ERAGS STT] error after partial result; using fallback:',
-            lastText,
-          );
+          console.warn('[ERAGS STT] error after partial result; using fallback:', lastText);
           finish(lastText);
           return;
         }
 
         resolved = true;
         const message =
-          (error as any)?.error?.message ??
-          (error as any)?.error?.code ??
-          'On-device STT failed';
+          (error as any)?.error?.message ?? (error as any)?.error?.code ?? 'On-device STT failed';
         console.warn('[ERAGS STT] failing transcribe promise:', message, error);
         reject(new Error(String(message)));
         cleanup();
@@ -675,16 +436,10 @@ class OnDeviceSttService implements SttService {
         if (partialText && partialText.trim().length > 0) {
           lastText = partialText;
           if (this.hasEmergencyKeyword(partialText)) {
-            console.log(
-              '[ERAGS STT] scheduling emergency partial result:',
-              partialText,
-            );
+            console.log('[ERAGS STT] scheduling emergency partial result:', partialText);
             partialFallbackId = setTimeout(() => {
               if (lastText) {
-                console.log(
-                  '[ERAGS STT] using emergency partial result:',
-                  lastText,
-                );
+                console.log('[ERAGS STT] using emergency partial result:', lastText);
                 finish(lastText);
               }
             }, this.emergencyPartialDelayMs);
@@ -725,10 +480,7 @@ export function createDefaultPortsWithStt(): {
   const { ml, inventory } = createDefaultPorts();
   const stt = new OnDeviceSttService();
   console.log('[ERAGS TRIAGE] provider: gemini');
-  console.log(
-    '[ERAGS TRIAGE] Gemini key configured:',
-    Boolean(Config.GEMINI_API_KEY),
-  );
+  console.log('[ERAGS TRIAGE] Gemini key configured:', Boolean(Config.GEMINI_API_KEY));
 
   const triage = Config.GEMINI_API_KEY
     ? new GeminiVoiceTriageService(Config.GEMINI_API_KEY)
