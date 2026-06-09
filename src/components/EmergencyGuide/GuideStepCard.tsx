@@ -9,8 +9,8 @@ type GuideStepCardProps = {
 
 export function GuideStepCard({ step, index }: GuideStepCardProps) {
   return (
-    <View className="bg-[#22262E] border border-[#363C46] rounded-xl p-4 mb-3">
-      <Text className="text-[#FF3B3B] text-sm tracking-erags">
+    <View className="bg-surface border border-borderMuted rounded-xl p-4 mb-3">
+      <Text className="text-red text-sm tracking-erags">
         STEP {index + 1}
       </Text>
       <Text className="text-white text-body mt-2 leading-6 font-suitBold">

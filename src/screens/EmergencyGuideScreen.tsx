@@ -13,6 +13,9 @@ import { useTreatment } from '../erags-sm1/context/TreatmentContext';
 import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
+import tailwindConfig from '../../tailwind.config';
+
+const { colors } = tailwindConfig;
 
 type EmergencyGuideProps = NativeStackScreenProps<
   RootStackParamList,
@@ -39,7 +42,7 @@ export function EmergencyGuideScreen({
   route,
 }: EmergencyGuideProps) {
   const treatment = useTreatment();
-  const mainLabel = route.params?.mainLabel ?? '응급';
+  const mainLabel = route.params?.mainLabel ?? '?�급';
   const subtypeLabel = route.params?.subtypeLabel ?? '';
 
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
@@ -85,11 +88,11 @@ export function EmergencyGuideScreen({
   const isShowStep = treatment.state === 'showStep';
   const isLastStep = currentIndex >= steps.length - 1;
 
-  // 단계 정보가 아직 없으면 로딩 표시 (race condition 방어)
+  // 단계 정보가 아직 없으면 로딩 표시  (race condition 방어)
   if (!currentStep) {
     return (
       <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator color="#FFFFFF" />
+        <ActivityIndicator color={colors.white} />
       </SafeAreaView>
     );
   }
@@ -120,14 +123,14 @@ export function EmergencyGuideScreen({
 
         {isLoading && (
           <View className="mt-6 items-center">
-            <ActivityIndicator color="#FFFFFF" />
-            <Text className="text-gray mt-2 text-sm">처리 중...</Text>
+            <ActivityIndicator color={colors.white} />
+            <Text className="text-gray mt-2 text-sm">처리 �?..</Text>
           </View>
         )}
 
         {isError && (
-          <View className="mt-6 p-4 bg-[#2A1D1D] rounded-xl border border-[#FF3B3B]">
-            <Text className="text-[#FF6B6B] text-sm text-center">
+          <View className="mt-6 p-4 bg-dangerSurface rounded-xl border border-red">
+            <Text className="text-dangerText text-sm text-center">
               {treatment.context.lastError?.message ?? '오류가 발생했습니다.'}
             </Text>
           </View>
@@ -145,7 +148,7 @@ export function EmergencyGuideScreen({
         {isCheckPoint && (
           <TouchableOpacity
             className={`h-16 rounded-lg justify-center items-center mt-6 mb-6 ${
-              isChecked ? 'bg-[#2ECC71]' : 'bg-[#3A3A3A]'
+              isChecked ? 'bg-success' : 'bg-disabledDark'
             }`}
             disabled={!isChecked}
             onPress={() => treatment.confirm()}
@@ -156,7 +159,7 @@ export function EmergencyGuideScreen({
 
         {isError && (
           <TouchableOpacity
-            className="h-16 bg-[#AF2E26] rounded-lg justify-center items-center mt-6 mb-6"
+            className="h-16 bg-danger rounded-lg justify-center items-center mt-6 mb-6"
             onPress={() => treatment.retry()}
           >
             <Text className="text-white font-bold">재시도</Text>

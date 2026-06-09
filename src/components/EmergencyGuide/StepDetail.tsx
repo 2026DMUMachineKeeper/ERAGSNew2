@@ -23,17 +23,17 @@ export function StepDetail({
     <View className="flex-1 px-4 pt-2">
       <View className="relative min-h-[84px] justify-center items-center">
         <View className="items-center justify-center">
-          <Text className="text-xl text-[#FF3B3B]">{step.stepNo}단계</Text>
+          <Text className="text-xl text-red">{step.stepNo}단계</Text>
           <Text className="text-2xl font-bold text-white mt-2 text-center">
             {step.instruction}
           </Text>
         </View>
 
         <TouchableOpacity
-          className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-[#FF3B3B] bg-[#2A1D1D]"
+          className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-red bg-dangerSurface"
           onPress={() => setShowStopModal(true)}
         >
-          <Text className="text-[#FF6B6B] text-xs font-bold">
+          <Text className="text-dangerText text-xs font-bold">
             응급처치 중단
           </Text>
         </TouchableOpacity>
@@ -46,25 +46,25 @@ export function StepDetail({
         onRequestClose={() => setShowStopModal(false)}
       >
         <View className="flex-1 bg-black/60 items-center justify-center px-6">
-          <View className="w-full max-w-[320px] rounded-2xl bg-[#181C24] border border-[#2B303A] px-5 py-5">
+          <View className="w-full max-w-[320px] rounded-2xl bg-surfaceAlt border border-borderSubtle px-5 py-5">
             <View className="mb-4">
               <Text className="text-lg font-bold text-white text-center">
                 응급처치를 중단하시겠습니까?
               </Text>
-              <Text className="mt-3 text-sm text-[#A5ACB8] text-center leading-5">
+              <Text className="mt-3 text-sm text-textMuted text-center leading-5">
                 중단하면 현재 안내를 종료하고 구조대원 인계 페이지로 이동합니다.
               </Text>
             </View>
             <View className="mt-5 flex-row gap-3">
               <TouchableOpacity
-                className="flex-1 h-12 rounded-xl border border-[#2B303A] items-center justify-center"
+                className="flex-1 h-12 rounded-xl border border-borderSubtle items-center justify-center"
                 onPress={() => setShowStopModal(false)}
               >
                 <Text className="text-white font-bold">취소</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                className="flex-1 h-12 rounded-xl bg-[#FF3B3B] items-center justify-center"
+                className="flex-1 h-12 rounded-xl bg-red items-center justify-center"
                 onPress={() => {
                   setShowStopModal(false);
                   onStopPress?.();
@@ -78,7 +78,7 @@ export function StepDetail({
       </Modal>
 
       {showCheckpoint && (
-        <View className="mt-6 p-4 bg-[#1E2530] rounded-xl border border-[#2B303A]">
+        <View className="mt-6 p-4 bg-surfaceInfo rounded-xl border border-borderSubtle">
           <Text className="text-white text-base">
             {step.checkpointQuestion}
           </Text>
@@ -88,11 +88,11 @@ export function StepDetail({
           >
             <View
               className={`w-6 h-6 rounded border-2 items-center justify-center mr-3 ${
-                isChecked ? 'bg-[#2ECC71] border-[#2ECC71]' : 'border-[#555]'
+                isChecked ? 'bg-success border-success' : 'border-gray'
               }`}
             >
               {isChecked && (
-                <Text className="text-white text-xs font-bold">✓</Text>
+                <Text className="text-dangerText text-xs font-bold">?</Text>
               )}
             </View>
             <Text className="text-white">확인했습니다</Text>

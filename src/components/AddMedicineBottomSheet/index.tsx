@@ -18,7 +18,10 @@ import {
   type CameraOptions,
   type ImagePickerResponse,
 } from 'react-native-image-picker';
+import tailwindConfig from '../../../tailwind.config';
 import { postMedicineVision } from '../../services';
+
+const { colors } = tailwindConfig;
 
 type MedicineItem = {
   id: string;
@@ -71,21 +74,21 @@ export default function AddMedicineBottomSheet({
         bottom: 0,
         zIndex: 999,
         elevation: 999,
-        backgroundColor: 'rgba(0,0,0,0.7)',
+        backgroundColor: `${colors.black}B3`,
         justifyContent: 'flex-end',
       }}
     >
       <View
         onStartShouldSetResponder={() => true}
         style={{
-          backgroundColor: '#0F172A',
+          backgroundColor: colors.sheetBg,
           borderTopLeftRadius: 32,
           borderTopRightRadius: 32,
           paddingHorizontal: 24,
           paddingTop: 16,
           paddingBottom: 30,
           height: 600,
-          shadowColor: '#000',
+          shadowColor: colors.black,
           shadowOpacity: 0.35,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: -6 },
@@ -97,7 +100,7 @@ export default function AddMedicineBottomSheet({
             width: 60,
             height: 5,
             borderRadius: 999,
-            backgroundColor: '#9CA3AF',
+            backgroundColor: colors.placeholder,
             alignSelf: 'center',
             marginTop: 4,
             marginBottom: 28,
@@ -106,7 +109,7 @@ export default function AddMedicineBottomSheet({
         <View className="bg-gray border border-white rounded-lg p-3 mb-3">
           <TextInput
             placeholder="약품 이름"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.placeholder}
             className="text-white"
             value={name}
             onChangeText={setName}
@@ -115,7 +118,7 @@ export default function AddMedicineBottomSheet({
         <View className="bg-gray border border-white rounded-lg p-3 mb-3">
           <TextInput
             placeholder="바코드"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.placeholder}
             className="text-white"
             value={barcode}
             onChangeText={setBarcode}
@@ -124,7 +127,7 @@ export default function AddMedicineBottomSheet({
         <View className="bg-gray border border-white rounded-lg p-3 mb-3">
           <TextInput
             placeholder="수량"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.placeholder}
             className="text-white"
             value={qty}
             onChangeText={setQty}
@@ -136,7 +139,7 @@ export default function AddMedicineBottomSheet({
           activeOpacity={0.8}
           className="bg-gray border border-white rounded-lg p-3 mb-6"
         >
-          <Text style={{ color: expiryDate ? '#FFFFFF' : '#9CA3AF' }}>
+          <Text style={{ color: expiryDate ? colors.white : colors.placeholder }}>
             {expiryDate ? expiryDate.toLocaleDateString('ko-KR') : '유통기한 선택'}
           </Text>
         </TouchableOpacity>
@@ -306,7 +309,7 @@ export default function AddMedicineBottomSheet({
             }
           }}
           style={{
-            backgroundColor: '#2ECC71',
+            backgroundColor: colors.success,
             height: 58,
             borderRadius: 18,
             justifyContent: 'center',
@@ -315,11 +318,11 @@ export default function AddMedicineBottomSheet({
           }}
         >
           {uploading ? (
-            <ActivityIndicator color="#0F172A" />
+            <ActivityIndicator color={colors.sheetBg} />
           ) : (
             <Text
               style={{
-                color: 'white',
+                color: colors.white,
                 fontSize: 18,
                 fontWeight: '700',
               }}
@@ -334,7 +337,7 @@ export default function AddMedicineBottomSheet({
             else onClose();
           }}
           style={{
-            backgroundColor: '#ffffff',
+            backgroundColor: colors.white,
             height: 58,
             borderRadius: 18,
             justifyContent: 'center',
@@ -344,7 +347,7 @@ export default function AddMedicineBottomSheet({
         >
           <Text
             style={{
-              color: '#0F172A',
+              color: colors.sheetBg,
               fontSize: 18,
               fontWeight: '700',
             }}

@@ -65,8 +65,8 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
             const selected = selectedId === item.id;
             return (
               <TouchableOpacity
-                className={`h-[140px] w-[176px] bg-[#22262E] rounded-2xl items-center justify-center border-2 ${
-                  selected ? 'border-[#12B76A]' : 'border-[#363C46]'
+                className={`h-[140px] w-[176px] bg-surface rounded-2xl items-center justify-center border-2 ${
+                  selected ? 'border-successStrong' : 'border-borderMuted'
                 }`}
                 style={{ marginBottom: 0 }}
                 onPress={() => {
@@ -88,7 +88,7 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
       <View className="mt-4 mb-5">
         <TouchableOpacity
           className={`mx-4 h-16 rounded-lg justify-center items-center ${
-            selectedId ? 'bg-[#FF3B3B]' : 'bg-[#6B6F76]'
+            selectedId ? 'bg-red' : 'bg-disabled'
           }`}
           disabled={!selectedId}
           onPress={() => {

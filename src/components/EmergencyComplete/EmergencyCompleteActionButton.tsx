@@ -9,7 +9,7 @@ type Props = {
 export function EmergencyCompleteActionButton({ title, onPress }: Props) {
   return (
     <TouchableOpacity
-      className="h-16 rounded-2xl bg-[#FF3B3B] items-center justify-center"
+      className="h-16 rounded-2xl bg-red items-center justify-center"
       onPress={onPress}
     >
       <Text className="text-white text-base font-bold">{title}</Text>

@@ -43,7 +43,7 @@ export function GuideHeader({
           </Text>
         </View>
 
-        <Text className="text-sm text-[#BFE8D0] tracking-erags">
+        <Text className="text-sm text-successText tracking-erags">
           {elapsedLabel}
         </Text>
       </View>

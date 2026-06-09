@@ -122,9 +122,9 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
               <TouchableOpacity
                 className={`${
                   selectedId === item.id
-                    ? 'border-[#12B76A]'
-                    : 'border-[#363C46]'
-                } py-4 px-3 bg-[#22262E] rounded-lg mb-3 border`}
+                    ? 'border-successStrong'
+                    : 'border-borderMuted'
+                } py-4 px-3 bg-surface rounded-lg mb-3 border`}
                 onPress={() => {
                   setSelectedId(item.id);
                 }}

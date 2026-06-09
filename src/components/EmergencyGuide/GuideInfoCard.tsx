@@ -14,12 +14,12 @@ export function GuideInfoCard({
 }: GuideInfoCardProps) {
   const containerClassName =
     tone === 'success'
-      ? 'mt-4 bg-[#1C2F2C] border border-[#2ECC71] rounded-2xl p-4'
-      : 'bg-[#22262E] border border-[#363C46] rounded-2xl p-4';
+      ? 'mt-4 bg-successSurface border border-success rounded-2xl p-4'
+      : 'bg-surface border border-borderMuted rounded-2xl p-4';
 
   const descriptionClassName =
     tone === 'success'
-      ? 'text-[#BFE8D0] text-body mt-2 leading-6'
+      ? 'text-successText text-body mt-2 leading-6'
       : 'text-lightGray text-body mt-3 leading-6';
 
   return (
