@@ -1,5 +1,11 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -8,9 +14,17 @@ import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 
-type EmergencyGuideProps = NativeStackScreenProps<RootStackParamList, 'EmergencyGuide'>;
+type EmergencyGuideProps = NativeStackScreenProps<
+  RootStackParamList,
+  'EmergencyGuide'
+>;
 
-const LOADING_STATES = ['savingInventory', 'savingLog', 'finalizing', 'switchingPlan'];
+const LOADING_STATES = [
+  'savingInventory',
+  'savingLog',
+  'finalizing',
+  'switchingPlan',
+];
 const ERROR_STATES = [
   'serverUnavailable',
   'logSaveFailed',
@@ -20,7 +34,10 @@ const ERROR_STATES = [
   'emergencyQrFailed',
 ];
 
-export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps) {
+export function EmergencyGuideScreen({
+  navigation,
+  route,
+}: EmergencyGuideProps) {
   const treatment = useTreatment();
   const mainLabel = route.params?.mainLabel ?? '응급';
   const subtypeLabel = route.params?.subtypeLabel ?? '';
@@ -48,7 +65,14 @@ export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps)
         totalSteps: steps.length,
       });
     }
-  }, [elapsedSeconds, mainLabel, navigation, subtypeLabel, treatment.context, treatment.state]);
+  }, [
+    elapsedSeconds,
+    mainLabel,
+    navigation,
+    subtypeLabel,
+    treatment.context,
+    treatment.state,
+  ]);
 
   const { steps, currentIndex, isChecked } = treatment.context;
   const currentStep = steps[currentIndex];
@@ -91,7 +115,7 @@ export function EmergencyGuideScreen({ navigation, route }: EmergencyGuideProps)
           isChecked={isChecked as boolean}
           showCheckpoint={isCheckPoint}
           onToggle={checked => treatment.toggle(checked)}
-          onStopPress={() => navigation.goBack()}
+          onStopPress={() => navigation.navigate('EmergencyComplete')}
         />
 
         {isLoading && (

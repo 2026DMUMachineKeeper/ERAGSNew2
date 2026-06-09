@@ -10,7 +10,13 @@ type Props = {
   onStopPress?: () => void;
 };
 
-export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPress }: Props) {
+export function StepDetail({
+  step,
+  isChecked,
+  showCheckpoint,
+  onToggle,
+  onStopPress,
+}: Props) {
   const [showStopModal, setShowStopModal] = React.useState(false);
 
   return (
@@ -27,7 +33,9 @@ export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPr
           className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-[#FF3B3B] bg-[#2A1D1D]"
           onPress={() => setShowStopModal(true)}
         >
-          <Text className="text-[#FF6B6B] text-xs font-bold">응급처치 중단</Text>
+          <Text className="text-[#FF6B6B] text-xs font-bold">
+            응급처치 중단
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -39,14 +47,15 @@ export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPr
       >
         <View className="flex-1 bg-black/60 items-center justify-center px-6">
           <View className="w-full max-w-[320px] rounded-2xl bg-[#181C24] border border-[#2B303A] px-5 py-5">
-            <Text className="text-lg font-bold text-white text-center">
-              응급처치를 중단하시겠습니까?
-            </Text>
-            <Text className="mt-3 text-sm text-[#A5ACB8] text-center leading-5">
-              중단하면 현재 안내를 종료하고 이전 화면으로 돌아갑니다.
-            </Text>
-
-            <View className="mt-4 flex-row gap-3">
+            <View className="mb-4">
+              <Text className="text-lg font-bold text-white text-center">
+                응급처치를 중단하시겠습니까?
+              </Text>
+              <Text className="mt-3 text-sm text-[#A5ACB8] text-center leading-5">
+                중단하면 현재 안내를 종료하고 구조대원 인계 페이지로 이동합니다.
+              </Text>
+            </View>
+            <View className="mt-5 flex-row gap-3">
               <TouchableOpacity
                 className="flex-1 h-12 rounded-xl border border-[#2B303A] items-center justify-center"
                 onPress={() => setShowStopModal(false)}
@@ -70,7 +79,9 @@ export function StepDetail({ step, isChecked, showCheckpoint, onToggle, onStopPr
 
       {showCheckpoint && (
         <View className="mt-6 p-4 bg-[#1E2530] rounded-xl border border-[#2B303A]">
-          <Text className="text-white text-base">{step.checkpointQuestion}</Text>
+          <Text className="text-white text-base">
+            {step.checkpointQuestion}
+          </Text>
           <TouchableOpacity
             className="flex-row items-center mt-3"
             onPress={() => onToggle(!isChecked)}
