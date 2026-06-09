@@ -10,6 +10,7 @@ const fontSize = {
 
 const colors = {
   red: '#FF3B3B',
+  camera_bg: '#FFFAF8',
   background: '#1A1D24',
   white: '#FFFFFF',
   black: '#000000',
@@ -39,6 +40,17 @@ const colors = {
   placeholder: '#9CA3AF',
   warning: '#F59E0B',
   offWhite: '#E5E7EB',
+  memoBg: '#F8F9FC',
+  memoText: '#111827',
+  memoSubText: '#6B7280',
+  memoLine: '#EEF0F4',
+  memoCard: '#FFFFFF',
+  memoRed: '#FF3B3B',
+  memoOrange: '#FF7A1A',
+  memoGreen: '#2ECC71',
+  memoBlue: '#2F7DFF',
+  memoPurple: '#8A4DFF',
+  memoPink: '#FF4FA3',
 };
 
 module.exports = {
