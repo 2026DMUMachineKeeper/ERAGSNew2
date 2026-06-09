@@ -15,7 +15,7 @@ export function GuideActionButton({
   return (
     <TouchableOpacity
       className={`${
-        disabled ? 'h-16 bg-[#6B6F76]' : 'h-16 bg-[#FF3B3B]'
+        disabled ? 'h-16 bg-disabled' : 'h-16 bg-red'
       } rounded-lg justify-center items-center`}
       onPress={disabled ? undefined : onPress}
       disabled={disabled}

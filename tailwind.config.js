@@ -7,16 +7,46 @@ const fontSize = {
   body: ['16px', { lineHeight: '20px', fontWeight: '400' }],
   coment: ['12px', { lineHeight: '18px', fontWeight: '400' }],
 };
+
+const colors = {
+  red: '#FF3B3B',
+  background: '#1A1D24',
+  white: '#FFFFFF',
+  black: '#000000',
+  gray: '#525D6D',
+  lightGray: '#4A5B65',
+  appBg: '#0F1116',
+  sheetBg: '#0F172A',
+  surface: '#22262E',
+  surfaceAlt: '#181C24',
+  surfaceInfo: '#1E2530',
+  surfaceChip: '#2B2D31',
+  successSurface: '#1C2F2C',
+  dangerSurface: '#2A1D1D',
+  borderMuted: '#363C46',
+  borderSubtle: '#2B303A',
+  textMuted: '#A5ACB8',
+  textSubtle: '#8B93A1',
+  textDim: '#7F8389',
+  success: '#2ECC71',
+  successStrong: '#12B76A',
+  successText: '#BFE8D0',
+  danger: '#AF2E26',
+  dangerText: '#FF6B6B',
+  dangerBright: '#FF4D4D',
+  disabled: '#6B6F76',
+  disabledDark: '#3A3A3A',
+  placeholder: '#9CA3AF',
+  warning: '#F59E0B',
+  offWhite: '#E5E7EB',
+};
+
 module.exports = {
   content: ['./App.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        red: '#FF3B3B',
-        background: '#1A1D24',
-        white: '#FFFFFF',
-        gray: '#525D6D',
-        lightGray: '#4A5B65',
+        ...colors,
       },
       fontFamily: {
         sultRegular: ['Sult-Regular', 'System'],
@@ -35,3 +65,5 @@ module.exports = {
   },
   plugins: [],
 };
+
+module.exports.colors = colors;

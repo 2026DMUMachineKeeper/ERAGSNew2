@@ -24,8 +24,8 @@ export function SubtypeOptionList({
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity
-            className={`py-4 px-3 bg-[#22262E] border rounded-lg mb-3 ${
-              selectedId === item.id ? 'border-[#FF3B3B]' : 'border-[#363C46]'
+            className={`py-4 px-3 bg-surface border rounded-lg mb-3 ${
+              selectedId === item.id ? 'border-red' : 'border-borderMuted'
             }`}
             onPress={() => onSelect(item.id)}
           >

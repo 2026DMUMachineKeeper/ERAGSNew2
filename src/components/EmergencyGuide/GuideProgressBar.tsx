@@ -9,9 +9,9 @@ export function GuideProgressBar({ progress }: GuideProgressBarProps) {
   const safeProgress = Math.max(0, Math.min(1, progress));
 
   return (
-    <View className="mt-3 h-2 overflow-hidden rounded-full bg-[#22262E]">
+    <View className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
       <View
-        className="h-full rounded-full bg-[#FF3B3B]"
+        className="h-full rounded-full bg-red"
         style={{ width: `${safeProgress * 100}%` }}
       />
     </View>

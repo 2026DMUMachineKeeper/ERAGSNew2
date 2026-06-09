@@ -27,10 +27,10 @@ import {
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { postMedicineVision } from '../services';
 import { useTreatment } from '../erags-sm1/context/TreatmentContext';
-import type {
-  AccidentType,
-  PatientContext,
-} from '../erags-sm1/machine/types';
+import type { AccidentType, PatientContext } from '../erags-sm1/machine/types';
+import tailwindConfig from '../../tailwind.config';
+
+const { colors } = tailwindConfig;
 
 type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -173,7 +173,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           : '사진을 서버로 전송하지 못했습니다. 네트워크와 서버 상태를 확인해 주세요.';
 
       setVisionStatus(message);
-      Alert.alert('전송 실패', message);
+      Alert.alert('사진 전송 실패', message);
     } finally {
       setIsVisionUploading(false);
     }
@@ -247,7 +247,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       if (!result.ok) {
         if (result.reason === 'NO_CLASSIFICATION' && result.text) {
-          setVoiceStatus(`인식됨: ${result.text}`);
+          setVoiceStatus(`인식됨 : ${result.text}`);
           return;
         }
         if (result.reason === 'EMPTY_TEXT') {
@@ -275,7 +275,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <View className="flex-row items-center mt-3 relative overflow-visible">
           <View className="z-10 flex-1">
             <EragsLogo />
-            <Text className="text-coment text-[#7F8389] mt-1 z-10">
+            <Text className="text-coment text-textDim mt-1 z-10">
               EMERGENCY RESPONSE AID GUIDANCE
             </Text>
             <View className=" mt-10 z-10" />
@@ -289,7 +289,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       <View className="px-4 mt-6">
         <TouchableOpacity
-          className="h-[120px] rounded-2xl bg-[#AF2E26] overflow-hidden flex-row items-center px-4"
+          className="h-[120px] rounded-2xl bg-danger overflow-hidden flex-row items-center px-4"
           onPress={() => navigation.navigate('FirstAid')}
         >
           <View className="w-24 items-start justify-center">
@@ -310,13 +310,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View className="px-4 mt-5">
         <View className="flex-row justify-between gap-x-3">
           <TouchableOpacity
-            className="flex-1 h-[170px] bg-[#22262E] border border-[#363C46] rounded-2xl px-2 py-4 overflow-hidden"
+            className="flex-1 h-[170px] bg-surface border border-borderMuted rounded-2xl px-2 py-4 overflow-hidden"
             disabled={isVoiceBusy}
             onPress={handleVoicePress}
           >
             <View className="items-center mt-2">
               {isVoiceBusy ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={colors.white} />
               ) : (
                 <MicIcon width={40} height={40} />
               )}
@@ -338,13 +338,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="flex-1 h-[170px] bg-[#22262E] border border-[#363C46] rounded-2xl px-2 py-4 overflow-hidden"
+            className="flex-1 h-[170px] bg-surface border border-borderMuted rounded-2xl px-2 py-4 overflow-hidden"
             onPress={handlePhotoPress}
             disabled={isVisionUploading}
           >
             <View className="items-center mt-2">
               {isVisionUploading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={colors.white} />
               ) : (
                 <CameraIcon width={40} height={40} />
               )}
@@ -372,7 +372,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
 
         <TouchableOpacity
-          className="h-[110px] bg-[#22262E] border border-[#363C46] rounded-2xl justify-center mt-4 px-4"
+          className="h-[110px] bg-surface border border-borderMuted rounded-2xl justify-center mt-4 px-4"
           onPress={() => navigation.navigate('MedicinesStock')}
         >
           <View className="flex-row items-center justify-between w-full">

@@ -41,7 +41,6 @@ export function MedicinesStockScreen({
         if (!isActive) {
           return;
         }
-
         console.error('[MedicinesStockScreen] 약품 조회 실패:', error);
         setLoadError('약품 데이터를 불러오지 못했습니다.');
         setMedicines([]);
@@ -109,7 +108,10 @@ export function MedicinesStockScreen({
           paddingBottom: 140 + insets.bottom,
         }}
         renderItem={({ item: m }) => (
-          <View className="mb-4 bg-[#1C2F2C] border-2 border-[#2ECC71] rounded-3xl p-4 h-[100px]" style={{ overflow: 'hidden' }}>
+          <View
+            className="mb-4 bg-successSurface border-2 border-success rounded-3xl p-4 h-[100px]"
+            style={{ overflow: 'hidden' }}
+          >
             <View className="flex-row items-start justify-between h-full">
               {/* Left */}
               <View className="flex-row items-center flex-1">

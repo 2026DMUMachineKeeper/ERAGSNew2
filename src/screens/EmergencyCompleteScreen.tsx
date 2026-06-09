@@ -11,12 +11,15 @@ import {
   EmergencyCompleteSummaryCard,
   type EmergencyCompleteSummaryRow,
 } from '../components/EmergencyComplete/EmergencyCompleteSummaryCard';
+import tailwindConfig from '../../tailwind.config';
+
+const { colors } = tailwindConfig;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EmergencyComplete'>;
 
 const summaryRows: EmergencyCompleteSummaryRow[] = [
   { label: '사고 유형', value: '출혈 / 상처' },
-  { label: '처치 계획', value: 'Plan A 완료', valueColor: '#2ECC71' },
+  { label: '처치 계획', value: 'Plan A 완료', valueColor: colors.success },
   { label: '완료 단계', value: '4 / 4 단계' },
 ];
 
@@ -34,7 +37,7 @@ export function EmergencyCompleteScreen({ navigation, route }: Props) {
   const completedSteps = route.params?.completedSteps ?? totalSteps;
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-[#0F1116]">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-appBg">
       <View className="flex-1 px-4 pt-4 pb-5">
         <View className="mt-6">
           <EmergencyCompleteHeaderCard

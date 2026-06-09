@@ -3,6 +3,9 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import tailwindConfig from '../../tailwind.config';
+
+const { colors } = tailwindConfig;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'QRCode'>;
 
@@ -19,7 +22,7 @@ export function QRCodeScreen({ navigation }: Props) {
   ];
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-[#0F1116]">
+    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-appBg">
       <View className="mt-10" />
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         <View className="px-4">
@@ -31,30 +34,30 @@ export function QRCodeScreen({ navigation }: Props) {
             <View className="w-full aspect-square bg-black rounded-xl items-center justify-center">
               <Text className="text-white">QR CODE</Text>
             </View>
-            <Text className="text-gray-500 text-xs mt-3 text-center">
+            <Text className="text-placeholder text-xs mt-3 text-center">
               T:07:03|TYPE:출혈|STEPS:4/4|ITEMS:4
             </Text>
           </View>
 
           {/* 요약 카드 */}
-          <View className="bg-[#22262E] rounded-2xl p-4 mt-5">
-            <Text className="text-white text-sm mb-3">
+          <View className="bg-surface rounded-2xl p-4 mt-5">
+            <Text className="text-warning text-sm mb-3">
               처치 요약 (QR 스캔 불가 시)
             </Text>
 
-            <View className="flex-row justify-between py-2 border-b border-gray-800">
+            <View className="flex-row justify-between py-2 border-b border-borderSubtle">
               <Text className="text-white">사고 유형</Text>
               <Text className="text-white">{incidentType}</Text>
             </View>
 
-            <View className="flex-row justify-between py-2 border-b border-gray-800">
+            <View className="flex-row justify-between py-2 border-b border-borderSubtle">
               <Text className="text-white">총 처치 시간</Text>
               <Text className="text-white">{totalTime}</Text>
             </View>
 
-            <View className="flex-row justify-between py-2 border-b border-gray-800">
+            <View className="flex-row justify-between py-2 border-b border-borderSubtle">
               <Text className="text-white">완료 단계</Text>
-              <Text className="text-[#2ECC71] font-medium">{`${completed} / ${total} 완료`}</Text>
+              <Text className="text-success font-medium">{`${completed} / ${total} 완료`}</Text>
             </View>
 
             <View className="mt-3">
@@ -63,9 +66,9 @@ export function QRCodeScreen({ navigation }: Props) {
                 {items.map((it, idx) => (
                   <View
                     key={idx}
-                    className="bg-[#2B2D31] px-3 py-2 rounded-full mr-2 mb-2"
+                    className="bg-surfaceChip px-3 py-2 rounded-full mr-2 mb-2"
                   >
-                    <Text className="text-yellow-400 text-sm">{it}</Text>
+                    <Text className="text-warning text-sm">{it}</Text>
                   </View>
                 ))}
               </View>
@@ -74,11 +77,11 @@ export function QRCodeScreen({ navigation }: Props) {
         </View>
       </ScrollView>
 
-      {/* 하단 버튼 */}
+      {/* ?�단 버튼 */}
       <View className="px-4 pb-5">
         <Pressable
           onPress={() => navigation.navigate('Home')}
-          className="bg-[#2ECC71] py-4 rounded-2xl items-center"
+          className="bg-success py-4 rounded-2xl items-center"
         >
           <Text className="text-black font-medium text-lg">홈으로</Text>
         </Pressable>
