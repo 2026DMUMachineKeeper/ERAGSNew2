@@ -7,6 +7,9 @@ import { MedicinesStockScreen } from '../screens/MedicinesStockScreen';
 export type RootStackParamList = {
   Home: undefined;
   MedicinesStock: undefined;
+  MedicineMemo: undefined;
+  MedicineAdd: undefined;
+  MedicineManualInput: undefined;
   TestFont: undefined;
   FirstAid: undefined;
   FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
@@ -37,6 +40,21 @@ export function RootNavigator() {
       <Stack.Screen name="Home" component={HomeScreen} />
 
       <Stack.Screen name="MedicinesStock" component={MedicinesStockScreen} />
+      <Stack.Screen
+        name="MedicineMemo"
+        component={require('../screens/MedicineMemoScreen').MedicineMemoScreen}
+      />
+      <Stack.Screen
+        name="MedicineAdd"
+        component={require('../screens/MedicineAddScreen').MedicineAddScreen}
+      />
+      <Stack.Screen
+        name="MedicineManualInput"
+        component={
+          require('../screens/MedicineManualInputScreen')
+            .MedicineManualInputScreen
+        }
+      />
       <Stack.Screen
         name="FirstAid"
         component={require('../screens/FirstAidScreen').FirstAidScreen}

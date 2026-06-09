@@ -372,22 +372,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
 
         <TouchableOpacity
-          className="h-[110px] bg-surface border border-borderMuted rounded-2xl justify-center mt-4 px-4"
-          onPress={() => navigation.navigate('MedicinesStock')}
+          className="h-[86px] bg-surface border border-borderMuted rounded-2xl justify-center mt-3 px-4"
+          onPress={() => navigation.navigate('MedicineMemo')}
         >
           <View className="flex-row items-center justify-between w-full">
             <View className="flex-row items-center flex-1">
               <MedicinesIcon width={40} height={40} />
               <View className="ml-3 flex-1">
                 <Text className="text-title2 text-white font-suitBold">
-                  약품 재고 확인
+                  약품 메모
                 </Text>
                 <Text
                   numberOfLines={2}
                   ellipsizeMode="tail"
                   className="mt-1 text-coment text-gray"
                 >
-                  보유중인 약품목록과 재고 현황을 확인합니다.
+                  등록한 약품과 복용 메모를 한눈에 확인합니다
                 </Text>
               </View>
             </View>
