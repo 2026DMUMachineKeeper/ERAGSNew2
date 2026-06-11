@@ -4,6 +4,7 @@ import {
   Alert,
   PermissionsAndroid,
   Platform,
+  StyleSheet,
   View,
   Text,
   TouchableOpacity,
@@ -46,6 +47,16 @@ const defaultImageAccident: AccidentClassification = {
   confidence: 0,
   rawInputType: 'IMAGE',
 };
+
+const cardShadow = StyleSheet.create({
+  elevated: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+});
 
 const requestMicrophonePermission = async () => {
   if (Platform.OS !== 'android') {
@@ -249,7 +260,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       <View className="px-4 mt-6">
         <TouchableOpacity
-          className="h-[120px] rounded-2xl bg-danger overflow-hidden flex-row items-center px-4"
+          className="h-[120px] rounded-2xl bg-red overflow-hidden flex-row items-center px-4"
           onPress={() => navigation.navigate('FirstAid')}
         >
           <View className="w-24 items-start justify-center">
@@ -270,7 +281,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View className="px-4 mt-5">
         <View className="flex-row justify-between gap-x-3">
           <TouchableOpacity
-            className="flex-1 h-[170px] bg-surface border border-borderMuted rounded-2xl px-2 py-4 overflow-hidden"
+            className="flex-1 h-[170px] bg-background border border-background rounded-2xl px-2 py-4"
+            style={cardShadow.elevated}
             disabled={isVoiceBusy}
             onPress={handleVoicePress}
           >
@@ -282,7 +294,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               )}
             </View>
             <View className="mt-4 items-center">
-              <Text className="text-body text-white text-center font-suitBold">
+              <Text className="text-body text-black text-center font-suitBold">
                 음성으로 설명
               </Text>
             </View>
@@ -290,7 +302,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text
                 numberOfLines={2}
                 ellipsizeMode="tail"
-                className="text-coment text-gray text-center"
+                className="text-coment text-textDim text-center"
               >
                 {voiceStatus ?? '다친 부분을 음성으로 설명해 주세요.'}
               </Text>
@@ -298,7 +310,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="flex-1 h-[170px] bg-surface border border-borderMuted rounded-2xl px-2 py-4 overflow-hidden"
+            className="flex-1 h-[170px] bg-background border border-background rounded-2xl px-2 py-4"
+            style={cardShadow.elevated}
             onPress={handlePhotoPress}
             disabled={isVisionUploading}
           >
@@ -310,7 +323,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               )}
             </View>
             <View className="mt-4 items-center">
-              <Text className="text-body text-white text-center font-suitBold">
+              <Text className="text-body text-black text-center font-suitBold">
                 사진 촬영
               </Text>
             </View>
@@ -319,7 +332,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text
                 numberOfLines={2}
                 ellipsizeMode="tail"
-                className="text-coment text-gray text-center"
+                className="text-coment text-textDim text-center"
               >
                 {visionStatus ??
                   (isVisionUploading
@@ -331,20 +344,21 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
 
         <TouchableOpacity
-          className="h-[86px] bg-surface border border-borderMuted rounded-2xl justify-center mt-3 px-4"
+          className="h-[86px] bg-background border border-background rounded-2xl justify-center mt-3 px-4"
+          style={cardShadow.elevated}
           onPress={() => navigation.navigate('MedicineMemo')}
         >
           <View className="flex-row items-center justify-between w-full">
             <View className="flex-row items-center flex-1">
               <MedicinesIcon width={40} height={40} />
               <View className="ml-3 flex-1">
-                <Text className="text-title2 text-white font-suitBold">
+                <Text className="text-title2 text-black font-suitBold">
                   약품 메모
                 </Text>
                 <Text
                   numberOfLines={2}
                   ellipsizeMode="tail"
-                  className="mt-1 text-coment text-gray"
+                  className="mt-1 text-coment text-textDim"
                 >
                   등록한 약품과 복용 메모를 한눈에 확인합니다
                 </Text>
