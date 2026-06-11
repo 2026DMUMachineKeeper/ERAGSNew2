@@ -52,13 +52,13 @@ export function StepDetail({
       <View className="relative min-h-[84px] justify-center items-center">
         <View className="items-center justify-center">
           <Text className="text-xl text-red">{stepNo}단계</Text>
-          <Text className="text-2xl font-bold text-white mt-2 text-center">
+          <Text className="text-2xl font-bold text-black mt-2 text-center">
             {instruction}
           </Text>
         </View>
 
         <TouchableOpacity
-          className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-red bg-dangerSurface"
+          className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-red bg-backgroud"
           onPress={() => setShowStopModal(true)}
         >
           <Text className="text-dangerText text-xs font-bold">
@@ -107,28 +107,10 @@ export function StepDetail({
       </Modal>
 
       <View className="mt-6">
-        <Text className="text-white text-base leading-6">
+        <Text className="text-black text-base leading-6">
           {checkpointQuestion}
         </Text>
       </View>
-
-      {showCheckpoint ? (
-        <TouchableOpacity
-          className="flex-row items-center mt-4"
-          onPress={() => onToggle(!isChecked)}
-        >
-          <View
-            className={`w-6 h-6 rounded border-2 items-center justify-center mr-3 ${
-              isChecked ? 'bg-success border-success' : 'border-gray'
-            }`}
-          >
-            {isChecked ? (
-              <Text className="text-dangerText text-xs font-bold">✓</Text>
-            ) : null}
-          </View>
-          <Text className="text-white">확인했습니다</Text>
-        </TouchableOpacity>
-      ) : null}
 
       <View className="mt-6 items-center">
         <View className="w-[260px] h-[200px] bg-offWhite rounded-lg items-center justify-center">
@@ -138,7 +120,7 @@ export function StepDetail({
 
       {requiredSupply ? (
         <View className="mt-6">
-          <Text className="text-white text-sm">필요한 약품</Text>
+          <Text className="text-black text-sm">필요한 약품</Text>
           <View className="flex-row items-center mt-3">
             <View className="bg-red px-4 py-2 rounded-full">
               <Text className="text-white">{requiredSupply}</Text>

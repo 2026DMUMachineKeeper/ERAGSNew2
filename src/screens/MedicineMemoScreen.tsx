@@ -1,11 +1,17 @@
 import React from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
 import tailwindConfig from '../../tailwind.config';
-
+import { BackIcon } from '../assets';
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>;
 
 const { colors } = tailwindConfig;
@@ -69,7 +75,7 @@ export function MedicineMemoScreen({ navigation }: Props) {
             className="h-9 w-9 items-center justify-center"
             onPress={() => navigation.goBack()}
           >
-            <Text className="text-3xl text-memoText">‹</Text>
+            <BackIcon width={24} height={24} />
           </TouchableOpacity>
         </View>
 
@@ -99,7 +105,9 @@ export function MedicineMemoScreen({ navigation }: Props) {
             </Text>
           </View>
           <TouchableOpacity className="flex-row items-center">
-            <Text className="text-sm font-semibold text-memoSubText">최신순</Text>
+            <Text className="text-sm font-semibold text-memoSubText">
+              최신순
+            </Text>
             <Text className="ml-1 text-sm text-memoSubText">⌄</Text>
           </TouchableOpacity>
         </View>
@@ -132,40 +140,46 @@ export function MedicineMemoScreen({ navigation }: Props) {
               const itemColor = getMedicineColor(item.id);
 
               return (
-            <TouchableOpacity
-              key={item.id}
-              activeOpacity={0.85}
-              className="mb-2 min-h-[58px] flex-row items-center rounded-2xl bg-memoCard px-3"
-            >
-              <View
-                className="h-9 w-9 items-center justify-center rounded-full"
-                style={{ backgroundColor: `${itemColor}14` }}
-              >
-                <View
-                  className="h-5 w-5 rotate-45 rounded-md border-2"
-                  style={{ borderColor: itemColor }}
-                />
-              </View>
+                <TouchableOpacity
+                  key={item.id}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    navigation.navigate('MedicineDetail', { medicine: item })
+                  }
+                  className="mb-2 min-h-[58px] flex-row items-center rounded-2xl bg-memoCard px-3"
+                >
+                  <View
+                    className="h-9 w-9 items-center justify-center rounded-full"
+                    style={{ backgroundColor: `${itemColor}14` }}
+                  >
+                    <View
+                      className="h-5 w-5 rotate-45 rounded-md border-2"
+                      style={{ borderColor: itemColor }}
+                    />
+                  </View>
 
-              <View className="ml-3 flex-1">
-                <Text className="text-sm font-extrabold text-memoText">
-                  {item.name}
-                </Text>
-                <Text className="mt-0.5 text-xs text-memoSubText">
-                  {item.expiry}
-                </Text>
-              </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-sm font-extrabold text-memoText">
+                      {item.name}
+                    </Text>
+                    <Text className="mt-0.5 text-xs text-memoSubText">
+                      {item.expiry}
+                    </Text>
+                  </View>
 
-              <View
-                className="rounded-full px-2 py-1"
-                style={{ backgroundColor: `${itemColor}14` }}
-              >
-                <Text className="text-xs font-extrabold" style={{ color: itemColor }}>
-                  {item.qty}개
-                </Text>
-              </View>
-              <Text className="ml-2 text-lg text-memoSubText">›</Text>
-            </TouchableOpacity>
+                  <View
+                    className="rounded-full px-2 py-1"
+                    style={{ backgroundColor: `${itemColor}14` }}
+                  >
+                    <Text
+                      className="text-xs font-extrabold"
+                      style={{ color: itemColor }}
+                    >
+                      {item.qty}개
+                    </Text>
+                  </View>
+                  <Text className="ml-2 text-lg text-memoSubText">›</Text>
+                </TouchableOpacity>
               );
             })
           )}
@@ -178,7 +192,9 @@ export function MedicineMemoScreen({ navigation }: Props) {
           className="h-14 flex-row items-center justify-center rounded-2xl bg-memoRed"
           onPress={() => navigation.navigate('MedicineAdd')}
         >
-          <Text className="text-base font-extrabold text-white">＋ 약품 추가</Text>
+          <Text className="text-base font-extrabold text-white">
+            ＋ 약품 추가
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

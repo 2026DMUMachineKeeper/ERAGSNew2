@@ -36,14 +36,14 @@ export function GuideHeader({
             {centerLabel}
           </Text>
           <Text
-            className="mt-1 text-body text-white tracking-erags text-center font-suitBold"
+            className="mt-1 text-body text-black tracking-erags text-center font-suitBold"
             numberOfLines={1}
           >
             {centerValue}
           </Text>
         </View>
 
-        <Text className="text-sm text-successText tracking-erags">
+        <Text className="text-sm text-red tracking-erags">
           {elapsedLabel}
         </Text>
       </View>

@@ -9,7 +9,7 @@ type Props = {
 export function GuideNextButton({ title = '다음 단계', onPress }: Props) {
   return (
     <TouchableOpacity
-      className="h-16 bg-success rounded-lg justify-center items-center mt-6 mb-6"
+      className="h-14 bg-red rounded-2xl justify-center items-center"
       onPress={onPress}
     >
       <Text className="text-white font-bold">{title}</Text>

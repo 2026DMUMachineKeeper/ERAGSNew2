@@ -3,11 +3,13 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HomeScreen } from '../screens/HomeScreen';
 import { MedicinesStockScreen } from '../screens/MedicinesStockScreen';
+import type { MedicineItem } from '../services/medicineApi';
 
 export type RootStackParamList = {
   Home: undefined;
   MedicinesStock: undefined;
   MedicineMemo: undefined;
+  MedicineDetail: { medicine: MedicineItem };
   MedicineAdd: undefined;
   MedicineManualInput: undefined;
   TestFont: undefined;
@@ -18,15 +20,6 @@ export type RootStackParamList = {
         mainLabel?: string;
         subtypeLabel?: string;
         source?: 'manual' | 'machine';
-      }
-    | undefined;
-  EmergencyComplete:
-    | {
-        mainLabel?: string;
-        subtypeLabel?: string;
-        elapsedLabel?: string;
-        completedSteps?: number;
-        totalSteps?: number;
       }
     | undefined;
   QRCode: undefined;
@@ -43,6 +36,12 @@ export function RootNavigator() {
       <Stack.Screen
         name="MedicineMemo"
         component={require('../screens/MedicineMemoScreen').MedicineMemoScreen}
+      />
+      <Stack.Screen
+        name="MedicineDetail"
+        component={
+          require('../screens/MedicineDetailScreen').MedicineDetailScreen
+        }
       />
       <Stack.Screen
         name="MedicineAdd"
@@ -67,12 +66,6 @@ export function RootNavigator() {
         name="EmergencyGuide"
         component={
           require('../screens/EmergencyGuideScreen').EmergencyGuideScreen
-        }
-      />
-      <Stack.Screen
-        name="EmergencyComplete"
-        component={
-          require('../screens/EmergencyCompleteScreen').EmergencyCompleteScreen
         }
       />
       <Stack.Screen

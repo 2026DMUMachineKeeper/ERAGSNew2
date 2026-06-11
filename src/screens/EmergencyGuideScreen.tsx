@@ -71,13 +71,7 @@ export function EmergencyGuideScreen({
   const isLastStep = currentStepIndex >= steps.length - 1;
 
   const moveToComplete = () => {
-    navigation.replace('EmergencyComplete', {
-      mainLabel,
-      subtypeLabel,
-      elapsedLabel,
-      completedSteps: currentStepIndex + 1,
-      totalSteps: steps.length,
-    });
+    navigation.replace('QRCode');
   };
 
   const handleNextStep = () => {
@@ -123,7 +117,7 @@ export function EmergencyGuideScreen({
         />
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
+      <View className="bg-background px-5 pb-5">
         <GuideNextButton
           title={isLastStep ? '완료' : '다음 단계'}
           onPress={handleNextStep}
