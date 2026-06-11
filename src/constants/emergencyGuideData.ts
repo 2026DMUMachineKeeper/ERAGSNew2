@@ -6,6 +6,16 @@ export type EmergencyGuideStep = {
   description: string;
 };
 
+export interface EmergencyGuideRuntimeStep {
+  stepNo: number;
+  title: string;
+  instruction: string;
+  checkpointQuestion: string;
+  requiredItemId: number | null;
+  requiredSlotId: number | null;
+  imageResource: string;
+}
+
 export const emergencyGuideSteps: EmergencyGuideStep[] = [
   {
     id: 'step-1',
