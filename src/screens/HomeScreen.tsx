@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   launchCamera,
-  type Asset,
   type CameraOptions,
   type ImagePickerResponse,
 } from 'react-native-image-picker';
@@ -25,9 +24,11 @@ import {
   EragsLogo,
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { postMedicineVision } from '../services';
-import { useTreatment } from '../erags-sm1/context/TreatmentContext';
-import type { AccidentType, PatientContext } from '../erags-sm1/machine/types';
+import { useEmergencyTriage } from '../erags-sm1/hooks/useEmergencyTriage';
+import type {
+  AccidentClassification,
+  PatientContext,
+} from '../erags-sm1/types';
 import tailwindConfig from '../../tailwind.config';
 
 const { colors } = tailwindConfig;
@@ -40,21 +41,10 @@ const defaultPatientContext: PatientContext = {
   ageGroup: 'ADULT',
 };
 
-const accidentLabelByType: Record<AccidentType, string> = {
-  BLEEDING: '출혈',
-  BURN: '화상',
-  FRACTURE: '골절',
-  CPR: '심폐소생술',
-};
-
-const getSubtypeLabel = (patientContext: PatientContext) => {
-  if (patientContext.bleedingLevel === 'HIGH') {
-    return '중증';
-  }
-  if (patientContext.bleedingLevel === 'LOW') {
-    return '경증';
-  }
-  return '중등도';
+const defaultImageAccident: AccidentClassification = {
+  type: 'BLEEDING',
+  confidence: 0,
+  rawInputType: 'IMAGE',
 };
 
 const requestMicrophonePermission = async () => {
@@ -76,6 +66,7 @@ const requestMicrophonePermission = async () => {
 };
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
+  const triage = useEmergencyTriage();
   const [isVisionUploading, setIsVisionUploading] = React.useState(false);
   const [visionStatus, setVisionStatus] = React.useState<string | null>(null);
 
@@ -96,27 +87,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     );
 
     return granted === PermissionsAndroid.RESULTS.GRANTED;
-  };
-
-  const uploadMedicineVision = async (asset: Asset) => {
-    const base64Image = asset.base64;
-
-    if (!base64Image) {
-      Alert.alert(
-        '업로드 실패',
-        '촬영한 사진에서 base64 데이터를 가져오지 못했습니다.',
-      );
-      return;
-    }
-
-    const result = await postMedicineVision({
-      imageBase64: base64Image,
-    });
-
-    // eslint-disable-next-line no-console
-    console.log('[HomeScreen] /api/medicines/vision result:', result);
-    Alert.alert('전송 완료', '사진을 서버로 전송했습니다.');
-    setVisionStatus('사진을 서버로 전송했습니다.');
   };
 
   const handlePhotoPress = async () => {
@@ -142,7 +112,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     };
 
     setIsVisionUploading(true);
-    setVisionStatus('사진을 서버로 전송하는 중입니다.');
+    setVisionStatus('사진 입력을 ML로 전송하는 중입니다.');
 
     try {
       const response: ImagePickerResponse = await launchCamera(options);
@@ -163,9 +133,31 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         return;
       }
 
-      await uploadMedicineVision(asset);
+      if (!asset.uri) {
+        Alert.alert('촬영 실패', '사진 경로를 가져오지 못했습니다.');
+        setVisionStatus('사진 경로를 가져오지 못했습니다.');
+        return;
+      }
+
+      const result = await triage.sendImageTriage(
+        // 사진 버튼
+        asset.uri,
+        defaultImageAccident,
+        defaultPatientContext,
+      );
+
+      if (!result.ok) {
+        setVisionStatus('이미지 입력을 ML로 전달하지 못했습니다.');
+        Alert.alert(
+          '이미지 전송 실패',
+          '이미지 입력을 ML로 전달하지 못했습니다.',
+        );
+        return;
+      }
+
+      setVisionStatus('이미지 입력을 ML로 전달했습니다.');
+      Alert.alert('전송 완료', '이미지 입력을 ML로 전달했습니다.');
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('[HomeScreen] 사진 전송 실패:', error);
       const message =
         error instanceof Error && error.message.trim().length > 0
@@ -178,43 +170,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       setIsVisionUploading(false);
     }
   };
-  const treatment = useTreatment();
-  const handledSessionIdRef = React.useRef<string | null>(null);
   const voiceRequestInFlightRef = React.useRef(false);
   const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
   const [isListening, setIsListening] = React.useState(false);
-  const isVoiceBusy =
-    isListening ||
-    treatment.state === 'loadingSession' ||
-    treatment.state === 'switchingPlan';
-
-  React.useEffect(() => {
-    const session = treatment.context.session;
-    if (treatment.state !== 'showStep' || !session) {
-      return;
-    }
-
-    if (handledSessionIdRef.current === session.sessionId) {
-      return;
-    }
-
-    handledSessionIdRef.current = session.sessionId;
-    setVoiceStatus(null);
-    navigation.navigate('EmergencyGuide', {
-      mainLabel: accidentLabelByType[session.accidentType as AccidentType],
-      subtypeLabel: getSubtypeLabel(session.patientContext),
-      source: 'machine',
-    });
-  }, [navigation, treatment.context.session, treatment.state]);
-
-  React.useEffect(() => {
-    if (treatment.state === 'serverUnavailable') {
-      setVoiceStatus(
-        treatment.context.lastError?.message ??
-          '응급처치 세션을 시작하지 못했습니다.',
-      );
-    }
-  }, [treatment.context.lastError, treatment.state]);
+  const isVoiceBusy = isListening || triage.isBusy;
 
   const handleVoicePress = React.useCallback(async () => {
     if (voiceRequestInFlightRef.current) {
@@ -223,24 +182,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
     voiceRequestInFlightRef.current = true;
 
-    if (treatment.state === 'serverUnavailable') {
-      setVoiceStatus('응급처치 세션을 다시 준비하고 있습니다.');
-      treatment.retry();
-      voiceRequestInFlightRef.current = false;
-      return;
-    }
-
-    const hasPermission = await requestMicrophonePermission();
-    if (!hasPermission) {
-      setVoiceStatus('마이크 권한이 필요합니다.');
-      voiceRequestInFlightRef.current = false;
-      return;
-    }
-
-    setVoiceStatus('음성을 듣고 있습니다.');
-    setIsListening(true);
     try {
-      const result = await treatment.audioInputResult(
+      const hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        setVoiceStatus('마이크 권한이 필요합니다.');
+        voiceRequestInFlightRef.current = false;
+        return;
+      }
+
+      setVoiceStatus('음성을 듣고 있습니다.');
+      setIsListening(true);
+      const result = await triage.startVoiceTriage(
+        // 음성 버튼
         undefined,
         defaultPatientContext,
       );
@@ -258,16 +211,23 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           setVoiceStatus('음성 인식 서비스가 꺼져 있거나 없습니다.');
           return;
         }
+        if (result.reason === 'ML_REQUEST_FAILED') {
+          setVoiceStatus('ML 입력 전달에 실패했습니다.');
+          return;
+        }
         setVoiceStatus('음성을 인식하지 못했습니다. 다시 시도해 주세요.');
         return;
       }
 
-      setVoiceStatus('응급처치 가이드를 준비하고 있습니다.');
+      setVoiceStatus('음성 입력을 ML로 전달했습니다.');
+    } catch (error) {
+      console.error('[HomeScreen] voice input failed:', error);
+      setVoiceStatus('음성 입력 처리 중 오류가 발생했습니다.');
     } finally {
       setIsListening(false);
       voiceRequestInFlightRef.current = false;
     }
-  }, [treatment]);
+  }, [triage]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -363,9 +323,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               >
                 {visionStatus ??
                   (isVisionUploading
-                    ? '사진을 분석 서버로 전송하고 있습니다.'
+                    ? '사진 입력을 ML로 전송하고 있습니다.'
                     : '다친 부분을 촬영해주세요.')}
-                다친 부분을 촬영해 주세요.
               </Text>
             </View>
           </TouchableOpacity>

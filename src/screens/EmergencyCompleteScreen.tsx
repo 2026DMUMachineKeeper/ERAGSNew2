@@ -19,7 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'EmergencyComplete'>;
 
 const summaryRows: EmergencyCompleteSummaryRow[] = [
   { label: '사고 유형', value: '출혈 / 상처' },
-  { label: '처치 계획', value: 'Plan A 완료', valueColor: colors.success },
+  { label: '처치 상태', value: '응급처치 완료', valueColor: colors.success },
   { label: '완료 단계', value: '4 / 4 단계' },
 ];
 
