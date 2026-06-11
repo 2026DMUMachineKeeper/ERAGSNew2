@@ -14,17 +14,17 @@ export function GuideInfoCard({
 }: GuideInfoCardProps) {
   const containerClassName =
     tone === 'success'
-      ? 'mt-4 bg-successSurface border border-success rounded-2xl p-4'
-      : 'bg-surface border border-borderMuted rounded-2xl p-4';
+      ? 'mt-4 bg-white border border-success rounded-2xl p-4'
+      : 'bg-white border border-memoLine rounded-2xl p-4';
 
   const descriptionClassName =
     tone === 'success'
-      ? 'text-successText text-body mt-2 leading-6'
-      : 'text-lightGray text-body mt-3 leading-6';
+      ? 'text-gray text-body mt-2 leading-6'
+      : 'text-textDim text-body mt-3 leading-6';
 
   return (
     <View className={containerClassName}>
-      <Text className="text-white text-title tracking-erags font-suitBold">
+      <Text className="text-black text-title tracking-erags font-suitBold">
         {title}
       </Text>
       <Text className={descriptionClassName}>{description}</Text>
