@@ -1,50 +1,59 @@
 import React from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { useTreatment } from '../erags-sm1/context/TreatmentContext';
+import {
+  emergencyGuideSteps,
+  type EmergencyGuideRuntimeStep,
+} from '../constants/emergencyGuideData';
 import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
-import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
-import tailwindConfig from '../../tailwind.config';
-
-const { colors } = tailwindConfig;
+import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 
 type EmergencyGuideProps = NativeStackScreenProps<
   RootStackParamList,
   'EmergencyGuide'
 >;
 
-const LOADING_STATES = [
-  'savingInventory',
-  'savingLog',
-  'finalizing',
-  'switchingPlan',
-];
-const ERROR_STATES = [
-  'serverUnavailable',
-  'logSaveFailed',
-  'inventoryInsufficient',
-  'inventorySaveFailed',
-  'completionFailed',
-  'emergencyQrFailed',
-];
+const getVisibleStepCount = (label?: string) => {
+  if (!label) {
+    return emergencyGuideSteps.length;
+  }
+  if (label.includes('경미')) {
+    return 2;
+  }
+  if (label.includes('일반') || label.includes('중간')) {
+    return 3;
+  }
+  return emergencyGuideSteps.length;
+};
+
+const toGuideRuntimeStep = (
+  step: (typeof emergencyGuideSteps)[number],
+  index: number,
+): EmergencyGuideRuntimeStep => ({
+  stepNo: index + 1,
+  title: step.title,
+  instruction: step.title.replace(/^\d+단계:\s*/, ''),
+  checkpointQuestion: step.description,
+  requiredItemId: index === 0 ? 1 : null,
+  requiredSlotId: index === 0 ? 1 : null,
+  imageResource: '',
+});
 
 export function EmergencyGuideScreen({
   navigation,
   route,
 }: EmergencyGuideProps) {
-  const treatment = useTreatment();
-  const mainLabel = route.params?.mainLabel ?? '?�급';
+  const mainLabel = route.params?.mainLabel ?? '응급';
   const subtypeLabel = route.params?.subtypeLabel ?? '';
-
+  const visibleStepCount = getVisibleStepCount(subtypeLabel);
+  const steps = emergencyGuideSteps
+    .slice(0, visibleStepCount)
+    .map(toGuideRuntimeStep);
+  const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
+  const [isChecked, setIsChecked] = React.useState(false);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
@@ -52,50 +61,42 @@ export function EmergencyGuideScreen({
     return () => clearInterval(timer);
   }, []);
 
-  // 세션 완료 시 완료 화면으로 이동
   React.useEffect(() => {
-    if (
-      treatment.state === 'completed' ||
-      treatment.state === 'emergencyOverride'
-    ) {
-      const { steps, currentIndex } = treatment.context;
-      const elapsedLabel = formatElapsed(elapsedSeconds);
-      navigation.replace('EmergencyComplete', {
-        mainLabel,
-        subtypeLabel,
-        elapsedLabel,
-        completedSteps: currentIndex + 1,
-        totalSteps: steps.length,
-      });
-    }
-  }, [
-    elapsedSeconds,
-    mainLabel,
-    navigation,
-    subtypeLabel,
-    treatment.context,
-    treatment.state,
-  ]);
+    setIsChecked(false);
+  }, [currentStepIndex]);
 
-  const { steps, currentIndex, isChecked } = treatment.context;
-  const currentStep = steps[currentIndex];
-  const progress = steps.length ? (currentIndex + 1) / steps.length : 0;
+  const currentStep = steps[currentStepIndex] ?? steps[0];
   const elapsedLabel = formatElapsed(elapsedSeconds);
+  const progress = steps.length ? (currentStepIndex + 1) / steps.length : 0;
+  const isLastStep = currentStepIndex >= steps.length - 1;
 
-  const isLoading = LOADING_STATES.includes(treatment.state as string);
-  const isError = ERROR_STATES.includes(treatment.state as string);
-  const isCheckPoint = treatment.state === 'checkPoint';
-  const isShowStep = treatment.state === 'showStep';
-  const isLastStep = currentIndex >= steps.length - 1;
+  const moveToComplete = () => {
+    navigation.replace('EmergencyComplete', {
+      mainLabel,
+      subtypeLabel,
+      elapsedLabel,
+      completedSteps: currentStepIndex + 1,
+      totalSteps: steps.length,
+    });
+  };
 
-  // 단계 정보가 아직 없으면 로딩 표시  (race condition 방어)
-  if (!currentStep) {
-    return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator color={colors.white} />
-      </SafeAreaView>
-    );
-  }
+  const handleNextStep = () => {
+    if (!isLastStep) {
+      setCurrentStepIndex(index => index + 1);
+      return;
+    }
+
+    moveToComplete();
+  };
+
+  const handleBackStep = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex(index => index - 1);
+      return;
+    }
+
+    navigation.goBack();
+  };
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -104,8 +105,8 @@ export function EmergencyGuideScreen({
         centerValue={`${mainLabel}${subtypeLabel ? ` / ${subtypeLabel}` : ''}`}
         elapsedLabel={elapsedLabel}
         progress={progress}
-        showBackButton={false}
-        onBackPress={() => {}}
+        showBackButton
+        onBackPress={handleBackStep}
       />
 
       <ScrollView
@@ -115,56 +116,18 @@ export function EmergencyGuideScreen({
       >
         <StepDetail
           step={currentStep}
-          isChecked={isChecked as boolean}
-          showCheckpoint={isCheckPoint}
-          onToggle={checked => treatment.toggle(checked)}
-          onStopPress={() => navigation.navigate('EmergencyComplete')}
+          isChecked={isChecked}
+          showCheckpoint
+          onToggle={setIsChecked}
+          onStopPress={moveToComplete}
         />
-
-        {isLoading && (
-          <View className="mt-6 items-center">
-            <ActivityIndicator color={colors.white} />
-            <Text className="text-gray mt-2 text-sm">처리 �?..</Text>
-          </View>
-        )}
-
-        {isError && (
-          <View className="mt-6 p-4 bg-dangerSurface rounded-xl border border-red">
-            <Text className="text-dangerText text-sm text-center">
-              {treatment.context.lastError?.message ?? '오류가 발생했습니다.'}
-            </Text>
-          </View>
-        )}
       </ScrollView>
 
       <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
-        {isShowStep && (
-          <GuideNextButton
-            title={isLastStep ? '완료 확인' : '다음 단계'}
-            onPress={() => treatment.next()}
-          />
-        )}
-
-        {isCheckPoint && (
-          <TouchableOpacity
-            className={`h-16 rounded-lg justify-center items-center mt-6 mb-6 ${
-              isChecked ? 'bg-success' : 'bg-disabledDark'
-            }`}
-            disabled={!isChecked}
-            onPress={() => treatment.confirm()}
-          >
-            <Text className="text-white font-bold">완료</Text>
-          </TouchableOpacity>
-        )}
-
-        {isError && (
-          <TouchableOpacity
-            className="h-16 bg-danger rounded-lg justify-center items-center mt-6 mb-6"
-            onPress={() => treatment.retry()}
-          >
-            <Text className="text-white font-bold">재시도</Text>
-          </TouchableOpacity>
-        )}
+        <GuideNextButton
+          title={isLastStep ? '완료' : '다음 단계'}
+          onPress={handleNextStep}
+        />
       </View>
     </SafeAreaView>
   );

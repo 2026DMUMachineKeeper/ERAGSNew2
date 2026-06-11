@@ -6,82 +6,28 @@ import Voice, {
   type SpeechResultsEvent,
 } from '@react-native-voice/voice'; // 라이브러리 호출 STT 코드
 import Config from 'react-native-config';
-import { ServerInventoryService, type InventoryPort } from './services/dbService';
-import type { MlSessionPort } from './services/mlService';
 import type {
   AccidentClassification,
   AccidentType,
+  AirwayObstructionState,
   BleedingLevel,
+  BurnDegree,
   Consciousness,
+  EmergencyMlInput,
+  FracturePattern,
   InputType,
   PatientContext,
-  Plan,
-  QRPayload,
-  TreatmentSession,
-} from './machine/types';
-
-class FakeMlService implements MlSessionPort { // ML/session 서버 역할을 임시로 흉내냄. 테스트용
-  async createSession(
-    accident: AccidentClassification,
-    patientContext: PatientContext,
-  ): Promise<TreatmentSession> {
-    return {
-      sessionId: `mock-${Date.now()}`,
-      accidentType: accident.type,
-      plan: 'A',
-      steps: [
-        {
-          stepNo: 1,
-          instruction: '상처를 압박합니다.',
-          checkpointQuestion: '출혈이 줄었나요?',
-          requiredItemId: 1,
-          requiredSlotId: 1,
-          imageResource: '',
-        },
-      ],
-      patientContext,
-      startedAt: Date.now(),
-    };
-  }
-
-  async switchPlan(
-    session: TreatmentSession,
-    nextPlan: Plan,
-    _note: string,
-  ): Promise<TreatmentSession> {
-    return { ...session, plan: nextPlan };
-  }
-
-  async onStepCompleted(): Promise<void> {
-    return;
-  }
-
-  async onEmergencyOverride(): Promise<QRPayload> {
-    return { qrSvg: '', summaryText: 'emergency', rawCompressed: '' };
-  }
-
-  async onSessionCompleted(): Promise<QRPayload> {
-    return { qrSvg: '', summaryText: 'completed', rawCompressed: '' };
-  }
-}
-
-export function createDefaultPorts(): {
-  ml: MlSessionPort;
-  inventory: InventoryPort;
-} {
-  const inventory = new ServerInventoryService();
-  const ml = new FakeMlService();
-
-  return { ml, inventory };
-}
-
-export default createDefaultPorts;
+  RashType,
+  RedFlagSignal,
+  TemperatureBand,
+} from './types';
 
 export type SttService = {
   transcribe(audioUri?: string): Promise<string>;
 };
 
-export type VoiceTriageResult = { // 나중에 AI 분류 꽂을 타입 추가
+export type VoiceTriageResult = {
+  // 나중에 AI 분류 꽂을 타입 추가
   accident: AccidentClassification;
   patientContext: PatientContext;
 };
@@ -93,10 +39,50 @@ export type VoiceTriageService = {
   ): Promise<VoiceTriageResult | null>;
 };
 
+export type MlInputSender = {
+  submit(input: EmergencyMlInput): Promise<void>;
+};
+
+class ConfigurableMlInputSender implements MlInputSender {
+  constructor(
+    private readonly endpoint: string | undefined = Config.ML_INPUT_API_URL,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
+
+  async submit(input: EmergencyMlInput): Promise<void> {
+    if (!this.endpoint) {
+      console.log(
+        '[ERAGS ML INPUT] submit skipped; ML_INPUT_API_URL is not configured',
+        input,
+      );
+      return;
+    }
+
+    const response = await this.fetcher(this.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`ML input submit failed: ${response.status} ${body}`);
+    }
+  }
+}
+
 type AiTriagePayload = {
   accidentType: AccidentType | 'UNKNOWN';
   bleedingLevel?: BleedingLevel;
+  burnDegree?: BurnDegree;
+  fracturePattern?: FracturePattern;
+  temperatureC?: number;
+  temperatureBand?: TemperatureBand;
+  rashType?: RashType;
+  airwayObstructionState?: AirwayObstructionState;
   consciousness?: Consciousness;
+  ageGroup?: PatientContext['ageGroup'];
+  redFlagSignals?: RedFlagSignal[];
   confidence: number;
 };
 
@@ -104,12 +90,78 @@ const GEMINI_TRIAGE_MODEL =
   Config.GEMINI_TRIAGE_MODEL || 'gemini-2.5-flash-lite';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TRIAGE_MODEL}:generateContent`;
 
-const accidentTypes: AccidentType[] = ['BLEEDING', 'BURN', 'FRACTURE', 'CPR'];
+const accidentTypes: AccidentType[] = [
+  'BLEEDING',
+  'BURN',
+  'FRACTURE_BRUISE',
+  'FEVER',
+  'SKIN_RASH',
+  'AIRWAY_OBSTRUCTION',
+  'FRACTURE',
+  'CPR',
+];
 const bleedingLevels: BleedingLevel[] = ['LOW', 'MEDIUM', 'HIGH'];
+const burnDegrees: BurnDegree[] = ['FIRST', 'SECOND', 'THIRD', 'UNKNOWN'];
+const fracturePatterns: FracturePattern[] = [
+  'SIMPLE_CLOSED',
+  'OPEN',
+  'COMPLETE',
+  'COMMINUTED',
+  'UNKNOWN',
+];
+const temperatureBands: TemperatureBand[] = [
+  'UNDER_37_9',
+  '38_0_TO_38_9',
+  '39_PLUS',
+];
+const rashTypes: RashType[] = [
+  'MACULAR',
+  'VESICULAR',
+  'ERYTHEMATOUS',
+  'URTICARIAL',
+  'UNKNOWN',
+];
+const airwayObstructionStates: AirwayObstructionState[] = [
+  'PARTIAL',
+  'COMPLETE_CONSCIOUS',
+  'UNCONSCIOUS',
+  'UNKNOWN',
+];
 const consciousnessValues: Consciousness[] = [
   'CONSCIOUS',
   'UNCONSCIOUS',
   'UNKNOWN',
+];
+const ageGroups: PatientContext['ageGroup'][] = ['CHILD', 'ADULT', 'ELDERLY'];
+const redFlagSignals: RedFlagSignal[] = [
+  'UNCONTROLLED_BLEEDING',
+  'SHOCK',
+  'SPURTING_BLOOD',
+  'DEEP_WOUND',
+  'AMPUTATION',
+  'EMBEDDED_OBJECT',
+  'AIRWAY_BURN',
+  'FACE_BURN',
+  'LARGE_AREA_BURN',
+  'CHEMICAL_BURN',
+  'ELECTRICAL_BURN',
+  'EXPOSED_BONE',
+  'NEUROVASCULAR_SYMPTOM',
+  'CRUSH_INJURY',
+  'ALTERED_CONSCIOUSNESS',
+  'RESPIRATORY_DISTRESS',
+  'SEIZURE',
+  'SEVERE_DEHYDRATION',
+  'HIGH_RISK_AGE',
+  'NON_BLANCHING_RASH',
+  'FACIAL_SWELLING',
+  'LIP_SWELLING',
+  'WHEEZING',
+  'HOARSE_VOICE',
+  'CANNOT_SPEAK',
+  'CANNOT_COUGH',
+  'CANNOT_BREATHE',
+  'CYANOSIS',
 ];
 
 const parseGeminiResponseText = (payload: any): string | null => {
@@ -119,6 +171,15 @@ const parseGeminiResponseText = (payload: any): string | null => {
 
   return typeof textPart?.text === 'string' ? textPart.text : null;
 };
+
+const bleedingSeverityPrompt = [
+  'Bleeding severity rules are important. Do not simply copy currentPatientContext. Re-evaluate from the transcript.',
+  'For BLEEDING, set bleedingLevel to HIGH when Korean speech says or strongly implies heavy bleeding.',
+  'HIGH examples: "피가 많이 나요", "피 많이 나요", "피가 계속 나요", "피가 안 멈춰요", "출혈이 심해요", "피가 쏟아져요", "분수처럼 나요", "옷이 젖었어요".',
+  'MEDIUM is for ongoing or noticeable bleeding without heavy/severe wording.',
+  'LOW is only for small/light/minor bleeding such as "조금 나요", "살짝 나요", "긁혔어요".',
+  'If transcript is "피가 많이나요" or "피가 많이 나요", accidentType must be BLEEDING and bleedingLevel must be HIGH.',
+].join('\n');
 
 const normalizeTriageResult = (
   result: AiTriagePayload,
@@ -141,7 +202,21 @@ const normalizeTriageResult = (
         result.accidentType === 'BLEEDING'
           ? result.bleedingLevel ?? patientContext.bleedingLevel
           : patientContext.bleedingLevel,
+      burnDegree: result.burnDegree ?? patientContext.burnDegree,
+      fracturePattern: result.fracturePattern ?? patientContext.fracturePattern,
+      temperatureC: result.temperatureC ?? patientContext.temperatureC,
+      temperatureBand: result.temperatureBand ?? patientContext.temperatureBand,
+      rashType: result.rashType ?? patientContext.rashType,
+      airwayObstructionState:
+        result.airwayObstructionState ?? patientContext.airwayObstructionState,
       consciousness: result.consciousness ?? patientContext.consciousness,
+      ageGroup: result.ageGroup ?? patientContext.ageGroup,
+      redFlagSignals: [
+        ...new Set([
+          ...(patientContext.redFlagSignals ?? []),
+          ...(result.redFlagSignals ?? []),
+        ]),
+      ],
     },
   };
 };
@@ -169,16 +244,32 @@ class GeminiVoiceTriageService implements VoiceTriageService {
                   'You classify Korean first-aid voice transcripts.',
                   'Return only JSON matching the schema.',
                   'If the accident type is unclear, use UNKNOWN.',
+                  bleedingSeverityPrompt,
                   JSON.stringify({
                     transcript: text,
                     currentPatientContext: patientContext,
                     accidentTypes,
                     bleedingLevels,
+                    burnDegrees,
+                    fracturePatterns,
+                    temperatureBands,
+                    rashTypes,
+                    airwayObstructionStates,
                     consciousnessValues,
+                    ageGroups,
+                    redFlagSignals,
                     schema: {
                       accidentType: [...accidentTypes, 'UNKNOWN'],
                       bleedingLevel: bleedingLevels,
+                      burnDegree: burnDegrees,
+                      fracturePattern: fracturePatterns,
+                      temperatureC: 'number in Celsius when stated',
+                      temperatureBand: temperatureBands,
+                      rashType: rashTypes,
+                      airwayObstructionState: airwayObstructionStates,
                       consciousness: consciousnessValues,
+                      ageGroup: ageGroups,
+                      redFlagSignals,
                       confidence: 'number from 0 to 1',
                     },
                   }),
@@ -200,9 +291,43 @@ class GeminiVoiceTriageService implements VoiceTriageService {
                 type: 'STRING',
                 enum: bleedingLevels,
               },
+              burnDegree: {
+                type: 'STRING',
+                enum: burnDegrees,
+              },
+              fracturePattern: {
+                type: 'STRING',
+                enum: fracturePatterns,
+              },
+              temperatureC: {
+                type: 'NUMBER',
+              },
+              temperatureBand: {
+                type: 'STRING',
+                enum: temperatureBands,
+              },
+              rashType: {
+                type: 'STRING',
+                enum: rashTypes,
+              },
+              airwayObstructionState: {
+                type: 'STRING',
+                enum: airwayObstructionStates,
+              },
               consciousness: {
                 type: 'STRING',
                 enum: consciousnessValues,
+              },
+              ageGroup: {
+                type: 'STRING',
+                enum: ageGroups,
+              },
+              redFlagSignals: {
+                type: 'ARRAY',
+                items: {
+                  type: 'STRING',
+                  enum: redFlagSignals,
+                },
               },
               confidence: {
                 type: 'NUMBER',
@@ -212,6 +337,7 @@ class GeminiVoiceTriageService implements VoiceTriageService {
               'accidentType',
               'bleedingLevel',
               'consciousness',
+              'redFlagSignals',
               'confidence',
             ],
           },
@@ -253,8 +379,7 @@ class OnDeviceSttService implements SttService {
     }
 
     return (
-      candidates.find(value => this.hasEmergencyKeyword(value)) ??
-      candidates[0]
+      candidates.find(value => this.hasEmergencyKeyword(value)) ?? candidates[0]
     );
   }
 
@@ -262,6 +387,12 @@ class OnDeviceSttService implements SttService {
     return /출혈|피|피가|피나|상처|베였|베임|찢|화상|골절|부러|뼈|심폐|호흡|숨|의식/.test(
       value,
     );
+  }
+
+  private async resetRecognizer(): Promise<void> {
+    Voice.removeAllListeners();
+    await Voice.cancel().catch(() => undefined);
+    await Voice.destroy().catch(() => undefined);
   }
 
   async transcribe(audioUri?: string): Promise<string> {
@@ -282,8 +413,12 @@ class OnDeviceSttService implements SttService {
 
   private async transcribeOnce(audioUri?: string): Promise<string> {
     if (audioUri) {
-      throw new Error('File-based transcription is not supported on this device');
+      throw new Error(
+        'File-based transcription is not supported on this device',
+      );
     }
+
+    await this.resetRecognizer();
 
     const isAvailable = await Voice.isAvailable().catch(() => false);
     const servicePromise = Voice.getSpeechRecognitionServices();
@@ -350,7 +485,11 @@ class OnDeviceSttService implements SttService {
         }
 
         Voice.removeAllListeners();
-        Voice.cancel().catch(() => undefined);
+        Voice.cancel()
+          .catch(() => undefined)
+          .finally(() => {
+            Voice.destroy().catch(() => undefined);
+          });
       };
 
       const schedulePartialFallback = () => {
@@ -360,7 +499,10 @@ class OnDeviceSttService implements SttService {
 
         partialFallbackId = setTimeout(() => {
           if (lastText) {
-            console.log('[ERAGS STT] using delayed partial fallback:', lastText);
+            console.log(
+              '[ERAGS STT] using delayed partial fallback:',
+              lastText,
+            );
             finish(lastText);
           }
         }, 1200);
@@ -388,20 +530,27 @@ class OnDeviceSttService implements SttService {
         // entering an error state.
         const code = (error as any)?.error?.code?.toString?.();
         if (code === '7' || code === '7/No match') {
-          console.warn('[ERAGS STT] recognizer returned No match; resolving empty string');
+          console.warn(
+            '[ERAGS STT] recognizer returned No match; resolving empty string',
+          );
           finish('');
           return;
         }
 
         if (lastText) {
-          console.warn('[ERAGS STT] error after partial result; using fallback:', lastText);
+          console.warn(
+            '[ERAGS STT] error after partial result; using fallback:',
+            lastText,
+          );
           finish(lastText);
           return;
         }
 
         resolved = true;
         const message =
-          (error as any)?.error?.message ?? (error as any)?.error?.code ?? 'On-device STT failed';
+          (error as any)?.error?.message ??
+          (error as any)?.error?.code ??
+          'On-device STT failed';
         console.warn('[ERAGS STT] failing transcribe promise:', message, error);
         reject(new Error(String(message)));
         cleanup();
@@ -436,10 +585,19 @@ class OnDeviceSttService implements SttService {
         if (partialText && partialText.trim().length > 0) {
           lastText = partialText;
           if (this.hasEmergencyKeyword(partialText)) {
-            console.log('[ERAGS STT] scheduling emergency partial result:', partialText);
+            console.log(
+              '[ERAGS STT] scheduling emergency partial result:',
+              partialText,
+            );
+            if (partialFallbackId) {
+              clearTimeout(partialFallbackId);
+            }
             partialFallbackId = setTimeout(() => {
               if (lastText) {
-                console.log('[ERAGS STT] using emergency partial result:', lastText);
+                console.log(
+                  '[ERAGS STT] using emergency partial result:',
+                  lastText,
+                );
                 finish(lastText);
               }
             }, this.emergencyPartialDelayMs);
@@ -471,20 +629,24 @@ class OnDeviceSttService implements SttService {
   }
 }
 
-export function createDefaultPortsWithStt(): {
-  ml: MlSessionPort;
-  inventory: InventoryPort;
+export function createDefaultEmergencyTriagePorts(): {
   stt: SttService;
   triage?: VoiceTriageService;
+  mlInputSender: MlInputSender;
 } {
-  const { ml, inventory } = createDefaultPorts();
   const stt = new OnDeviceSttService();
+  const mlInputSender = new ConfigurableMlInputSender();
   console.log('[ERAGS TRIAGE] provider: gemini');
-  console.log('[ERAGS TRIAGE] Gemini key configured:', Boolean(Config.GEMINI_API_KEY));
+  console.log(
+    '[ERAGS TRIAGE] Gemini key configured:',
+    Boolean(Config.GEMINI_API_KEY),
+  );
 
   const triage = Config.GEMINI_API_KEY
     ? new GeminiVoiceTriageService(Config.GEMINI_API_KEY)
     : undefined;
 
-  return { ml, inventory, stt, triage };
+  return { stt, triage, mlInputSender };
 }
+
+export default createDefaultEmergencyTriagePorts;

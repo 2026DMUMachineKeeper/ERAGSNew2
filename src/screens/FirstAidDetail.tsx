@@ -5,48 +5,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon } from '../assets';
 import { GuideActionButton } from '../components/EmergencyGuide/GuideActionButton';
-import { useTreatment } from '../erags-sm1/context/TreatmentContext';
-import type {
-  AccidentType,
-  BleedingLevel,
-  PatientContext,
-} from '../erags-sm1/machine/types';
 
 type DetailProps = NativeStackScreenProps<RootStackParamList, 'FirstAidDetail'>;
 
-const defaultPatientContext: PatientContext = {
-  bleedingLevel: 'MEDIUM',
-  consciousness: 'UNKNOWN',
-  ageGroup: 'ADULT',
-};
-
-const getAccidentType = (mainLabel: string): AccidentType => {
-  if (mainLabel.includes('화상')) {
-    return 'BURN';
-  }
-  if (mainLabel.includes('골절')) {
-    return 'FRACTURE';
-  }
-  if (mainLabel.includes('심폐')) {
-    return 'CPR';
-  }
-  return 'BLEEDING';
-};
-
-const getBleedingLevel = (selectedId: string | null): BleedingLevel => {
-  if (selectedId === 'a') {
-    return 'LOW';
-  }
-  if (selectedId === 'c') {
-    return 'HIGH';
-  }
-  return 'MEDIUM';
-};
-
 export function FirstAidDetail({ navigation, route }: DetailProps) {
-  const treatment = useTreatment();
-  const handledSessionIdRef = React.useRef<string | null>(null);
-  const startedManualRef = React.useRef(false);
   const main = route.params?.mainLabel ?? '항목';
   const subtypes = [
     { id: 'a', label: `${main} - 경미한 출혈` },
@@ -54,38 +16,20 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
     { id: 'c', label: `${main} - 대량 출혈` },
   ];
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const selectedLabel =
-    subtypes.find(item => item.id === selectedId)?.label ?? subtypes[0].label;
-  const subtypeLabel = selectedLabel.replace(`${main} - `, '');
-  const isStarting = treatment.state === 'loadingSession';
+  const selectedSubtypeLabel = subtypes.find(item => item.id === selectedId)
+    ?.label;
 
-  React.useEffect(() => {
-    if (!startedManualRef.current) {
+  const handleStartPress = React.useCallback(() => {
+    if (!selectedSubtypeLabel) {
       return;
     }
 
-    const session = treatment.context.session;
-    if (treatment.state !== 'showStep' || !session) {
-      return;
-    }
-
-    if (handledSessionIdRef.current === session.sessionId) {
-      return;
-    }
-
-    handledSessionIdRef.current = session.sessionId;
     navigation.navigate('EmergencyGuide', {
       mainLabel: main,
-      subtypeLabel,
-      source: 'machine',
+      subtypeLabel: selectedSubtypeLabel,
+      source: 'manual',
     });
-  }, [
-    main,
-    navigation,
-    subtypeLabel,
-    treatment.context.session,
-    treatment.state,
-  ]);
+  }, [main, navigation, selectedSubtypeLabel]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -101,7 +45,7 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
         </View>
 
         <Text className="mt-2 text-lightGray text-body tracking-erags font-suitBold">
-          해당되는 상태를 선택하세요.
+          해당하는 상태를 선택하세요.
         </Text>
 
         <View className="h-[1px] bg-lightGray rounded-full mt-2" />
@@ -125,27 +69,20 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
                     ? 'border-successStrong'
                     : 'border-borderMuted'
                 } py-4 px-3 bg-surface rounded-lg mb-3 border`}
-                onPress={() => {
-                  setSelectedId(item.id);
-                }}
+                onPress={() => setSelectedId(item.id)}
               >
                 <Text className="text-white font-suitBold">{item.label}</Text>
               </TouchableOpacity>
             )}
+            extraData={selectedId}
           />
         </View>
 
         <View style={{ marginTop: 16, marginBottom: 20 }}>
           <GuideActionButton
-            title={isStarting ? '가이드 준비 중...' : '다음 단계'}
-            disabled={!selectedId || isStarting}
-            onPress={() => {
-              startedManualRef.current = true;
-              treatment.manualInput(getAccidentType(main), {
-                ...defaultPatientContext,
-                bleedingLevel: getBleedingLevel(selectedId),
-              });
-            }}
+            title="다음 단계"
+            disabled={!selectedId}
+            onPress={handleStartPress}
           />
         </View>
       </View>
