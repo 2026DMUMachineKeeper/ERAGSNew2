@@ -9,9 +9,9 @@ const fontSize = {
 };
 
 const colors = {
-  red: '#FF3B3B',
+  red: '#FF3A3A',
   camera_bg: '#FFFAF8',
-  background: '#1A1D24',
+  background: '#F6F7FB',
   white: '#FFFFFF',
   black: '#000000',
   gray: '#525D6D',
@@ -61,10 +61,10 @@ module.exports = {
         ...colors,
       },
       fontFamily: {
-        sultRegular: ['Sult-Regular', 'System'],
-        sultMedium: ['Sult-Medium', 'System'],
-        sultSemiBold: ['Sult-SemiBold', 'System'],
-        sultBold: ['Sult-Bold', 'System'],
+        suitRegular: ['SUIT-Regular', 'System'],
+        suitMedium: ['SUIT-Medium', 'System'],
+        suitSemiBold: ['SUIT-SemiBold', 'System'],
+        suitBold: ['SUIT-Bold', 'System'],
       },
       fontSize,
       spacing: {
