@@ -1,9 +1,19 @@
-import { SessionError } from '../machine/types';
-
 export const DEFAULT_DATABASE_API_BASE_URL = 'http://REDACTED_HOST:4000';
 
 export interface InventoryPort {
   decreaseQuantity(id: number, amount?: number): Promise<void>;
+}
+
+type InventoryErrorCode =
+  | 'SERVER_UNAVAILABLE'
+  | 'INVALID_RESPONSE'
+  | 'INSUFFICIENT_QUANTITY';
+
+export class InventoryError extends Error {
+  constructor(public readonly code: InventoryErrorCode, message: string) {
+    super(message);
+    this.name = 'InventoryError';
+  }
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -21,7 +31,7 @@ export class ServerInventoryService implements InventoryPort {
       !Number.isInteger(amount) ||
       amount < 1
     ) {
-      throw new SessionError(
+      throw new InventoryError(
         'INVALID_RESPONSE',
         'Medicine id and quantity must be positive integers',
       );
@@ -35,20 +45,20 @@ export class ServerInventoryService implements InventoryPort {
         body: JSON.stringify({ id, quantityToUse: amount }),
       });
     } catch {
-      throw new SessionError(
+      throw new InventoryError(
         'SERVER_UNAVAILABLE',
         'Could not connect to inventory server',
       );
     }
 
     if (response.status === 400) {
-      throw new SessionError(
+      throw new InventoryError(
         'INSUFFICIENT_QUANTITY',
         'Required medicine quantity is insufficient',
       );
     }
     if (!response.ok) {
-      throw new SessionError(
+      throw new InventoryError(
         'SERVER_UNAVAILABLE',
         `Inventory request failed with HTTP ${response.status}`,
       );
@@ -60,7 +70,7 @@ export class ServerInventoryService implements InventoryPort {
         throw new Error('success was not true');
       }
     } catch {
-      throw new SessionError(
+      throw new InventoryError(
         'INVALID_RESPONSE',
         'Inventory server returned an invalid response',
       );
