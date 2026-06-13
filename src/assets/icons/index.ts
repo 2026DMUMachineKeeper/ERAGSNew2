@@ -10,5 +10,4 @@ export { default as ArrowBlue } from './arrow_blue.svg';
 export { default as ArrowGray } from './arrow_gray.svg';
 export { default as ArrowGreen } from './arrow_green.svg';
 export { default as EragsLogo } from './ERAGS.svg';
-export { default as CameraRedIcon } from './camera_r.svg';
 // (no default export)

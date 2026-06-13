@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon, MedicinesIcon2 } from '../assets';
-
+import AddMedicineBottomSheet from '../components/AddMedicineBottomSheet';
 import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
 
 type MedicinesStockScreenProps = NativeStackScreenProps<
@@ -170,6 +170,12 @@ export function MedicinesStockScreen({
           </TouchableOpacity>
         </View>
       )}
+
+      <AddMedicineBottomSheet
+        visible={showAddSheet}
+        onClose={closeAddSheet}
+        medicines={medicines}
+      />
     </SafeAreaView>
   );
 }
