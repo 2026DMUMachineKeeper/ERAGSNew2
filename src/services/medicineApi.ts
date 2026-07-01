@@ -9,11 +9,11 @@ export type MedicineApiRecord = {
   usage?: string | null;
   efficacy?: string | null;
   barcode?: string | null;
-  qty?: number;
-  quantity?: number;
-  count?: number;
-  stock?: number;
-  threshold?: number;
+  qty?: number | string;
+  quantity?: number | string;
+  count?: number | string;
+  stock?: number | string;
+  threshold?: number | string;
   expiry?: string;
   expire_date?: string;
   expiryDate?: string;
@@ -34,25 +34,11 @@ export type MedicineItem = {
   efficacy: string;
 };
 
-const getBaseUrl = () => {
-  const configuredBaseUrl =
-    Config.Base_URL ?? Config.BASE_URL ?? Config.base_url ?? '';
-
-  return configuredBaseUrl.replace(/\/$/, '');
-};
-
 const buildUrl = (path: string) => {
-  const baseUrl = getBaseUrl();
-
-  try {
-    // eslint-disable-next-line no-console
-    console.log('[medicineApi] buildUrl', { baseUrl, path });
-  } catch (e) {}
+  const baseUrl = (Config.Base_URL ?? '').replace(/\/+$/, '');
 
   if (!baseUrl) {
-    throw new Error(
-      'Base_URL이 설정되지 않았습니다. .env에 Base_URL을 넣고 앱을 재빌드했는지 확인하세요.',
-    );
+    throw new Error('Base_URL이 설정되지 않았습니다. .env를 확인하세요.');
   }
 
   return `${baseUrl}${path}`;
@@ -130,7 +116,7 @@ export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
   expiry: readString(
     record,
     ['expiry', 'expire_date', 'expiryDate', 'expirationDate', 'expiredAt'],
-    '미지정',
+    '미정',
   ),
   threshold: readNumber(record, ['threshold'], 0),
   barcode: readOptionalString(record, ['barcode']),
@@ -139,11 +125,19 @@ export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
 });
 
 export async function fetchMedicines(): Promise<MedicineItem[]> {
-  const response = await fetch(buildUrl('/api/medicines'), {
+  const url = buildUrl('/api/medicines');
+  console.log('[medicineApi] fetchMedicines request', { url });
+
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
     },
+  });
+
+  console.log('[medicineApi] fetchMedicines response', {
+    ok: response.ok,
+    status: response.status,
   });
 
   if (!response.ok) {
@@ -151,11 +145,24 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   }
 
   const payload = await response.json();
+  console.log('[medicineApi] fetchMedicines payload shape', {
+    isArray: Array.isArray(payload),
+    dataIsArray: Array.isArray(payload?.data),
+    keys:
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? Object.keys(payload)
+        : [],
+  });
+
   const records = Array.isArray(payload)
     ? payload
     : Array.isArray(payload?.data)
     ? payload.data
     : [];
+
+  console.log('[medicineApi] fetchMedicines normalized count', {
+    count: records.length,
+  });
 
   return records.map(normalizeMedicine);
 }
@@ -164,13 +171,53 @@ export type MedicineVisionUploadResult = {
   [key: string]: unknown;
 };
 
+export type MedicineManualCreateParams = {
+  name: string;
+  efficacy?: string;
+  usage?: string;
+  quantityToAdd?: number;
+};
+
+export type MedicineManualCreateResult = {
+  [key: string]: unknown;
+};
+
+export type MedicineUpdateParams = {
+  name?: string;
+  usage?: string;
+  efficacy?: string;
+  quantity?: number;
+};
+
+export type MedicineMutationResult = {
+  [key: string]: unknown;
+};
+
+const getBase64ImageKind = (base64: string) => {
+  if (base64.startsWith('/9j/')) {
+    return 'jpeg';
+  }
+
+  if (base64.startsWith('iVBORw0KGgo')) {
+    return 'png';
+  }
+
+  if (base64.startsWith('data:image/')) {
+    return 'data-uri';
+  }
+
+  return 'unknown';
+};
+
 export async function postMedicineVision(params: {
   imageBase64: string;
   quantityToAdd?: number;
 }): Promise<MedicineVisionUploadResult> {
-  // eslint-disable-next-line no-console
   console.log('[medicineApi] postMedicineVision start', {
     imageBase64Length: params.imageBase64.length,
+    imageBase64Kind: getBase64ImageKind(params.imageBase64),
+    imageBase64Preview: params.imageBase64.slice(0, 80),
+    hasDataUriPrefix: params.imageBase64.startsWith('data:image/'),
     quantityToAdd: params.quantityToAdd ?? 1,
   });
 
@@ -186,7 +233,6 @@ export async function postMedicineVision(params: {
     }),
   });
 
-  // eslint-disable-next-line no-console
   console.log('[medicineApi] postMedicineVision response', {
     ok: response.ok,
     status: response.status,
@@ -203,10 +249,121 @@ export async function postMedicineVision(params: {
   }
 
   const payload = await response.json();
-  // eslint-disable-next-line no-console
+  console.log(
+    '[medicineApi] postMedicineVision full response body',
+    JSON.stringify(payload),
+  );
   console.log('[medicineApi] postMedicineVision payload keys', {
     keys: Object.keys(payload ?? {}),
   });
 
   return payload as MedicineVisionUploadResult;
+}
+
+export async function postMedicineManual(
+  params: MedicineManualCreateParams,
+): Promise<MedicineManualCreateResult> {
+  const body = {
+    name: params.name,
+    efficacy: params.efficacy,
+    usage: params.usage,
+    quantityToAdd: params.quantityToAdd ?? 1,
+  };
+
+  console.log('[medicineApi] postMedicineManual request', {
+    body,
+  });
+
+  const response = await fetch(buildUrl('/api/medicines/manual'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  console.log('[medicineApi] postMedicineManual response', {
+    ok: response.ok,
+    status: response.status,
+  });
+
+  const payload = await response.json();
+  console.log(
+    '[medicineApi] postMedicineManual full response body',
+    JSON.stringify(payload),
+  );
+
+  if (!response.ok) {
+    throw new Error(`약품 수동 등록 실패: ${response.status}`);
+  }
+
+  return payload as MedicineManualCreateResult;
+}
+
+export async function updateMedicine(
+  id: string,
+  params: MedicineUpdateParams,
+): Promise<MedicineMutationResult> {
+  const body = Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined),
+  );
+
+  console.log('[medicineApi] updateMedicine request', { id, body });
+
+  const response = await fetch(buildUrl(`/api/medicines/${id}`), {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  console.log('[medicineApi] updateMedicine response', {
+    ok: response.ok,
+    status: response.status,
+  });
+
+  const payload = await response.json();
+  console.log(
+    '[medicineApi] updateMedicine full response body',
+    JSON.stringify(payload),
+  );
+
+  if (!response.ok) {
+    throw new Error(`약품 수정 실패: ${response.status}`);
+  }
+
+  return payload as MedicineMutationResult;
+}
+
+export async function deleteMedicine(
+  id: string,
+): Promise<MedicineMutationResult> {
+  console.log('[medicineApi] deleteMedicine request', { id });
+
+  const response = await fetch(buildUrl(`/api/medicines/${id}`), {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  console.log('[medicineApi] deleteMedicine response', {
+    ok: response.ok,
+    status: response.status,
+  });
+
+  const payload = await response.json();
+  console.log(
+    '[medicineApi] deleteMedicine full response body',
+    JSON.stringify(payload),
+  );
+
+  if (!response.ok) {
+    throw new Error(`약품 삭제 실패: ${response.status}`);
+  }
+
+  return payload as MedicineMutationResult;
 }
