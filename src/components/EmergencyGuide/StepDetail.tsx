@@ -74,12 +74,12 @@ export function StepDetail({
         onRequestClose={() => setShowStopModal(false)}
       >
         <View className="flex-1 bg-black/60 items-center justify-center px-6">
-          <View className="w-full max-w-[320px] rounded-2xl bg-surfaceAlt border border-borderSubtle px-5 py-5">
+          <View className="w-full max-w-[320px] rounded-2xl bg-white border border-white px-5 py-5">
             <View className="mb-4">
-              <Text className="text-lg font-bold text-white text-center">
+              <Text className="text-lg font-bold text-black text-center">
                 응급처치를 중단하시겠습니까?
               </Text>
-              <Text className="mt-3 text-sm text-textMuted text-center leading-5">
+              <Text className="mt-3 text-sm text-black text-center leading-5">
                 중단하면 현재 안내를 종료하고 구조대원 인계 페이지로 이동합니다.
               </Text>
             </View>
@@ -89,7 +89,7 @@ export function StepDetail({
                 className="flex-1 h-12 rounded-xl border border-borderSubtle items-center justify-center"
                 onPress={() => setShowStopModal(false)}
               >
-                <Text className="text-white font-bold">취소</Text>
+                <Text className="text-black font-bold">취소</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

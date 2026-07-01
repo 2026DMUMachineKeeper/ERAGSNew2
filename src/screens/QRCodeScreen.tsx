@@ -73,7 +73,12 @@ export function QRCodeScreen({ navigation }: Props) {
 
       <View className="bg-background px-5 pb-5">
         <Pressable
-          onPress={() => navigation.navigate('Home')}
+          onPress={() =>
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Home' }],
+            })
+          }
           className="h-14 bg-red rounded-2xl items-center justify-center"
         >
           <Text className="text-white font-bold">홈으로</Text>

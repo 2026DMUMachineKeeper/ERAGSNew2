@@ -48,7 +48,7 @@ export function MedicineMemoScreen({ navigation }: Props) {
         if (isActive) {
           setMedicines(nextMedicines);
         }
-      } catch (error) {
+      } catch {
         if (isActive) {
           setLoadError('약품 목록을 불러오지 못했습니다.');
           setMedicines([]);
@@ -67,13 +67,20 @@ export function MedicineMemoScreen({ navigation }: Props) {
     };
   }, []);
 
+  const goHome = React.useCallback(() => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
+  }, [navigation]);
+
   return (
     <SafeAreaView className="flex-1 bg-memoBg" edges={['top', 'bottom']}>
       <View className="flex-1 px-4 pt-3">
         <View className="h-10 flex-row items-center">
           <TouchableOpacity
             className="h-9 w-9 items-center justify-center"
-            onPress={() => navigation.goBack()}
+            onPress={goHome}
           >
             <BackIcon width={24} height={24} />
           </TouchableOpacity>
@@ -104,12 +111,6 @@ export function MedicineMemoScreen({ navigation }: Props) {
               {medicines.length}개
             </Text>
           </View>
-          <TouchableOpacity className="flex-row items-center">
-            <Text className="text-sm font-semibold text-memoSubText">
-              최신순
-            </Text>
-            <Text className="ml-1 text-sm text-memoSubText">⌄</Text>
-          </TouchableOpacity>
         </View>
 
         <ScrollView
