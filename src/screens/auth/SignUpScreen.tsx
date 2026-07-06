@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { register } from '@/services';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
@@ -26,13 +27,15 @@ export const SignUpScreen = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isSignUpDisabled =
+    isSubmitting ||
     email.trim().length === 0 ||
     password.trim().length === 0 ||
     passwordConfirm.trim().length === 0;
 
-  const handleSignUpPress = (): void => {
+  const handleSignUpPress = async (): Promise<void> => {
     if (isSignUpDisabled) {
       Alert.alert('입력 필요', '회원가입 정보를 모두 입력해주세요.');
       return;
@@ -43,8 +46,29 @@ export const SignUpScreen = ({
       return;
     }
 
-    Alert.alert('회원가입 완료', '로그인 화면에서 다시 로그인해주세요.');
-    navigation.replace('Login');
+    setIsSubmitting(true);
+
+    try {
+      const registerResponse = await register({
+        email: email.trim(),
+        password,
+      });
+
+      Alert.alert('회원가입 완료', registerResponse.message, [
+        {
+          text: '확인',
+          onPress: () => navigation.replace('Login'),
+        },
+      ]);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : '회원가입에 실패했습니다.';
+
+      console.error('[SignUpScreen] 회원가입 실패', error);
+      Alert.alert('회원가입 실패', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLoginPress = (): void => {
@@ -131,7 +155,7 @@ export const SignUpScreen = ({
                   onPress={handleSignUpPress}
                 >
                   <Text className="text-2xl font-suitBold text-white">
-                    회원가입!
+                    {isSubmitting ? '가입 중...' : '회원가입'}
                   </Text>
                 </Pressable>
 
@@ -141,7 +165,7 @@ export const SignUpScreen = ({
                   </Text>
                   <Pressable className="mt-6" onPress={handleLoginPress}>
                     <Text className="text-xl font-suitBold text-red">
-                      로그인 〉
+                      로그인
                     </Text>
                   </Pressable>
                 </View>
