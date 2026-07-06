@@ -24,6 +24,7 @@ const { colors } = tailwindConfig;
 export const SignUpScreen = ({
   navigation,
 }: SignUpScreenProps): React.JSX.Element => {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -31,6 +32,7 @@ export const SignUpScreen = ({
 
   const isSignUpDisabled =
     isSubmitting ||
+    name.trim().length === 0 ||
     email.trim().length === 0 ||
     password.trim().length === 0 ||
     passwordConfirm.trim().length === 0;
@@ -50,6 +52,7 @@ export const SignUpScreen = ({
 
     try {
       const registerResponse = await register({
+        name: name.trim(),
         email: email.trim(),
         password,
       });
@@ -99,19 +102,35 @@ export const SignUpScreen = ({
 
               <View className="mt-12">
                 <AuthTextInput
-                  iconName="email"
+                  iconName="user"
                   inputProps={{
-                    autoCapitalize: 'none',
+                    autoCapitalize: 'words',
                     autoCorrect: false,
-                    keyboardType: 'email-address',
-                    onChangeText: setEmail,
-                    placeholder: '이메일을 입력하세요',
+                    onChangeText: setName,
+                    placeholder: '이름을 입력하세요',
                     placeholderTextColor: colors.placeholder,
                     returnKeyType: 'next',
-                    textContentType: 'emailAddress',
-                    value: email,
+                    textContentType: 'name',
+                    value: name,
                   }}
                 />
+
+                <View className="mt-5">
+                  <AuthTextInput
+                    iconName="email"
+                    inputProps={{
+                      autoCapitalize: 'none',
+                      autoCorrect: false,
+                      keyboardType: 'email-address',
+                      onChangeText: setEmail,
+                      placeholder: '이메일을 입력하세요',
+                      placeholderTextColor: colors.placeholder,
+                      returnKeyType: 'next',
+                      textContentType: 'emailAddress',
+                      value: email,
+                    }}
+                  />
+                </View>
 
                 <View className="mt-5">
                   <AuthTextInput
