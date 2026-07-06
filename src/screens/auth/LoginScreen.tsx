@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { login, saveAuthToken } from '@/services';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
@@ -25,20 +26,40 @@ export const LoginScreen = ({
 }: LoginScreenProps): React.JSX.Element => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isLoginDisabled =
-    email.trim().length === 0 || password.trim().length === 0;
+    isSubmitting || email.trim().length === 0 || password.trim().length === 0;
 
-  const handleLoginPress = (): void => {
+  const handleLoginPress = async (): Promise<void> => {
     if (isLoginDisabled) {
       Alert.alert('입력 필요', '이메일과 비밀번호를 입력해주세요.');
       return;
     }
 
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }],
-    });
+    setIsSubmitting(true);
+
+    try {
+      const loginResponse = await login({
+        email: email.trim(),
+        password,
+      });
+
+      await saveAuthToken(loginResponse.user.email, loginResponse.token);
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : '로그인에 실패했습니다.';
+
+      console.error('[LoginScreen] 로그인 실패', error);
+      Alert.alert('로그인 실패', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSignUpPress = (): void => {
@@ -63,7 +84,7 @@ export const LoginScreen = ({
                   로그인
                 </Text>
                 <Text className="mt-5 text-center text-base font-suitMedium text-authText">
-                  계정에 로그인하여 서비스를 이용하세요.
+                  계정에 로그인하고 서비스를 이용하세요.
                 </Text>
               </View>
 
@@ -108,7 +129,7 @@ export const LoginScreen = ({
                   onPress={handleLoginPress}
                 >
                   <Text className="text-2xl font-suitBold text-white">
-                    로그인
+                    {isSubmitting ? '로그인 중...' : '로그인'}
                   </Text>
                 </Pressable>
 
@@ -126,7 +147,7 @@ export const LoginScreen = ({
                   </Text>
                   <Pressable className="mt-6" onPress={handleSignUpPress}>
                     <Text className="text-xl font-suitBold text-red">
-                      회원가입 〉
+                      회원가입
                     </Text>
                   </Pressable>
                 </View>
