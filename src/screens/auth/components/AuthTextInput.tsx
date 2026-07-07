@@ -10,7 +10,7 @@ import {
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 interface AuthTextInputProps {
-  iconName: 'email' | 'lock';
+  iconName: 'email' | 'lock' | 'user';
   inputProps: Pick<
     TextInputProps,
     | 'autoCapitalize'
@@ -32,6 +32,20 @@ const ICON_COLOR = '#9CA3AF';
 const renderInputIcon = (
   iconName: AuthTextInputProps['iconName'],
 ): React.JSX.Element => {
+  if (iconName === 'user') {
+    return (
+      <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+        <Circle cx={12} cy={8} r={4} stroke={ICON_COLOR} strokeWidth={2} />
+        <Path
+          d="M4 21a8 8 0 0116 0"
+          stroke={ICON_COLOR}
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+      </Svg>
+    );
+  }
+
   if (iconName === 'email') {
     return (
       <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
