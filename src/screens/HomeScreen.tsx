@@ -133,7 +133,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       }
 
       if (response.errorCode) {
-        Alert.alert('촬영 실패', response.errorMessage ?? response.errorCode);
+        console.error('[HomeScreen] camera failed', {
+          errorCode: response.errorCode,
+          errorMessage: response.errorMessage,
+        });
+        Alert.alert('촬영 실패', '사진을 촬영하지 못했습니다.');
         return;
       }
 
@@ -171,9 +175,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     } catch (error) {
       console.error('[HomeScreen] 사진 전송 실패:', error);
       const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '사진을 서버로 전송하지 못했습니다. 네트워크와 서버 상태를 확인해 주세요.';
+        '사진을 전송하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
       setVisionStatus(message);
       Alert.alert('사진 전송 실패', message);

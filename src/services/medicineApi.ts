@@ -1,5 +1,35 @@
 import Config from 'react-native-config';
 
+type MedicineApiErrorCode =
+  | 'CONFIG_MISSING'
+  | 'NETWORK_FAILED'
+  | 'INVALID_RESPONSE'
+  | 'VALIDATION_FAILED'
+  | 'NOT_FOUND'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'RATE_LIMITED'
+  | 'SERVER_UNAVAILABLE'
+  | 'REQUEST_FAILED';
+
+type MedicineErrorAction =
+  | 'load'
+  | 'vision'
+  | 'manualCreate'
+  | 'update'
+  | 'delete';
+
+type MedicineListResponseBody = {
+  data?: unknown;
+  [key: string]: unknown;
+};
+
+class MedicineApiError extends Error {
+  constructor(message: string, public readonly code: MedicineApiErrorCode) {
+    super(message);
+    this.name = 'MedicineApiError';
+  }
+}
+
 export type MedicineApiRecord = {
   id: string | number;
   name?: string;
@@ -35,13 +65,155 @@ export type MedicineItem = {
 };
 
 const buildUrl = (path: string) => {
-  const baseUrl = (Config.Base_URL ?? '').replace(/\/+$/, '');
+  const baseUrl = (
+    Config.API_BASE_URL ??
+    Config.Base_URL ??
+    Config.BaseURL ??
+    ''
+  ).replace(/\/+$/, '');
 
   if (!baseUrl) {
-    throw new Error('Base_URL이 설정되지 않았습니다. .env를 확인하세요.');
+    throw new MedicineApiError(
+      'API 서버 주소가 설정되지 않았습니다. .env를 확인하세요.',
+      'CONFIG_MISSING',
+    );
   }
 
   return `${baseUrl}${path}`;
+};
+
+const getMedicineApiErrorCode = (
+  responseStatus: number,
+): MedicineApiErrorCode => {
+  if (responseStatus === 400 || responseStatus === 422) {
+    return 'VALIDATION_FAILED';
+  }
+
+  if (responseStatus === 404) {
+    return 'NOT_FOUND';
+  }
+
+  if (responseStatus === 413) {
+    return 'PAYLOAD_TOO_LARGE';
+  }
+
+  if (responseStatus === 429) {
+    return 'RATE_LIMITED';
+  }
+
+  if (responseStatus >= 500) {
+    return 'SERVER_UNAVAILABLE';
+  }
+
+  return 'REQUEST_FAILED';
+};
+
+const fetchMedicineRequest = async (
+  requestUrl: string,
+  requestInit: RequestInit,
+): Promise<Response> => {
+  try {
+    return await fetch(requestUrl, requestInit);
+  } catch (error) {
+    throw new MedicineApiError(
+      error instanceof Error ? error.message : 'Network request failed',
+      'NETWORK_FAILED',
+    );
+  }
+};
+
+const parseMedicineJson = async (response: Response): Promise<unknown> => {
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new MedicineApiError(
+      error instanceof Error ? error.message : 'Invalid JSON response',
+      'INVALID_RESPONSE',
+    );
+  }
+};
+
+const throwMedicineResponseError = (
+  operation: string,
+  responseStatus: number,
+): never => {
+  throw new MedicineApiError(
+    `${operation} 실패: ${responseStatus}`,
+    getMedicineApiErrorCode(responseStatus),
+  );
+};
+
+export const getVisibleMedicineErrorMessage = (
+  error: unknown,
+  action: MedicineErrorAction,
+): string => {
+  if (!(error instanceof MedicineApiError)) {
+    return getDefaultMedicineErrorMessage(action);
+  }
+
+  if (error.code === 'NETWORK_FAILED') {
+    return '네트워크 연결을 확인한 뒤 다시 시도해 주세요.';
+  }
+
+  if (error.code === 'RATE_LIMITED') {
+    return '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  if (error.code === 'SERVER_UNAVAILABLE') {
+    return '서버가 응답하지 않습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  if (error.code === 'INVALID_RESPONSE' || error.code === 'CONFIG_MISSING') {
+    return getDefaultMedicineErrorMessage(action);
+  }
+
+  if (error.code === 'PAYLOAD_TOO_LARGE') {
+    return '사진 용량이 너무 큽니다. 더 작게 촬영해서 다시 시도해 주세요.';
+  }
+
+  if (error.code === 'NOT_FOUND') {
+    return action === 'delete'
+      ? '이미 삭제된 약품입니다. 목록을 새로고침해 주세요.'
+      : '약품 정보를 찾지 못했습니다. 목록을 새로고침해 주세요.';
+  }
+
+  if (error.code === 'VALIDATION_FAILED') {
+    return getValidationMedicineErrorMessage(action);
+  }
+
+  return getDefaultMedicineErrorMessage(action);
+};
+
+const getDefaultMedicineErrorMessage = (action: MedicineErrorAction): string => {
+  switch (action) {
+    case 'load':
+      return '약품 목록을 불러오지 못했습니다.';
+    case 'vision':
+      return '사진으로 약품을 등록하지 못했습니다. 직접 입력을 이용해 주세요.';
+    case 'manualCreate':
+      return '약품을 등록하지 못했습니다. 입력 내용을 확인해 주세요.';
+    case 'update':
+      return '약품을 수정하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    case 'delete':
+      return '약품을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    default:
+      return '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+};
+
+const getValidationMedicineErrorMessage = (
+  action: MedicineErrorAction,
+): string => {
+  switch (action) {
+    case 'vision':
+      return '사진에서 약품 정보를 확인하지 못했습니다. 직접 입력해 주세요.';
+    case 'manualCreate':
+      return '입력한 약품 정보를 다시 확인해 주세요.';
+    case 'update':
+      return '수정할 약품 정보를 다시 확인해 주세요.';
+    default:
+      return getDefaultMedicineErrorMessage(action);
+  }
 };
 
 const readString = (
@@ -100,6 +272,10 @@ const readNumber = (
   return fallback;
 };
 
+const isRecord = (value: unknown): value is MedicineListResponseBody => {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+};
+
 export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
   id: String(record.id),
   name: readString(record, ['name', 'medicineName', 'itemName'], '이름 없음'),
@@ -128,7 +304,7 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   const url = buildUrl('/api/medicines');
   console.log('[medicineApi] fetchMedicines request', { url });
 
-  const response = await fetch(url, {
+  const response = await fetchMedicineRequest(url, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
@@ -141,23 +317,22 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`약품 조회 실패: ${response.status}`);
+    throwMedicineResponseError('약품 조회', response.status);
   }
 
-  const payload = await response.json();
+  const payload = await parseMedicineJson(response);
+  const payloadRecord = isRecord(payload) ? payload : null;
+
   console.log('[medicineApi] fetchMedicines payload shape', {
     isArray: Array.isArray(payload),
-    dataIsArray: Array.isArray(payload?.data),
-    keys:
-      payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? Object.keys(payload)
-        : [],
+    dataIsArray: Array.isArray(payloadRecord?.data),
+    keys: payloadRecord ? Object.keys(payloadRecord) : [],
   });
 
   const records = Array.isArray(payload)
     ? payload
-    : Array.isArray(payload?.data)
-    ? payload.data
+    : Array.isArray(payloadRecord?.data)
+    ? payloadRecord.data
     : [];
 
   console.log('[medicineApi] fetchMedicines normalized count', {
@@ -221,17 +396,20 @@ export async function postMedicineVision(params: {
     quantityToAdd: params.quantityToAdd ?? 1,
   });
 
-  const response = await fetch(buildUrl('/api/medicines/vision'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await fetchMedicineRequest(
+    buildUrl('/api/medicines/vision'),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        imageBase64: params.imageBase64,
+        quantityToAdd: params.quantityToAdd ?? 1,
+      }),
     },
-    body: JSON.stringify({
-      imageBase64: params.imageBase64,
-      quantityToAdd: params.quantityToAdd ?? 1,
-    }),
-  });
+  );
 
   console.log('[medicineApi] postMedicineVision response', {
     ok: response.ok,
@@ -239,16 +417,12 @@ export async function postMedicineVision(params: {
   });
 
   if (!response.ok) {
-    if (response.status === 413) {
-      throw new Error(
-        '의약품 비전 업로드 실패: 이미지 용량이 너무 큽니다. 더 작게 촬영해서 다시 시도해 주세요.',
-      );
-    }
-
-    throw new Error(`의약품 비전 업로드 실패: ${response.status}`);
+    throwMedicineResponseError('의약품 비전 업로드', response.status);
   }
 
-  const payload = await response.json();
+  const payload = (await parseMedicineJson(
+    response,
+  )) as MedicineVisionUploadResult;
   console.log(
     '[medicineApi] postMedicineVision full response body',
     JSON.stringify(payload),
@@ -274,28 +448,33 @@ export async function postMedicineManual(
     body,
   });
 
-  const response = await fetch(buildUrl('/api/medicines/manual'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await fetchMedicineRequest(
+    buildUrl('/api/medicines/manual'),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
 
   console.log('[medicineApi] postMedicineManual response', {
     ok: response.ok,
     status: response.status,
   });
 
-  const payload = await response.json();
+  const payload = (await parseMedicineJson(
+    response,
+  )) as MedicineManualCreateResult;
   console.log(
     '[medicineApi] postMedicineManual full response body',
     JSON.stringify(payload),
   );
 
   if (!response.ok) {
-    throw new Error(`약품 수동 등록 실패: ${response.status}`);
+    throwMedicineResponseError('약품 수동 등록', response.status);
   }
 
   return payload as MedicineManualCreateResult;
@@ -311,28 +490,31 @@ export async function updateMedicine(
 
   console.log('[medicineApi] updateMedicine request', { id, body });
 
-  const response = await fetch(buildUrl(`/api/medicines/${id}`), {
-    method: 'PUT',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await fetchMedicineRequest(
+    buildUrl(`/api/medicines/${id}`),
+    {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
 
   console.log('[medicineApi] updateMedicine response', {
     ok: response.ok,
     status: response.status,
   });
 
-  const payload = await response.json();
+  const payload = (await parseMedicineJson(response)) as MedicineMutationResult;
   console.log(
     '[medicineApi] updateMedicine full response body',
     JSON.stringify(payload),
   );
 
   if (!response.ok) {
-    throw new Error(`약품 수정 실패: ${response.status}`);
+    throwMedicineResponseError('약품 수정', response.status);
   }
 
   return payload as MedicineMutationResult;
@@ -343,26 +525,29 @@ export async function deleteMedicine(
 ): Promise<MedicineMutationResult> {
   console.log('[medicineApi] deleteMedicine request', { id });
 
-  const response = await fetch(buildUrl(`/api/medicines/${id}`), {
-    method: 'DELETE',
-    headers: {
-      Accept: 'application/json',
+  const response = await fetchMedicineRequest(
+    buildUrl(`/api/medicines/${id}`),
+    {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+      },
     },
-  });
+  );
 
   console.log('[medicineApi] deleteMedicine response', {
     ok: response.ok,
     status: response.status,
   });
 
-  const payload = await response.json();
+  const payload = (await parseMedicineJson(response)) as MedicineMutationResult;
   console.log(
     '[medicineApi] deleteMedicine full response body',
     JSON.stringify(payload),
   );
 
   if (!response.ok) {
-    throw new Error(`약품 삭제 실패: ${response.status}`);
+    throwMedicineResponseError('약품 삭제', response.status);
   }
 
   return payload as MedicineMutationResult;

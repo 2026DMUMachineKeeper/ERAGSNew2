@@ -6,7 +6,11 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon, MedicinesIcon2 } from '../assets';
 
-import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
+import {
+  fetchMedicines,
+  getVisibleMedicineErrorMessage,
+  type MedicineItem,
+} from '../services/medicineApi';
 
 type MedicinesStockScreenProps = NativeStackScreenProps<
   RootStackParamList,
@@ -42,7 +46,7 @@ export function MedicinesStockScreen({
           return;
         }
         console.error('[MedicinesStockScreen] 약품 조회 실패:', error);
-        setLoadError('약품 데이터를 불러오지 못했습니다.');
+        setLoadError(getVisibleMedicineErrorMessage(error, 'load'));
         setMedicines([]);
       } finally {
         if (isActive) {
@@ -63,10 +67,6 @@ export function MedicinesStockScreen({
     setShowAddSheet(true);
   };
 
-  const closeAddSheet = () => {
-    console.log('[MedicinesStockScreen] 약품 추가 시트 닫기');
-    setShowAddSheet(false);
-  };
   const insets = useSafeAreaInsets();
 
   return (

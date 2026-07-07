@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { login, saveAuthToken } from '@/services';
+import { getVisibleAuthErrorMessage, login, saveAuthToken } from '@/services';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
@@ -79,8 +79,10 @@ export const LoginScreen = ({
         routes: [{ name: 'Home' }],
       });
     } catch (error: unknown) {
-      const caughtErrorMessage =
-        error instanceof Error ? error.message : '로그인에 실패했습니다.';
+      const caughtErrorMessage = getVisibleAuthErrorMessage(
+        error,
+        '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      );
 
       console.error('[LoginScreen] 로그인 실패', error);
       setErrorMessage(caughtErrorMessage);

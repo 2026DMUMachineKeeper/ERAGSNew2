@@ -14,7 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { postMedicineManual } from '../services/medicineApi';
+import {
+  getVisibleMedicineErrorMessage,
+  postMedicineManual,
+} from '../services/medicineApi';
 import tailwindConfig from '../../tailwind.config';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineManualInput'>;
@@ -93,12 +96,10 @@ export function MedicineManualInputScreen({ navigation }: Props) {
       ]);
     } catch (error) {
       console.error('[MedicineManualInputScreen] saveMedicine failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 등록하지 못했습니다.';
-
-      Alert.alert('등록 실패', message);
+      Alert.alert(
+        '등록 실패',
+        getVisibleMedicineErrorMessage(error, 'manualCreate'),
+      );
     } finally {
       setIsSaving(false);
     }

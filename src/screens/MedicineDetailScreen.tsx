@@ -15,6 +15,7 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon } from '../assets';
 import {
   deleteMedicine,
+  getVisibleMedicineErrorMessage,
   updateMedicine,
   type MedicineItem,
 } from '../services/medicineApi';
@@ -87,11 +88,10 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       Alert.alert('수정 완료', '약품 정보가 수정되었습니다.');
     } catch (error) {
       console.error('[MedicineDetailScreen] update failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 수정하지 못했습니다.';
-      Alert.alert('수정 실패', message);
+      Alert.alert(
+        '수정 실패',
+        getVisibleMedicineErrorMessage(error, 'update'),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -125,11 +125,10 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       ]);
     } catch (error) {
       console.error('[MedicineDetailScreen] delete failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 삭제하지 못했습니다.';
-      Alert.alert('삭제 실패', message);
+      Alert.alert(
+        '삭제 실패',
+        getVisibleMedicineErrorMessage(error, 'delete'),
+      );
     } finally {
       setIsDeleting(false);
     }

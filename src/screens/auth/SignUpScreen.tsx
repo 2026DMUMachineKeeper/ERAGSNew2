@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { register } from '@/services';
+import { getVisibleAuthErrorMessage, register } from '@/services';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
@@ -106,15 +106,19 @@ export const SignUpScreen = ({
         password,
       });
 
-      Alert.alert('회원가입 완료', registerResponse.message, [
+      console.log('[SignUpScreen] 회원가입 완료', registerResponse);
+
+      Alert.alert('회원가입 완료', '회원가입이 완료되었습니다.', [
         {
           text: '확인',
           onPress: () => navigation.replace('Login'),
         },
       ]);
     } catch (error: unknown) {
-      const caughtErrorMessage =
-        error instanceof Error ? error.message : '회원가입에 실패했습니다.';
+      const caughtErrorMessage = getVisibleAuthErrorMessage(
+        error,
+        '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      );
 
       console.error('[SignUpScreen] 회원가입 실패', error);
       setErrorMessage(caughtErrorMessage);

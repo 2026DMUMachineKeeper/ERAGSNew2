@@ -16,7 +16,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { StackActions } from '@react-navigation/native';
 import { Camera, CameraType, type CameraApi } from 'react-native-camera-kit';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { postMedicineVision } from '../services/medicineApi';
+import {
+  getVisibleMedicineErrorMessage,
+  postMedicineVision,
+} from '../services/medicineApi';
 import tailwindConfig from '../../tailwind.config';
 import { CameraRedIcon } from '../assets';
 
@@ -164,18 +167,12 @@ export function MedicineAddScreen({ navigation }: Props) {
       });
 
       if (registerResult.isRegistered !== true) {
-        const message =
-          typeof registerResult.message === 'string' &&
-          registerResult.message.trim().length > 0
-            ? registerResult.message
-            : '약품 이름을 직접 입력해 주세요.';
-
         console.log('[MedicineAddScreen] medicine photo needs manual input', {
-          message,
+          message: registerResult.message,
           data: registerResult.data,
         });
 
-        Alert.alert('추가 입력 필요', message, [
+        Alert.alert('추가 입력 필요', '약품 이름을 직접 입력해 주세요.', [
           {
             text: '직접 입력',
             onPress: () =>
@@ -197,12 +194,10 @@ export function MedicineAddScreen({ navigation }: Props) {
       ]);
     } catch (error) {
       console.error('[MedicineAddScreen] uploadCapturedPhoto failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 등록하지 못했습니다.';
-
-      Alert.alert('등록 실패', message);
+      Alert.alert(
+        '등록 실패',
+        getVisibleMedicineErrorMessage(error, 'vision'),
+      );
     } finally {
       setIsUploading(false);
     }
@@ -240,12 +235,10 @@ export function MedicineAddScreen({ navigation }: Props) {
       });
     } catch (error) {
       console.error('[MedicineAddScreen] captureWithBackCamera failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '사진 촬영에 실패했습니다.';
-
-      Alert.alert('촬영 실패', message);
+      Alert.alert(
+        '촬영 실패',
+        '사진을 처리하지 못했습니다. 다시 촬영해 주세요.',
+      );
     }
   };
 

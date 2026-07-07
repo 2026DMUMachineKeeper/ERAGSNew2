@@ -9,7 +9,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
+import {
+  fetchMedicines,
+  getVisibleMedicineErrorMessage,
+  type MedicineItem,
+} from '../services/medicineApi';
 import tailwindConfig from '../../tailwind.config';
 import { BackIcon } from '../assets';
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>;
@@ -48,9 +52,10 @@ export function MedicineMemoScreen({ navigation }: Props) {
         if (isActive) {
           setMedicines(nextMedicines);
         }
-      } catch {
+      } catch (error) {
+        console.error('[MedicineMemoScreen] 약품 조회 실패:', error);
         if (isActive) {
-          setLoadError('약품 목록을 불러오지 못했습니다.');
+          setLoadError(getVisibleMedicineErrorMessage(error, 'load'));
           setMedicines([]);
         }
       } finally {
