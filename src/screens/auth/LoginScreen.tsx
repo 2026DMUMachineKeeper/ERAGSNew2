@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,28 +19,56 @@ import AuthTextInput from './components/AuthTextInput';
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const { colors } = tailwindConfig;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const LoginScreen = ({
   navigation,
 }: LoginScreenProps): React.JSX.Element => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isLoginDisabled =
-    isSubmitting || email.trim().length === 0 || password.trim().length === 0;
+  const isLoginDisabled = isSubmitting;
+
+  const handleEmailChange = (value: string): void => {
+    setEmail(value);
+    setErrorMessage('');
+  };
+
+  const handlePasswordChange = (value: string): void => {
+    setPassword(value);
+    setErrorMessage('');
+  };
 
   const handleLoginPress = async (): Promise<void> => {
-    if (isLoginDisabled) {
-      Alert.alert('입력 필요', '이메일과 비밀번호를 입력해주세요.');
+    if (isSubmitting) {
       return;
     }
 
+    const trimmedEmail = email.trim();
+
+    if (trimmedEmail.length === 0) {
+      setErrorMessage('이메일을 입력해주세요.');
+      return;
+    }
+
+    if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      setErrorMessage('올바른 이메일 형식으로 입력해주세요.');
+      return;
+    }
+
+    if (password.trim().length === 0) {
+      setErrorMessage('비밀번호를 입력해주세요.');
+      return;
+    }
+
+    setErrorMessage('');
     setIsSubmitting(true);
 
     try {
       const loginResponse = await login({
-        email: email.trim(),
+        email: trimmedEmail,
         password,
       });
 
@@ -52,11 +79,11 @@ export const LoginScreen = ({
         routes: [{ name: 'Home' }],
       });
     } catch (error: unknown) {
-      const errorMessage =
+      const caughtErrorMessage =
         error instanceof Error ? error.message : '로그인에 실패했습니다.';
 
       console.error('[LoginScreen] 로그인 실패', error);
-      Alert.alert('로그인 실패', errorMessage);
+      setErrorMessage(caughtErrorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -95,7 +122,7 @@ export const LoginScreen = ({
                     autoCapitalize: 'none',
                     autoCorrect: false,
                     keyboardType: 'email-address',
-                    onChangeText: setEmail,
+                    onChangeText: handleEmailChange,
                     placeholder: '이메일을 입력하세요',
                     placeholderTextColor: colors.placeholder,
                     returnKeyType: 'next',
@@ -110,7 +137,7 @@ export const LoginScreen = ({
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
-                      onChangeText: setPassword,
+                      onChangeText: handlePasswordChange,
                       placeholder: '비밀번호를 입력하세요',
                       placeholderTextColor: colors.placeholder,
                       returnKeyType: 'done',
@@ -120,6 +147,12 @@ export const LoginScreen = ({
                     isPassword
                   />
                 </View>
+
+                {errorMessage ? (
+                  <Text className="mt-4 text-sm font-suitMedium text-red">
+                    {errorMessage}
+                  </Text>
+                ) : null}
 
                 <Pressable
                   className={`mt-7 h-16 items-center justify-center rounded-xl ${
