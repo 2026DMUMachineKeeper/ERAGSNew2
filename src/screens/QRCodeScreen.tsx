@@ -1,10 +1,16 @@
 import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'QRCode'>;
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: 140,
+  },
+});
 
 export function QRCodeScreen({ navigation }: Props) {
   const incidentType = '출혈 / 상처';
@@ -17,7 +23,7 @@ export function QRCodeScreen({ navigation }: Props) {
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <View className="mt-10" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View className="px-4">
           <Text className="text-black text-body text-center">
             구조대원에게 QR 코드를 보여주세요.

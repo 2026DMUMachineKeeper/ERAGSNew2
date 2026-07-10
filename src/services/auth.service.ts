@@ -21,10 +21,7 @@ interface ParsedResponseBody {
 }
 
 const getAuthBaseUrl = (): string => {
-  const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
-    /\/+$/,
-    '',
-  );
+  const baseUrl = (Config.API_BASE_URL ?? '').replace(/\/+$/, '');
 
   if (!baseUrl) {
     throw new Error('API_BASE_URL이 설정되지 않았습니다. .env를 확인하세요.');

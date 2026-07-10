@@ -67,14 +67,12 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
 
     try {
       setIsSaving(true);
-      const result = await updateMedicine(medicine.id, {
+      await updateMedicine(medicine.id, {
         name: trimmedName,
         efficacy: efficacy.trim(),
         usage: usage.trim(),
         quantity: parsedQuantity,
       });
-
-      console.log('[MedicineDetailScreen] medicine updated', { result });
 
       setMedicine(current => ({
         ...current,
@@ -111,8 +109,7 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   const deleteCurrentMedicine = async () => {
     try {
       setIsDeleting(true);
-      const result = await deleteMedicine(medicine.id);
-      console.log('[MedicineDetailScreen] medicine deleted', { result });
+      await deleteMedicine(medicine.id);
       Alert.alert('삭제 완료', '약품이 삭제되었습니다.', [
         {
           text: '확인',

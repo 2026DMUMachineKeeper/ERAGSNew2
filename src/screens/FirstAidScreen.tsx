@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { SvgProps } from 'react-native-svg';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -18,8 +19,18 @@ import {
 } from '../assets';
 
 type FirstAidProps = NativeStackScreenProps<RootStackParamList, 'FirstAid'>;
+type AccidentIconKey = 'med' | 'med2' | 'mic' | 'cam';
+type AccidentType = {
+  id: string;
+  label: string;
+  icon: AccidentIconKey;
+};
 
 const styles = StyleSheet.create({
+  accidentTypeColumn: {
+    gap: 8,
+    marginBottom: 10,
+  },
   optionCard: {
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
@@ -29,7 +40,14 @@ const styles = StyleSheet.create({
   },
 });
 
-const accidentTypes = [
+const iconMap: Record<AccidentIconKey, React.ComponentType<SvgProps>> = {
+  med: MedicinesIcon,
+  med2: MedicinesIcon2,
+  mic: MicIcon,
+  cam: CameraIcon,
+};
+
+const accidentTypes: AccidentType[] = [
   { id: '1', label: '화재 / 화염', icon: 'med' },
   { id: '2', label: '약물 / 중독', icon: 'med2' },
   { id: '3', label: '호흡 곤란', icon: 'mic' },
@@ -65,15 +83,9 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
           data={accidentTypes}
           keyExtractor={item => item.id}
           numColumns={2}
-          columnWrapperStyle={{ gap: 8, marginBottom: 10 }}
+          columnWrapperStyle={styles.accidentTypeColumn}
           renderItem={({ item }) => {
-            const iconMap: Record<string, any> = {
-              med: MedicinesIcon,
-              med2: MedicinesIcon2,
-              mic: MicIcon,
-              cam: CameraIcon,
-            };
-            const Icon = iconMap[item.icon] ?? MedicinesIcon;
+            const Icon = iconMap[item.icon];
             const selected = selectedId === item.id;
 
             return (

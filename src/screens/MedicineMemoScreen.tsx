@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -15,6 +16,12 @@ import { BackIcon } from '../assets';
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>;
 
 const { colors } = tailwindConfig;
+
+const styles = StyleSheet.create({
+  listContent: {
+    paddingBottom: 12,
+  },
+});
 
 const memoColors = [
   colors.memoRed,
@@ -116,7 +123,7 @@ export function MedicineMemoScreen({ navigation }: Props) {
         <ScrollView
           className="mt-2 flex-1"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 12 }}
+          contentContainerStyle={styles.listContent}
         >
           {isLoading ? (
             <View className="mt-12 items-center">

@@ -8,9 +8,6 @@ type StepDetailStep = Partial<EmergencyGuideRuntimeStep> & {
 
 type Props = {
   step?: StepDetailStep | null;
-  isChecked: boolean;
-  showCheckpoint: boolean;
-  onToggle: (checked: boolean) => void;
   onStopPress?: () => void;
 };
 
@@ -23,9 +20,6 @@ const getInstructionFromTitle = (title: string) =>
 
 export function StepDetail({
   step,
-  isChecked,
-  showCheckpoint,
-  onToggle,
   onStopPress,
 }: Props) {
   const [showStopModal, setShowStopModal] = React.useState(false);

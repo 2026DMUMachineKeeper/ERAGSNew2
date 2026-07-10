@@ -12,6 +12,14 @@ import type {
 
 type TriageSource = EmergencyMlInput['source'];
 
+export const getTriageErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return '응급상황 판단 요청에 실패했습니다.';
+};
+
 type TriageResult =
   | {
       ok: true;
@@ -170,7 +178,12 @@ export function useEmergencyTriage() {
           assessment,
         };
       } catch (error) {
-        return { ok: false, reason: 'SM_ASSESSMENT_FAILED', error };
+        return {
+          ok: false,
+          reason: 'SM_ASSESSMENT_FAILED',
+          text: getTriageErrorMessage(error),
+          error,
+        };
       } finally {
         setIsBusy(false);
       }

@@ -70,15 +70,11 @@ export function MedicineManualInputScreen({ navigation }: Props) {
     try {
       setIsSaving(true);
 
-      const result = await postMedicineManual({
+      await postMedicineManual({
         name: trimmedName,
         efficacy: trimmedEfficacy,
         usage: trimmedUsage,
         quantityToAdd: quantity,
-      });
-
-      console.log('[MedicineManualInputScreen] medicine manually registered', {
-        result,
       });
 
       Alert.alert('등록 완료', '약품이 등록되었습니다.', [

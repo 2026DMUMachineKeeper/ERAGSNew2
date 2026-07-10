@@ -24,22 +24,6 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MedicineAdd'>;
 
 const { colors } = tailwindConfig;
 
-const getBase64ImageKind = (base64: string) => {
-  if (base64.startsWith('/9j/')) {
-    return 'jpeg';
-  }
-
-  if (base64.startsWith('iVBORw0KGgo')) {
-    return 'png';
-  }
-
-  if (base64.startsWith('data:image/')) {
-    return 'data-uri';
-  }
-
-  return 'unknown';
-};
-
 const stripDataUriPrefix = (value: string) => {
   const marker = 'base64,';
   const markerIndex = value.indexOf(marker);
@@ -85,8 +69,6 @@ const requestCameraPermission = async () => {
     PermissionsAndroid.PERMISSIONS.CAMERA,
   );
 
-  console.log('[MedicineAddScreen] camera permission current', { current });
-
   if (current) {
     return true;
   }
@@ -100,8 +82,6 @@ const requestCameraPermission = async () => {
       buttonNegative: '취소',
     },
   );
-
-  console.log('[MedicineAddScreen] camera permission requested', { granted });
 
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 };
@@ -123,14 +103,9 @@ export function MedicineAddScreen({ navigation }: Props) {
       return;
     }
 
-    console.log('[MedicineAddScreen] openCamera start', {
-      cameraType: CameraType.Back,
-    });
-
     const hasPermission = await requestCameraPermission();
 
     if (!hasPermission) {
-      console.log('[MedicineAddScreen] openCamera blocked: permission');
       Alert.alert('권한 필요', '카메라 권한을 허용해야 촬영할 수 있습니다.', [
         { text: '취소', style: 'cancel' },
         { text: '설정 열기', onPress: () => Linking.openSettings() },
@@ -141,16 +116,7 @@ export function MedicineAddScreen({ navigation }: Props) {
     setIsCameraOpen(true);
   };
 
-  const uploadCapturedPhoto = async (imageBase64: string, meta: object) => {
-    console.log('[MedicineAddScreen] photo base64 ready', {
-      ...meta,
-      hasBase64: imageBase64.length > 0,
-      base64Length: imageBase64.length,
-      base64Preview: imageBase64.slice(0, 80),
-      imageKind: getBase64ImageKind(imageBase64),
-      hasDataUriPrefix: imageBase64.startsWith('data:image/'),
-    });
-
+  const uploadCapturedPhoto = async (imageBase64: string) => {
     setIsUploading(true);
 
     try {
@@ -159,21 +125,12 @@ export function MedicineAddScreen({ navigation }: Props) {
         quantityToAdd: 1,
       });
 
-      console.log('[MedicineAddScreen] medicine registered from photo', {
-        result: registerResult,
-      });
-
       if (registerResult.isRegistered !== true) {
         const message =
           typeof registerResult.message === 'string' &&
           registerResult.message.trim().length > 0
             ? registerResult.message
             : '약품 이름을 직접 입력해 주세요.';
-
-        console.log('[MedicineAddScreen] medicine photo needs manual input', {
-          message,
-          data: registerResult.data,
-        });
 
         Alert.alert('추가 입력 필요', message, [
           {
@@ -214,13 +171,7 @@ export function MedicineAddScreen({ navigation }: Props) {
     }
 
     try {
-      console.log('[MedicineAddScreen] captureWithBackCamera start', {
-        cameraType: CameraType.Back,
-      });
-
       const captured = await cameraRef.current?.capture();
-
-      console.log('[MedicineAddScreen] camera-kit capture response', captured);
 
       if (!captured?.uri) {
         Alert.alert('촬영 실패', '촬영된 사진 경로를 가져오지 못했습니다.');
@@ -231,13 +182,7 @@ export function MedicineAddScreen({ navigation }: Props) {
 
       const imageBase64 = await fileUriToBase64(captured.uri);
 
-      await uploadCapturedPhoto(imageBase64, {
-        assetUri: captured.uri,
-        assetFileName: captured.name,
-        assetFileSize: captured.size,
-        assetWidth: captured.width,
-        assetHeight: captured.height,
-      });
+      await uploadCapturedPhoto(imageBase64);
     } catch (error) {
       console.error('[MedicineAddScreen] captureWithBackCamera failed', error);
       const message =

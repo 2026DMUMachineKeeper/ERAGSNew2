@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Text, TouchableOpacity, View, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon, MedicinesIcon2 } from '../assets';
@@ -13,14 +21,24 @@ type MedicinesStockScreenProps = NativeStackScreenProps<
   'MedicinesStock'
 >;
 
+const styles = StyleSheet.create({
+  addButton: {
+    elevation: 8,
+  },
+  medicineCard: {
+    overflow: 'hidden',
+  },
+  medicineText: {
+    flexShrink: 1,
+  },
+});
+
 export function MedicinesStockScreen({
   navigation,
 }: MedicinesStockScreenProps) {
   const [medicines, setMedicines] = useState<MedicineItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [showAddSheet, setShowAddSheet] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -59,15 +77,26 @@ export function MedicinesStockScreen({
   }, []);
 
   const openAdd = () => {
-    console.log('[MedicinesStockScreen] 약품 추가 버튼 눌림');
-    setShowAddSheet(true);
-  };
-
-  const closeAddSheet = () => {
-    console.log('[MedicinesStockScreen] 약품 추가 시트 닫기');
-    setShowAddSheet(false);
+    navigation.navigate('MedicineAdd');
   };
   const insets = useSafeAreaInsets();
+  const listContentStyle = React.useMemo(
+    () => ({
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 140 + insets.bottom,
+    }),
+    [insets.bottom],
+  );
+  const addButtonContainerStyle = React.useMemo(
+    () => ({
+      position: 'absolute' as const,
+      left: 16,
+      right: 16,
+      bottom: 24 + insets.bottom,
+    }),
+    [insets.bottom],
+  );
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -102,15 +131,11 @@ export function MedicinesStockScreen({
         data={medicines}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: 16,
-          paddingBottom: 140 + insets.bottom,
-        }}
+        contentContainerStyle={listContentStyle}
         renderItem={({ item: m }) => (
           <View
-            className="mb-4 bg-successSurface border-2 border-success rounded-3xl p-4 h-[100px]"
-            style={{ overflow: 'hidden' }}
+            className="mb-4 h-[100px] rounded-3xl border-2 border-success bg-successSurface p-4"
+            style={styles.medicineCard}
           >
             <View className="flex-row items-start justify-between h-full">
               {/* Left */}
@@ -121,7 +146,7 @@ export function MedicinesStockScreen({
                     numberOfLines={1}
                     ellipsizeMode="tail"
                     className="text-white text-body font-suitBold"
-                    style={{ flexShrink: 1 }}
+                    style={styles.medicineText}
                   >
                     {m.name}
                   </Text>
@@ -130,7 +155,7 @@ export function MedicinesStockScreen({
                     numberOfLines={1}
                     ellipsizeMode="tail"
                     className="text-lightGray text-sm mt-2"
-                    style={{ flexShrink: 1 }}
+                    style={styles.medicineText}
                   >
                     {m.info}
                   </Text>
@@ -147,29 +172,18 @@ export function MedicinesStockScreen({
       />
 
       {/* Floating Add Button */}
-      {!showAddSheet && (
-        <View
-          style={{
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            bottom: 24 + insets.bottom,
-          }}
+      <View style={addButtonContainerStyle}>
+        <TouchableOpacity
+          onPress={openAdd}
+          activeOpacity={0.8}
+          className="h-[75px] bg-red rounded-3xl items-center justify-center"
+          style={styles.addButton}
         >
-          <TouchableOpacity
-            onPress={openAdd}
-            activeOpacity={0.8}
-            className="h-[75px] bg-red rounded-3xl items-center justify-center"
-            style={{
-              elevation: 8,
-            }}
-          >
-            <Text className="text-white text-title font-suitBold">
-              약품 추가
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+          <Text className="text-white text-title font-suitBold">
+            약품 추가
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }

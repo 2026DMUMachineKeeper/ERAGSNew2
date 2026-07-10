@@ -5,8 +5,16 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
 
+import { EmergencyGuideScreen } from '../screens/EmergencyGuideScreen';
+import { FirstAidDetail } from '../screens/FirstAidDetail';
+import { FirstAidScreen } from '../screens/FirstAidScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { MedicineAddScreen } from '../screens/MedicineAddScreen';
+import { MedicineDetailScreen } from '../screens/MedicineDetailScreen';
+import { MedicineManualInputScreen } from '../screens/MedicineManualInputScreen';
+import { MedicineMemoScreen } from '../screens/MedicineMemoScreen';
 import { MedicinesStockScreen } from '../screens/MedicinesStockScreen';
+import { QRCodeScreen } from '../screens/QRCodeScreen';
 import type { MedicineItem } from '../services/medicineApi';
 
 export type RootStackParamList = {
@@ -44,45 +52,17 @@ export const RootNavigator = (): React.JSX.Element => {
       <Stack.Screen name="Home" component={HomeScreen} />
 
       <Stack.Screen name="MedicinesStock" component={MedicinesStockScreen} />
-      <Stack.Screen
-        name="MedicineMemo"
-        component={require('../screens/MedicineMemoScreen').MedicineMemoScreen}
-      />
-      <Stack.Screen
-        name="MedicineDetail"
-        component={
-          require('../screens/MedicineDetailScreen').MedicineDetailScreen
-        }
-      />
-      <Stack.Screen
-        name="MedicineAdd"
-        component={require('../screens/MedicineAddScreen').MedicineAddScreen}
-      />
+      <Stack.Screen name="MedicineMemo" component={MedicineMemoScreen} />
+      <Stack.Screen name="MedicineDetail" component={MedicineDetailScreen} />
+      <Stack.Screen name="MedicineAdd" component={MedicineAddScreen} />
       <Stack.Screen
         name="MedicineManualInput"
-        component={
-          require('../screens/MedicineManualInputScreen')
-            .MedicineManualInputScreen
-        }
+        component={MedicineManualInputScreen}
       />
-      <Stack.Screen
-        name="FirstAid"
-        component={require('../screens/FirstAidScreen').FirstAidScreen}
-      />
-      <Stack.Screen
-        name="FirstAidDetail"
-        component={require('../screens/FirstAidDetail').FirstAidDetail}
-      />
-      <Stack.Screen
-        name="EmergencyGuide"
-        component={
-          require('../screens/EmergencyGuideScreen').EmergencyGuideScreen
-        }
-      />
-      <Stack.Screen
-        name="QRCode"
-        component={require('../screens/QRCodeScreen').QRCodeScreen}
-      />
+      <Stack.Screen name="FirstAid" component={FirstAidScreen} />
+      <Stack.Screen name="FirstAidDetail" component={FirstAidDetail} />
+      <Stack.Screen name="EmergencyGuide" component={EmergencyGuideScreen} />
+      <Stack.Screen name="QRCode" component={QRCodeScreen} />
     </Stack.Navigator>
   );
 };

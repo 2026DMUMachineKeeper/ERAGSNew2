@@ -25,7 +25,10 @@ import {
   EragsLogo,
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { useEmergencyTriage } from '../hooks/useEmergencyTriage';
+import {
+  getTriageErrorMessage,
+  useEmergencyTriage,
+} from '../hooks/useEmergencyTriage';
 import type {
   AccidentClassification,
   PatientContext,
@@ -251,16 +254,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       setVoiceStatus('녹음을 종료하고 응급상황을 판단하는 중입니다.');
       const audioUri = await stopVoiceRecording();
+      console.log('[HomeScreen] voice recording uri:', audioUri);
       setIsRecording(false);
       const result = await triage.startVoiceTriage(
         // 음성 버튼
         audioUri,
         defaultPatientContext,
       );
+      console.log('[HomeScreen] voice triage result:', result);
 
       if (!result.ok) {
         if (result.reason === 'SM_ASSESSMENT_FAILED') {
-          setVoiceStatus('SM 응급상황 판단 요청에 실패했습니다.');
+          setVoiceStatus(result.text ?? getTriageErrorMessage(result.error));
           return;
         }
         if (result.reason === 'NO_CLASSIFICATION' && result.text) {

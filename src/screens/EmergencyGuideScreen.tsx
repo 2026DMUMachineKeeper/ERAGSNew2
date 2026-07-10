@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -15,6 +15,12 @@ type EmergencyGuideProps = NativeStackScreenProps<
   RootStackParamList,
   'EmergencyGuide'
 >;
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: 16,
+  },
+});
 
 const getVisibleStepCount = (label?: string) => {
   if (!label) {
@@ -53,17 +59,12 @@ export function EmergencyGuideScreen({
     .slice(0, visibleStepCount)
     .map(toGuideRuntimeStep);
   const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
-  const [isChecked, setIsChecked] = React.useState(false);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
     const timer = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  React.useEffect(() => {
-    setIsChecked(false);
-  }, [currentStepIndex]);
 
   const currentStep = steps[currentStepIndex] ?? steps[0];
   const elapsedLabel = formatElapsed(elapsedSeconds);
@@ -106,13 +107,10 @@ export function EmergencyGuideScreen({
       <ScrollView
         className="flex-1 px-4 pt-4"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 16 }}
+        contentContainerStyle={styles.scrollContent}
       >
         <StepDetail
           step={currentStep}
-          isChecked={isChecked}
-          showCheckpoint
-          onToggle={setIsChecked}
           onStopPress={moveToComplete}
         />
       </ScrollView>

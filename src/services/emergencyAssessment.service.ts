@@ -6,12 +6,48 @@ import type {
   EmergencyAssessmentVoiceUploadParams,
 } from '@/types/emergencyAssessment.types';
 
-const DEFAULT_EMERGENCY_ASSESSMENT_API_URL =
-  'http://52.79.242.244:4000/api/emergency-assessments';
+const EMERGENCY_ASSESSMENT_PATH = '/api/emergency-assessments';
 
-const buildEmergencyAssessmentUrl = (): string =>
-  Config.SM_EMERGENCY_ASSESSMENT_API_URL ??
-  DEFAULT_EMERGENCY_ASSESSMENT_API_URL;
+const readEnvValue = (...values: Array<string | undefined>): string | null => {
+  for (const value of values) {
+    const trimmedValue = value?.trim();
+
+    if (trimmedValue) {
+      return trimmedValue;
+    }
+  }
+
+  return null;
+};
+
+const buildEndpointUrl = (url: string): string => {
+  if (url.includes(EMERGENCY_ASSESSMENT_PATH)) {
+    return url;
+  }
+
+  return `${url.replace(/\/+$/, '')}${EMERGENCY_ASSESSMENT_PATH}`;
+};
+
+const buildEmergencyAssessmentUrl = (): string => {
+  const emergencyAssessmentUrl = readEnvValue(
+    Config.SM_EMERGENCY_ASSESSMENT_API_URL,
+    Config.SM_API_URL,
+  );
+
+  if (emergencyAssessmentUrl) {
+    return buildEndpointUrl(emergencyAssessmentUrl);
+  }
+
+  const apiBaseUrl = readEnvValue(Config.API_BASE_URL);
+
+  if (!apiBaseUrl) {
+    throw new Error(
+      'API_BASE_URL이 설정되지 않았습니다. .env를 확인하세요.',
+    );
+  }
+
+  return buildEndpointUrl(apiBaseUrl);
+};
 
 const isEmergencyAssessmentErrorResponse = (
   payload: unknown,
@@ -42,11 +78,22 @@ const readErrorMessage = async (response: Response): Promise<string> => {
   return `SM 응급상황 판단 요청 실패: ${response.status}`;
 };
 
+const readSuccessResponse = async (
+  response: Response,
+): Promise<EmergencyAssessmentResponse> => {
+  try {
+    return (await response.json()) as EmergencyAssessmentResponse;
+  } catch {
+    throw new Error('SM 응급상황 판단 서버가 JSON 응답을 반환하지 않았습니다.');
+  }
+};
+
 export const postEmergencyAssessmentVoice = async ({
   audio,
   language = 'ko-KR',
   requestId = `voice-${Date.now()}`,
 }: EmergencyAssessmentVoiceUploadParams): Promise<EmergencyAssessmentResponse> => {
+  const endpointUrl = buildEmergencyAssessmentUrl();
   const formData = new FormData();
   const audioFile = {
     uri: audio.uri,
@@ -59,14 +106,25 @@ export const postEmergencyAssessmentVoice = async ({
   formData.append('requestId', requestId);
   formData.append('audio', audioFile as unknown as Blob);
 
-  const response = await fetch(buildEmergencyAssessmentUrl(), {
+  console.log('[EmergencyAssessment] voice request:', {
+    endpointUrl,
+    requestId,
+    audioFile,
+  });
+
+  const response = await fetch(endpointUrl, {
     method: 'POST',
     body: formData,
   });
+
+  console.log('[EmergencyAssessment] voice response status:', response.status);
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
   }
 
-  return (await response.json()) as EmergencyAssessmentResponse;
+  const assessment = await readSuccessResponse(response);
+  console.log('[EmergencyAssessment] voice response body:', assessment);
+
+  return assessment;
 };
