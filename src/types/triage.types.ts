@@ -7,29 +7,12 @@ export type AccidentType =
   | 'AIRWAY_OBSTRUCTION'
   | 'FRACTURE'
   | 'CPR';
+
 export type InputType = 'IMAGE' | 'VOICE' | 'MANUAL';
 export type BleedingLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type Consciousness = 'CONSCIOUS' | 'UNCONSCIOUS' | 'UNKNOWN';
 export type AgeGroup = 'CHILD' | 'ADULT' | 'ELDERLY';
-export type BurnDegree = 'FIRST' | 'SECOND' | 'THIRD' | 'UNKNOWN';
-export type FracturePattern =
-  | 'SIMPLE_CLOSED'
-  | 'OPEN'
-  | 'COMPLETE'
-  | 'COMMINUTED'
-  | 'UNKNOWN';
-export type TemperatureBand = 'UNDER_37_9' | '38_0_TO_38_9' | '39_PLUS';
-export type RashType =
-  | 'MACULAR'
-  | 'VESICULAR'
-  | 'ERYTHEMATOUS'
-  | 'URTICARIAL'
-  | 'UNKNOWN';
-export type AirwayObstructionState =
-  | 'PARTIAL'
-  | 'COMPLETE_CONSCIOUS'
-  | 'UNCONSCIOUS'
-  | 'UNKNOWN';
+
 export type RedFlagSignal =
   | 'UNCONTROLLED_BLEEDING'
   | 'SHOCK'
@@ -70,20 +53,13 @@ export interface PatientContext {
   bleedingLevel: BleedingLevel;
   consciousness: Consciousness;
   ageGroup: AgeGroup;
-  burnDegree?: BurnDegree;
-  fracturePattern?: FracturePattern;
-  temperatureC?: number;
-  temperatureBand?: TemperatureBand;
-  rashType?: RashType;
-  airwayObstructionState?: AirwayObstructionState;
   redFlagSignals?: RedFlagSignal[];
 }
 
 export interface EmergencyMlInput {
   accident: AccidentClassification;
   patientContext: PatientContext;
-  transcript?: string;
   imageUri?: string;
   missingFields?: string[];
-  source: 'AI' | 'KEYWORD' | 'MANUAL' | 'IMAGE';
+  source: 'AI' | 'MANUAL' | 'IMAGE';
 }

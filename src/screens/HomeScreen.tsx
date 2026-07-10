@@ -25,11 +25,16 @@ import {
   EragsLogo,
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { useEmergencyTriage } from '../erags-sm1/hooks/useEmergencyTriage';
+import { useEmergencyTriage } from '../hooks/useEmergencyTriage';
 import type {
   AccidentClassification,
   PatientContext,
-} from '../erags-sm1/types';
+} from '../types/triage.types';
+import {
+  cancelVoiceRecording,
+  startVoiceRecording,
+  stopVoiceRecording,
+} from '../services/voiceRecorder.service';
 import tailwindConfig from '../../tailwind.config';
 
 const { colors } = tailwindConfig;
@@ -74,6 +79,41 @@ const requestMicrophonePermission = async () => {
   );
 
   return granted === PermissionsAndroid.RESULTS.GRANTED;
+};
+
+const getVoiceInputErrorMessage = (error: unknown): string => {
+  const voiceError =
+    error && typeof error === 'object'
+      ? (error as { code?: unknown; message?: unknown })
+      : null;
+  const errorCode =
+    typeof voiceError?.code === 'string' ? voiceError.code : undefined;
+  const errorMessage =
+    typeof voiceError?.message === 'string' ? voiceError.message : undefined;
+
+  if (errorCode === 'START_RECORDING_FAILED') {
+    return '녹음을 시작하지 못했습니다. 마이크 권한과 기기 상태를 확인해 주세요.';
+  }
+
+  if (errorCode === 'ALREADY_RECORDING') {
+    return '이미 녹음 중입니다. 다시 눌러 분석을 시작해 주세요.';
+  }
+
+  if (errorCode === 'RECORDING_TOO_SHORT' || errorCode === 'STOP_RECORDING_FAILED') {
+    return '녹음 시간이 너무 짧거나 저장에 실패했습니다. 1초 이상 말한 뒤 다시 시도해 주세요.';
+  }
+
+  if (errorCode === 'NOT_RECORDING') {
+    return '진행 중인 녹음을 찾지 못했습니다. 다시 녹음을 시작해 주세요.';
+  }
+
+  if (errorMessage?.includes('Network request failed')) {
+    return '응급상황 판단 서버에 연결하지 못했습니다. 네트워크 상태를 확인해 주세요.';
+  }
+
+  return errorMessage && errorMessage.trim().length > 0
+    ? errorMessage
+    : '음성 입력 처리 중 오류가 발생했습니다. 다시 시도해 주세요.';
 };
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
@@ -183,8 +223,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   };
   const voiceRequestInFlightRef = React.useRef(false);
   const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
-  const [isListening, setIsListening] = React.useState(false);
-  const isVoiceBusy = isListening || triage.isBusy;
+  const [isRecording, setIsRecording] = React.useState(false);
+  const isVoiceBusy = triage.isBusy;
 
   const handleVoicePress = React.useCallback(async () => {
     if (voiceRequestInFlightRef.current) {
@@ -202,14 +242,27 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       }
 
       setVoiceStatus('음성을 듣고 있습니다.');
-      setIsListening(true);
+      if (!isRecording) {
+        await startVoiceRecording();
+        setIsRecording(true);
+        setVoiceStatus('녹음 중입니다. 다시 누르면 분석을 시작합니다.');
+        return;
+      }
+
+      setVoiceStatus('녹음을 종료하고 응급상황을 판단하는 중입니다.');
+      const audioUri = await stopVoiceRecording();
+      setIsRecording(false);
       const result = await triage.startVoiceTriage(
         // 음성 버튼
-        undefined,
+        audioUri,
         defaultPatientContext,
       );
 
       if (!result.ok) {
+        if (result.reason === 'SM_ASSESSMENT_FAILED') {
+          setVoiceStatus('SM 응급상황 판단 요청에 실패했습니다.');
+          return;
+        }
         if (result.reason === 'NO_CLASSIFICATION' && result.text) {
           setVoiceStatus(`인식됨 : ${result.text}`);
           return;
@@ -230,15 +283,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         return;
       }
 
-      setVoiceStatus('음성 입력을 ML로 전달했습니다.');
+      setVoiceStatus(result.assessment?.explanation.summary ?? '응급상황 판단이 완료되었습니다.');
     } catch (error) {
       console.error('[HomeScreen] voice input failed:', error);
-      setVoiceStatus('음성 입력 처리 중 오류가 발생했습니다.');
+      if (isRecording) {
+        await cancelVoiceRecording().catch(cancelError => {
+          console.warn('[HomeScreen] voice recording cancel failed:', cancelError);
+        });
+        setIsRecording(false);
+      }
+      setVoiceStatus(getVoiceInputErrorMessage(error));
     } finally {
-      setIsListening(false);
       voiceRequestInFlightRef.current = false;
     }
-  }, [triage]);
+  }, [isRecording, triage]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -295,7 +353,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <View className="mt-4 items-center">
               <Text className="text-body text-black text-center font-suitBold">
-                음성으로 설명
+                {isRecording ? '녹음 종료' : '음성으로 설명'}
               </Text>
             </View>
             <View className="mt-2 items-center w-full px-4">
