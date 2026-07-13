@@ -3,10 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
-  Modal,
   PermissionsAndroid,
   Platform,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -14,7 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { StackActions } from '@react-navigation/native';
-import { Camera, CameraType, type CameraApi } from 'react-native-camera-kit';
+import {
+  launchCamera,
+  type CameraOptions,
+  type ImagePickerResponse,
+} from 'react-native-image-picker';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { postMedicineVision } from '../services/medicineApi';
 import tailwindConfig from '../../tailwind.config';
@@ -23,42 +25,6 @@ import { CameraRedIcon } from '../assets';
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineAdd'>;
 
 const { colors } = tailwindConfig;
-
-const stripDataUriPrefix = (value: string) => {
-  const marker = 'base64,';
-  const markerIndex = value.indexOf(marker);
-
-  if (markerIndex === -1) {
-    return value;
-  }
-
-  return value.slice(markerIndex + marker.length);
-};
-
-const fileUriToBase64 = async (uri: string) => {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onerror = () => {
-      reject(new Error('촬영한 사진을 base64로 변환하지 못했습니다.'));
-    };
-    reader.onloadend = () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        reject(new Error('촬영한 사진 데이터를 읽지 못했습니다.'));
-        return;
-      }
-
-      resolve(stripDataUriPrefix(result));
-    };
-
-    reader.readAsDataURL(blob);
-  });
-};
 
 const requestCameraPermission = async () => {
   if (Platform.OS !== 'android') {
@@ -87,8 +53,6 @@ const requestCameraPermission = async () => {
 };
 
 export function MedicineAddScreen({ navigation }: Props) {
-  const cameraRef = React.useRef<CameraApi>(null);
-  const [isCameraOpen, setIsCameraOpen] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
 
   const closeToMedicineMemo = React.useCallback(() => {
@@ -97,24 +61,6 @@ export function MedicineAddScreen({ navigation }: Props) {
       routes: [{ name: 'Home' }, { name: 'MedicineMemo' }],
     });
   }, [navigation]);
-
-  const openCamera = async () => {
-    if (isUploading) {
-      return;
-    }
-
-    const hasPermission = await requestCameraPermission();
-
-    if (!hasPermission) {
-      Alert.alert('권한 필요', '카메라 권한을 허용해야 촬영할 수 있습니다.', [
-        { text: '취소', style: 'cancel' },
-        { text: '설정 열기', onPress: () => Linking.openSettings() },
-      ]);
-      return;
-    }
-
-    setIsCameraOpen(true);
-  };
 
   const uploadCapturedPhoto = async (imageBase64: string) => {
     setIsUploading(true);
@@ -165,26 +111,50 @@ export function MedicineAddScreen({ navigation }: Props) {
     }
   };
 
-  const captureWithBackCamera = async () => {
+  const openCamera = async () => {
     if (isUploading) {
       return;
     }
 
-    try {
-      const captured = await cameraRef.current?.capture();
+    const hasPermission = await requestCameraPermission();
 
-      if (!captured?.uri) {
-        Alert.alert('촬영 실패', '촬영된 사진 경로를 가져오지 못했습니다.');
+    if (!hasPermission) {
+      Alert.alert('권한 필요', '카메라 권한을 허용해야 촬영할 수 있습니다.', [
+        { text: '취소', style: 'cancel' },
+        { text: '설정 열기', onPress: () => Linking.openSettings() },
+      ]);
+      return;
+    }
+
+    const options: CameraOptions = {
+      mediaType: 'photo',
+      includeBase64: true,
+      saveToPhotos: false,
+      quality: 0.9,
+      cameraType: 'back',
+    };
+
+    try {
+      const response: ImagePickerResponse = await launchCamera(options);
+
+      if (response.didCancel) {
         return;
       }
 
-      setIsCameraOpen(false);
+      if (response.errorCode) {
+        Alert.alert('촬영 실패', response.errorMessage ?? response.errorCode);
+        return;
+      }
 
-      const imageBase64 = await fileUriToBase64(captured.uri);
+      const asset = response.assets?.[0];
+      if (!asset?.base64) {
+        Alert.alert('촬영 실패', '촬영한 사진 데이터를 가져오지 못했습니다.');
+        return;
+      }
 
-      await uploadCapturedPhoto(imageBase64);
+      await uploadCapturedPhoto(asset.base64);
     } catch (error) {
-      console.error('[MedicineAddScreen] captureWithBackCamera failed', error);
+      console.error('[MedicineAddScreen] launchCamera failed', error);
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
@@ -221,7 +191,7 @@ export function MedicineAddScreen({ navigation }: Props) {
           </Text>
 
           <Text className="mt-5 text-center text-sm text-memoSubText">
-            후면 카메라로 약품의 제품명이 잘 보이도록 촬영합니다.
+            후면 카메라로 약품의 제품명이 잘 보이도록 촬영합니다
           </Text>
 
           {isUploading ? (
@@ -252,54 +222,13 @@ export function MedicineAddScreen({ navigation }: Props) {
             </Text>
 
             <Text className="mt-1 text-xs leading-5 text-memoSubText">
-              사진 말고 직접 입력할 수 있어요.
+              사진 말고 직접 입력할 수도 있어요
             </Text>
           </View>
 
           <Text className="text-2xl text-memoBlue">{'>'}</Text>
         </TouchableOpacity>
       </View>
-
-      <Modal visible={isCameraOpen} animationType="slide">
-        <View className="flex-1 bg-black">
-          {isCameraOpen ? (
-            <Camera
-              ref={cameraRef}
-              style={StyleSheet.absoluteFill}
-              cameraType={CameraType.Back}
-              resizeMode="cover"
-            />
-          ) : null}
-
-          <View className="absolute left-0 right-0 top-0 px-5 pt-12">
-            <TouchableOpacity
-              className="h-11 w-11 items-center justify-center rounded-full bg-black/55"
-              disabled={isUploading}
-              onPress={() => setIsCameraOpen(false)}
-            >
-              <Text className="text-2xl font-bold text-white">x</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View className="absolute bottom-0 left-0 right-0 items-center bg-black/45 px-5 pb-10 pt-6">
-            <Text className="mb-5 text-center text-sm font-bold text-white">
-              후면 카메라로 제품명이 선명하게 보이도록 맞춰 주세요.
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              className="h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-white/30"
-              disabled={isUploading}
-              onPress={captureWithBackCamera}
-            >
-              {isUploading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <View className="h-14 w-14 rounded-full bg-white" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

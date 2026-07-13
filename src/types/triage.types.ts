@@ -60,6 +60,7 @@ export interface EmergencyMlInput {
   accident: AccidentClassification;
   patientContext: PatientContext;
   imageUri?: string;
+  imageBase64?: string;
   missingFields?: string[];
   source: 'AI' | 'MANUAL' | 'IMAGE';
 }

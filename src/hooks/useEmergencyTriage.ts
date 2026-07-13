@@ -213,14 +213,16 @@ export function useEmergencyTriage() {
 
   const sendImageTriage = React.useCallback(
     async (
-      imageUri: string,
+      imageBase64: string,
       accident: AccidentClassification,
       patientContext: PatientContext = defaultPatientContext,
+      imageUri?: string,
     ): Promise<TriageResult> => {
       const input: EmergencyMlInput = {
         accident: { ...accident, rawInputType: 'IMAGE' },
         patientContext,
         imageUri,
+        imageBase64,
         source: 'IMAGE',
       };
 

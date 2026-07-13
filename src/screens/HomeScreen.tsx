@@ -187,17 +187,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         return;
       }
 
-      if (!asset.uri) {
-        Alert.alert('촬영 실패', '사진 경로를 가져오지 못했습니다.');
-        setVisionStatus('사진 경로를 가져오지 못했습니다.');
+      if (!asset.base64) {
+        Alert.alert('촬영 실패', '사진 데이터를 가져오지 못했습니다.');
+        setVisionStatus('사진 데이터를 가져오지 못했습니다.');
         return;
       }
 
       const result = await triage.sendImageTriage(
         // 사진 버튼
-        asset.uri,
+        asset.base64,
         defaultImageAccident,
         defaultPatientContext,
+        asset.uri,
       );
 
       if (!result.ok) {
