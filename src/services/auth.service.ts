@@ -134,3 +134,25 @@ export const saveAuthToken = async (
     service: AUTH_TOKEN_SERVICE,
   });
 };
+
+export const getAuthToken = async (): Promise<string> => {
+  const credentials = await Keychain.getGenericPassword({
+    service: AUTH_TOKEN_SERVICE,
+  });
+
+  if (!credentials) {
+    console.warn('[auth.service] auth token missing');
+    throw new Error('로그인이 필요합니다.');
+  }
+
+  if (credentials.password.trim().length === 0) {
+    console.warn('[auth.service] auth token empty');
+    throw new Error('로그인 토큰이 비어 있습니다.');
+  }
+
+  console.log('[auth.service] auth token loaded', {
+    tokenLength: credentials.password.length,
+  });
+
+  return credentials.password;
+};

@@ -48,9 +48,15 @@ export function MedicineMemoScreen({ navigation }: Props) {
         if (isActive) {
           setMedicines(nextMedicines);
         }
-      } catch {
+      } catch (error: unknown) {
         if (isActive) {
-          setLoadError('약품 목록을 불러오지 못했습니다.');
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : '약품 목록을 불러오지 못했습니다.';
+
+          console.error('[MedicineMemoScreen] 약품 조회 실패:', error);
+          setLoadError(errorMessage);
           setMedicines([]);
         }
       } finally {

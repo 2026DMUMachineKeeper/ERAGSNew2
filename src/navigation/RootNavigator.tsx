@@ -1,9 +1,11 @@
 // 상태머신 결과를 화면으로 전달하기 위해 화면 이름과 params 타입을 한곳에서 관리합니다.
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
+import { getAuthToken } from '@/services';
 
 import { HomeScreen } from '../screens/HomeScreen';
 import { MedicinesStockScreen } from '../screens/MedicinesStockScreen';
@@ -34,9 +36,45 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = (): React.JSX.Element => {
+  const [initialRouteName, setInitialRouteName] = React.useState<
+    keyof RootStackParamList | null
+  >(null);
+
+  React.useEffect(() => {
+    let isActive = true;
+
+    const loadInitialRoute = async (): Promise<void> => {
+      try {
+        await getAuthToken();
+
+        if (isActive) {
+          setInitialRouteName('Home');
+        }
+      } catch {
+        if (isActive) {
+          setInitialRouteName('Login');
+        }
+      }
+    };
+
+    loadInitialRoute();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  if (initialRouteName === null) {
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
   return (
     <Stack.Navigator
-      initialRouteName="Login"
+      initialRouteName={initialRouteName}
       screenOptions={{ headerShown: false }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
