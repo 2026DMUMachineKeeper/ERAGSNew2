@@ -5,17 +5,15 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
-import { getAuthToken } from '@/services';
+import { restoreAuthSession } from '@/services';
 
-import { HomeScreen } from '../screens/HomeScreen';
-import { MedicinesStockScreen } from '../screens/MedicinesStockScreen';
+import { MainTabNavigator } from './MainTabNavigator';
 import type { MedicineItem } from '../services/medicineApi';
 
 export type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
   Home: undefined;
-  MedicinesStock: undefined;
   MedicineMemo: undefined;
   MedicineDetail: { medicine: MedicineItem };
   MedicineAdd: undefined;
@@ -45,7 +43,7 @@ export const RootNavigator = (): React.JSX.Element => {
 
     const loadInitialRoute = async (): Promise<void> => {
       try {
-        await getAuthToken();
+        await restoreAuthSession();
 
         if (isActive) {
           setInitialRouteName('Home');
@@ -79,9 +77,7 @@ export const RootNavigator = (): React.JSX.Element => {
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
-      <Stack.Screen name="Home" component={HomeScreen} />
-
-      <Stack.Screen name="MedicinesStock" component={MedicinesStockScreen} />
+      <Stack.Screen name="Home" component={MainTabNavigator} />
       <Stack.Screen
         name="MedicineMemo"
         component={require('../screens/MedicineMemoScreen').MedicineMemoScreen}

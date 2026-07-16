@@ -3,11 +3,20 @@ import * as Keychain from 'react-native-keychain';
 
 import type {
   AuthRequest,
+  AuthUser,
   LoginResponse,
+  LogoutResponse,
   RegisterResponse,
+  RefreshTokenResponse,
 } from '@/types/auth.types';
 
 const AUTH_TOKEN_SERVICE = 'erags.auth.token';
+
+export type StoredAuthTokens = {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn?: number;
+};
 
 interface ErrorResponseBody {
   success?: boolean;
@@ -20,6 +29,24 @@ interface ParsedResponseBody {
   isJson: boolean;
 }
 
+type AuthTokenPayload = {
+  access_token?: unknown;
+  accessToken?: unknown;
+  access?: unknown;
+  token?: unknown;
+  jwt?: unknown;
+  refresh_token?: unknown;
+  refreshToken?: unknown;
+  refresh?: unknown;
+  expires_in?: unknown;
+  expiresIn?: unknown;
+  user?: unknown;
+  data?: unknown;
+  tokens?: unknown;
+};
+
+type AuthTokenResponse = LoginResponse | RefreshTokenResponse;
+
 const getAuthBaseUrl = (): string => {
   const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
     /\/+$/,
@@ -27,7 +54,7 @@ const getAuthBaseUrl = (): string => {
   );
 
   if (!baseUrl) {
-    throw new Error('API_BASE_URL이 설정되지 않았습니다. .env를 확인하세요.');
+    throw new Error('API_BASE_URL is not configured. Please check .env.');
   }
 
   return baseUrl;
@@ -67,6 +94,14 @@ const isErrorResponseBody = (
   return payload !== null && typeof payload === 'object';
 };
 
+const isRecord = (payload: unknown): payload is Record<string, unknown> => {
+  return payload !== null && typeof payload === 'object';
+};
+
+const getObjectKeys = (payload: unknown): string[] => {
+  return isRecord(payload) ? Object.keys(payload) : [];
+};
+
 const getErrorMessage = (payload: unknown, fallbackMessage: string): string => {
   if (
     isErrorResponseBody(payload) &&
@@ -81,7 +116,7 @@ const getErrorMessage = (payload: unknown, fallbackMessage: string): string => {
 
 const postAuthRequest = async <TResponse>(
   path: string,
-  body: AuthRequest,
+  body: unknown,
 ): Promise<TResponse> => {
   const requestUrl = `${getAuthBaseUrl()}${path}`;
   const response = await fetch(requestUrl, {
@@ -98,7 +133,7 @@ const postAuthRequest = async <TResponse>(
     const responsePreview = parsedResponseBody.rawText.trim().slice(0, 80);
 
     throw new Error(
-      `서버가 JSON이 아닌 응답을 반환했습니다. API 주소를 확인하세요. (${response.status}) ${requestUrl} ${responsePreview}`,
+      `Server returned a non-JSON response. (${response.status}) ${requestUrl} ${responsePreview}`,
     );
   }
 
@@ -106,7 +141,7 @@ const postAuthRequest = async <TResponse>(
     throw new Error(
       getErrorMessage(
         parsedResponseBody.payload,
-        `요청에 실패했습니다. (${response.status})`,
+        `Request failed. (${response.status})`,
       ),
     );
   }
@@ -123,36 +158,313 @@ export const register = async (
 export const login = async (
   authRequest: AuthRequest,
 ): Promise<LoginResponse> => {
-  return postAuthRequest<LoginResponse>('/api/auth/login', authRequest);
+  const response = await postAuthRequest<unknown>('/api/auth/login', authRequest);
+
+  return normalizeAuthTokenResponse(response, authRequest.email) as LoginResponse;
+};
+
+export const saveAuthTokens = async (
+  email: string,
+  tokens: StoredAuthTokens,
+): Promise<void> => {
+  await Keychain.setGenericPassword(email, JSON.stringify(tokens), {
+    service: AUTH_TOKEN_SERVICE,
+  });
 };
 
 export const saveAuthToken = async (
   email: string,
   token: string,
 ): Promise<void> => {
-  await Keychain.setGenericPassword(email, token, {
-    service: AUTH_TOKEN_SERVICE,
+  await saveAuthTokens(email, {
+    accessToken: token,
+    refreshToken: '',
   });
 };
 
-export const getAuthToken = async (): Promise<string> => {
+const readStoredAuthTokens = async (): Promise<{
+  email: string;
+  tokens: StoredAuthTokens;
+}> => {
   const credentials = await Keychain.getGenericPassword({
     service: AUTH_TOKEN_SERVICE,
   });
 
   if (!credentials) {
     console.warn('[auth.service] auth token missing');
-    throw new Error('로그인이 필요합니다.');
+    throw new Error('Login is required.');
   }
 
   if (credentials.password.trim().length === 0) {
     console.warn('[auth.service] auth token empty');
-    throw new Error('로그인 토큰이 비어 있습니다.');
+    throw new Error('Stored auth token is empty.');
   }
 
+  try {
+    const parsedTokens = JSON.parse(
+      credentials.password,
+    ) as Partial<StoredAuthTokens> & {
+      access_token?: unknown;
+      refresh_token?: unknown;
+      expires_in?: unknown;
+    };
+
+    const accessToken =
+      typeof parsedTokens.accessToken === 'string'
+        ? parsedTokens.accessToken
+        : typeof parsedTokens.access_token === 'string'
+          ? parsedTokens.access_token
+          : '';
+
+    if (accessToken.trim().length > 0) {
+      return {
+        email: credentials.username,
+        tokens: {
+          accessToken,
+          refreshToken:
+            typeof parsedTokens.refreshToken === 'string'
+              ? parsedTokens.refreshToken
+              : typeof parsedTokens.refresh_token === 'string'
+                ? parsedTokens.refresh_token
+                : '',
+          expiresIn:
+            typeof parsedTokens.expiresIn === 'number'
+              ? parsedTokens.expiresIn
+              : typeof parsedTokens.expires_in === 'number'
+                ? parsedTokens.expires_in
+                : undefined,
+        },
+      };
+    }
+  } catch {
+    return {
+      email: credentials.username,
+      tokens: {
+        accessToken: credentials.password,
+        refreshToken: '',
+      },
+    };
+  }
+
+  throw new Error('Stored auth token format is invalid.');
+};
+
+export const getAuthToken = async (): Promise<string> => {
+  const { tokens } = await readStoredAuthTokens();
+
   console.log('[auth.service] auth token loaded', {
-    tokenLength: credentials.password.length,
+    tokenLength: tokens.accessToken.length,
   });
 
-  return credentials.password;
+  return tokens.accessToken;
+};
+
+const findNestedRecord = (
+  payload: unknown,
+  keys: string[],
+): Record<string, unknown> | undefined => {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    if (isRecord(payload[key])) {
+      return payload[key];
+    }
+  }
+
+  return undefined;
+};
+
+const getStringField = (
+  payload: Record<string, unknown>,
+  keys: string[],
+): string => {
+  for (const key of keys) {
+    const value = payload[key];
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return '';
+};
+
+const getNumberField = (
+  payload: Record<string, unknown>,
+  keys: string[],
+): number => {
+  for (const key of keys) {
+    const value = payload[key];
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return 0;
+};
+
+const findTokenPayload = (response: unknown): AuthTokenPayload => {
+  if (!isRecord(response)) {
+    throw new Error('로그인 응답을 확인할 수 없습니다.');
+  }
+
+  const queue: Record<string, unknown>[] = [response];
+  const visited = new Set<Record<string, unknown>>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (!current || visited.has(current)) {
+      continue;
+    }
+
+    visited.add(current);
+
+    const hasAccessToken =
+      getStringField(current, [
+        'access_token',
+        'accessToken',
+        'access',
+        'token',
+        'jwt',
+      ]).length > 0;
+
+    if (hasAccessToken) {
+      return current as AuthTokenPayload;
+    }
+
+    for (const key of ['data', 'payload', 'result', 'body', 'tokens']) {
+      const next = current[key];
+
+      if (isRecord(next)) {
+        queue.push(next);
+      }
+    }
+  }
+
+  console.warn('[auth.service] login token fields not found', {
+    rootKeys: getObjectKeys(response),
+    nestedKeys: getObjectKeys(
+      findNestedRecord(response, ['data', 'payload', 'result', 'body', 'tokens']),
+    ),
+  });
+
+  throw new Error('로그인 응답에서 인증 토큰을 찾을 수 없습니다.');
+};
+
+const normalizeAuthTokenResponse = (
+  response: unknown,
+  fallbackEmail?: string,
+): AuthTokenResponse => {
+  const tokenPayload = findTokenPayload(response);
+  const root = isRecord(response) ? response : {};
+  const payload = isRecord(root.data)
+    ? (root.data as AuthTokenPayload)
+    : (root as AuthTokenPayload);
+  const accessToken = getStringField(tokenPayload, [
+    'access_token',
+    'accessToken',
+    'access',
+    'token',
+    'jwt',
+  ]);
+  const refreshToken = getStringField(tokenPayload, [
+    'refresh_token',
+    'refreshToken',
+    'refresh',
+  ]);
+  const expiresIn = getNumberField(tokenPayload, ['expires_in', 'expiresIn']);
+  const userPayload = payload.user ?? root.user;
+
+  const user: AuthUser | undefined =
+    fallbackEmail === undefined
+      ? undefined
+      : {
+          id:
+            isRecord(userPayload) && typeof userPayload.id === 'number'
+              ? userPayload.id
+              : 0,
+          email:
+            isRecord(userPayload) && typeof userPayload.email === 'string'
+              ? userPayload.email
+              : fallbackEmail,
+          name:
+            isRecord(userPayload) && typeof userPayload.name === 'string'
+              ? userPayload.name
+              : undefined,
+          guardian_phone:
+            isRecord(userPayload) &&
+            typeof userPayload.guardian_phone === 'string'
+              ? userPayload.guardian_phone
+              : undefined,
+        };
+
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: expiresIn,
+    ...(user ? { user } : {}),
+  } as AuthTokenResponse;
+};
+
+export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
+  const { email, tokens } = await readStoredAuthTokens();
+
+  if (tokens.refreshToken.trim().length === 0) {
+    throw new Error('Stored refresh token is missing.');
+  }
+
+  const refreshResponse = normalizeAuthTokenResponse(
+    await postAuthRequest<unknown>(
+      '/api/auth/refresh',
+      {
+        refresh_token: tokens.refreshToken,
+      },
+    ),
+  );
+
+  const nextTokens = {
+    accessToken: refreshResponse.access_token,
+    refreshToken: refreshResponse.refresh_token,
+    expiresIn: refreshResponse.expires_in,
+  };
+
+  await saveAuthTokens(email, nextTokens);
+
+  return nextTokens;
+};
+
+export const restoreAuthSession = async (): Promise<string> => {
+  try {
+    return await getAuthToken();
+  } catch {
+    const tokens = await refreshAuthTokens();
+    return tokens.accessToken;
+  }
+};
+
+export const clearAuthSession = async (): Promise<void> => {
+  await Keychain.resetGenericPassword({
+    service: AUTH_TOKEN_SERVICE,
+  });
+};
+
+export const logout = async (): Promise<LogoutResponse> => {
+  const { tokens } = await readStoredAuthTokens();
+
+  if (tokens.refreshToken.trim().length === 0) {
+    await clearAuthSession();
+    throw new Error('Stored refresh token is missing. Please log in again.');
+  }
+
+  try {
+    return await postAuthRequest<LogoutResponse>('/api/auth/logout', {
+      refresh_token: tokens.refreshToken,
+    });
+  } finally {
+    await clearAuthSession();
+  }
 };
