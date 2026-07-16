@@ -10,6 +10,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   launchCamera,
@@ -25,6 +27,7 @@ import {
   EragsLogo,
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { useEmergencyTriage } from '../erags-sm1/hooks/useEmergencyTriage';
 import type {
   AccidentClassification,
@@ -34,7 +37,10 @@ import tailwindConfig from '../../tailwind.config';
 
 const { colors } = tailwindConfig;
 
-type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
+type HomeScreenProps = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'HomeTab'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 const defaultPatientContext: PatientContext = {
   bleedingLevel: 'MEDIUM',
@@ -346,7 +352,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <TouchableOpacity
           className="h-[86px] bg-background border border-background rounded-2xl justify-center mt-3 px-4"
           style={cardShadow.elevated}
-          onPress={() => navigation.navigate('MedicineMemo')}
+          onPress={() => navigation.navigate('MedicinesTab')}
         >
           <View className="flex-row items-center justify-between w-full">
             <View className="flex-row items-center flex-1">

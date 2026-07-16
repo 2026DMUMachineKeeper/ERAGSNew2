@@ -1,7 +1,11 @@
 import Config from 'react-native-config';
 
+import { getAuthToken, refreshAuthTokens } from './auth.service';
+
 export type MedicineApiRecord = {
-  id: string | number;
+  id?: string | number;
+  medicineId?: string | number;
+  medicine_id?: string | number;
   name?: string;
   info?: string;
   description?: string;
@@ -35,13 +39,59 @@ export type MedicineItem = {
 };
 
 const buildUrl = (path: string) => {
-  const baseUrl = (Config.Base_URL ?? '').replace(/\/+$/, '');
+  const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
+    /\/+$/,
+    '',
+  );
 
   if (!baseUrl) {
     throw new Error('Base_URL이 설정되지 않았습니다. .env를 확인하세요.');
   }
 
   return `${baseUrl}${path}`;
+};
+
+const buildMedicineHeaders = async (
+  hasJsonBody = false,
+): Promise<Record<string, string>> => {
+  const token = await getAuthToken();
+  const headers = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
+    ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
+  };
+
+  console.log('[medicineApi] auth headers ready', {
+    hasAuthorization: headers.Authorization.length > 'Bearer '.length,
+    hasJsonBody,
+  });
+
+  return headers;
+};
+
+const authenticatedMedicineFetch = async (
+  path: string,
+  init: RequestInit = {},
+  hasJsonBody = false,
+): Promise<Response> => {
+  const request = async (): Promise<Response> =>
+    fetch(buildUrl(path), {
+      ...init,
+      headers: {
+        ...(await buildMedicineHeaders(hasJsonBody)),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    });
+
+  const response = await request();
+
+  if (response.status !== 401) {
+    return response;
+  }
+
+  await refreshAuthTokens();
+
+  return request();
 };
 
 const readString = (
@@ -100,8 +150,70 @@ const readNumber = (
   return fallback;
 };
 
+const readIdentifier = (record: MedicineApiRecord): string => {
+  const id = record.id ?? record.medicineId ?? record.medicine_id;
+
+  if (typeof id === 'string' && id.trim().length > 0) {
+    return id;
+  }
+
+  if (typeof id === 'number' && Number.isFinite(id)) {
+    return String(id);
+  }
+
+  return readString(record, ['name', 'medicineName', 'itemName'], 'unknown');
+};
+
+const isRecord = (payload: unknown): payload is Record<string, unknown> => {
+  return payload !== null && typeof payload === 'object';
+};
+
+const readMedicineRecords = (payload: unknown): MedicineApiRecord[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord);
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const data = payload.data;
+
+  if (Array.isArray(data)) {
+    return data.filter(isRecord);
+  }
+
+  if (isRecord(data)) {
+    const nestedRecords = [
+      data.medicines,
+      data.items,
+      data.list,
+      data.content,
+      data.results,
+    ].find(Array.isArray);
+
+    if (Array.isArray(nestedRecords)) {
+      return nestedRecords.filter(isRecord);
+    }
+  }
+
+  const rootRecords = [
+    payload.medicines,
+    payload.items,
+    payload.list,
+    payload.content,
+    payload.results,
+  ].find(Array.isArray);
+
+  if (Array.isArray(rootRecords)) {
+    return rootRecords.filter(isRecord);
+  }
+
+  return [];
+};
+
 export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
-  id: String(record.id),
+  id: readIdentifier(record),
   name: readString(record, ['name', 'medicineName', 'itemName'], '이름 없음'),
   info:
     readString(record, ['info', 'description', 'detail', 'memo'], '').trim() ||
@@ -128,11 +240,8 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   const url = buildUrl('/api/medicines');
   console.log('[medicineApi] fetchMedicines request', { url });
 
-  const response = await fetch(url, {
+  const response = await authenticatedMedicineFetch('/api/medicines', {
     method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
   });
 
   console.log('[medicineApi] fetchMedicines response', {
@@ -144,27 +253,40 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
     throw new Error(`약품 조회 실패: ${response.status}`);
   }
 
-  const payload = await response.json();
+  const payload = (await response.json()) as unknown;
   console.log('[medicineApi] fetchMedicines payload shape', {
     isArray: Array.isArray(payload),
-    dataIsArray: Array.isArray(payload?.data),
+    dataIsArray: isRecord(payload) && Array.isArray(payload.data),
+    dataKeys:
+      isRecord(payload) && isRecord(payload.data)
+        ? Object.keys(payload.data)
+        : [],
     keys:
       payload && typeof payload === 'object' && !Array.isArray(payload)
         ? Object.keys(payload)
         : [],
   });
 
-  const records = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.data)
-    ? payload.data
-    : [];
+  const records = readMedicineRecords(payload);
 
   console.log('[medicineApi] fetchMedicines normalized count', {
     count: records.length,
   });
 
   return records.map(normalizeMedicine);
+}
+
+export async function fetchAvailableMedicines(): Promise<MedicineItem[]> {
+  const response = await authenticatedMedicineFetch('/api/medicines/available', {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Available medicines request failed: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  return readMedicineRecords(payload).map(normalizeMedicine);
 }
 
 export type MedicineVisionUploadResult = {
@@ -187,6 +309,12 @@ export type MedicineUpdateParams = {
   usage?: string;
   efficacy?: string;
   quantity?: number;
+};
+
+export type MedicineUseParams = {
+  id?: string;
+  medicineId?: string;
+  quantityToUse?: number;
 };
 
 export type MedicineMutationResult = {
@@ -221,17 +349,17 @@ export async function postMedicineVision(params: {
     quantityToAdd: params.quantityToAdd ?? 1,
   });
 
-  const response = await fetch(buildUrl('/api/medicines/vision'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await authenticatedMedicineFetch(
+    '/api/medicines/vision',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        imageBase64: params.imageBase64,
+        quantityToAdd: params.quantityToAdd ?? 1,
+      }),
     },
-    body: JSON.stringify({
-      imageBase64: params.imageBase64,
-      quantityToAdd: params.quantityToAdd ?? 1,
-    }),
-  });
+    true,
+  );
 
   console.log('[medicineApi] postMedicineVision response', {
     ok: response.ok,
@@ -274,14 +402,14 @@ export async function postMedicineManual(
     body,
   });
 
-  const response = await fetch(buildUrl('/api/medicines/manual'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await authenticatedMedicineFetch(
+    '/api/medicines/manual',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+    true,
+  );
 
   console.log('[medicineApi] postMedicineManual response', {
     ok: response.ok,
@@ -301,6 +429,33 @@ export async function postMedicineManual(
   return payload as MedicineManualCreateResult;
 }
 
+export async function postMedicineUse(
+  params: MedicineUseParams,
+): Promise<MedicineMutationResult> {
+  const body = {
+    id: params.id,
+    medicineId: params.medicineId,
+    quantityToUse: params.quantityToUse ?? 1,
+  };
+
+  const response = await authenticatedMedicineFetch(
+    '/api/medicines/use',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+    true,
+  );
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(`Medicine use request failed: ${response.status}`);
+  }
+
+  return payload as MedicineMutationResult;
+}
+
 export async function updateMedicine(
   id: string,
   params: MedicineUpdateParams,
@@ -311,14 +466,14 @@ export async function updateMedicine(
 
   console.log('[medicineApi] updateMedicine request', { id, body });
 
-  const response = await fetch(buildUrl(`/api/medicines/${id}`), {
-    method: 'PUT',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await authenticatedMedicineFetch(
+    `/api/medicines/${id}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+    true,
+  );
 
   console.log('[medicineApi] updateMedicine response', {
     ok: response.ok,
@@ -343,11 +498,8 @@ export async function deleteMedicine(
 ): Promise<MedicineMutationResult> {
   console.log('[medicineApi] deleteMedicine request', { id });
 
-  const response = await fetch(buildUrl(`/api/medicines/${id}`), {
+  const response = await authenticatedMedicineFetch(`/api/medicines/${id}`, {
     method: 'DELETE',
-    headers: {
-      Accept: 'application/json',
-    },
   });
 
   console.log('[medicineApi] deleteMedicine response', {
