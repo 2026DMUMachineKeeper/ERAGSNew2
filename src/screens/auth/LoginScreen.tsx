@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { login, saveAuthToken } from '@/services';
+import { login, saveAuthTokens } from '@/services';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
@@ -45,7 +45,11 @@ export const LoginScreen = ({
         password,
       });
 
-      await saveAuthToken(loginResponse.user.email, loginResponse.token);
+      await saveAuthTokens(loginResponse.user.email, {
+        accessToken: loginResponse.access_token,
+        refreshToken: loginResponse.refresh_token,
+        expiresIn: loginResponse.expires_in,
+      });
 
       navigation.reset({
         index: 0,
