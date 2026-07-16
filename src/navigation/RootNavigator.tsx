@@ -18,6 +18,7 @@ export type RootStackParamList = {
   MedicineDetail: { medicine: MedicineItem };
   MedicineAdd: undefined;
   MedicineManualInput: undefined;
+  PasswordReset: undefined;
   TestFont: undefined;
   FirstAid: undefined;
   FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
@@ -98,6 +99,10 @@ export const RootNavigator = (): React.JSX.Element => {
           require('../screens/MedicineManualInputScreen')
             .MedicineManualInputScreen
         }
+      />
+      <Stack.Screen
+        name="PasswordReset"
+        component={require('../screens/PasswordResetScreen').PasswordResetScreen}
       />
       <Stack.Screen
         name="FirstAid"
