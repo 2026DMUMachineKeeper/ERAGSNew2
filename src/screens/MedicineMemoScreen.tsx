@@ -7,12 +7,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
 import tailwindConfig from '../../tailwind.config';
 import { BackIcon } from '../assets';
-type Props = NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'MedicinesTab'>,
+  NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>
+>;
 
 const { colors } = tailwindConfig;
 
@@ -48,9 +54,15 @@ export function MedicineMemoScreen({ navigation }: Props) {
         if (isActive) {
           setMedicines(nextMedicines);
         }
-      } catch {
+      } catch (error: unknown) {
         if (isActive) {
-          setLoadError('약품 목록을 불러오지 못했습니다.');
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : '약품 목록을 불러오지 못했습니다.';
+
+          console.error('[MedicineMemoScreen] 약품 조회 실패:', error);
+          setLoadError(errorMessage);
           setMedicines([]);
         }
       } finally {
@@ -68,10 +80,7 @@ export function MedicineMemoScreen({ navigation }: Props) {
   }, []);
 
   const goHome = React.useCallback(() => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }],
-    });
+    navigation.navigate('HomeTab');
   }, [navigation]);
 
   return (

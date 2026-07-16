@@ -26,6 +26,7 @@ export const SignUpScreen = ({
 }: SignUpScreenProps): React.JSX.Element => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [guardianPhoneNumber, setGuardianPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,10 +52,14 @@ export const SignUpScreen = ({
     setIsSubmitting(true);
 
     try {
+      const trimmedGuardianPhoneNumber = guardianPhoneNumber.trim();
       const registerResponse = await register({
         name: name.trim(),
         email: email.trim(),
         password,
+        ...(trimmedGuardianPhoneNumber.length > 0
+          ? { guardian_phone: trimmedGuardianPhoneNumber }
+          : {}),
       });
 
       Alert.alert('회원가입 완료', registerResponse.message, [
@@ -128,6 +133,23 @@ export const SignUpScreen = ({
                       returnKeyType: 'next',
                       textContentType: 'emailAddress',
                       value: email,
+                    }}
+                  />
+                </View>
+
+                <View className="mt-5">
+                  <AuthTextInput
+                    iconName="phone"
+                    inputProps={{
+                      autoCapitalize: 'none',
+                      autoCorrect: false,
+                      keyboardType: 'phone-pad',
+                      onChangeText: setGuardianPhoneNumber,
+                      placeholder: '보호자 전화번호를 입력하세요 (선택)',
+                      placeholderTextColor: colors.placeholder,
+                      returnKeyType: 'next',
+                      textContentType: 'telephoneNumber',
+                      value: guardianPhoneNumber,
                     }}
                   />
                 </View>
