@@ -18,14 +18,7 @@ import {
   type CameraOptions,
   type ImagePickerResponse,
 } from 'react-native-image-picker';
-import {
-  CameraIcon,
-  MedicinesIcon,
-  MicIcon,
-  MainIcon,
-  MainIcon2,
-  EragsLogo,
-} from '../assets/icons';
+import { CameraIcon, MicIcon, MainIcon, EragsLogo } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { useEmergencyTriage } from '../erags-sm1/hooks/useEmergencyTriage';
@@ -192,6 +185,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [isListening, setIsListening] = React.useState(false);
   const isVoiceBusy = isListening || triage.isBusy;
 
+  const handleEmergencyReportPress = React.useCallback((): void => {
+    Alert.alert(
+      '긴급 신고 문자',
+      '보호자 연락처와 현재 위치 전송 기능을 연결한 뒤 사용할 수 있습니다.',
+    );
+  }, []);
+
   const handleVoicePress = React.useCallback(async () => {
     if (voiceRequestInFlightRef.current) {
       return;
@@ -264,37 +264,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
       </View>
 
-      <View className="px-4 mt-6">
-        <TouchableOpacity
-          className="h-[120px] rounded-2xl bg-red overflow-hidden flex-row items-center px-4"
-          onPress={() => navigation.navigate('FirstAid')}
-        >
-          <View className="w-24 items-start justify-center">
-            <MainIcon2 width={72} height={72} />
-          </View>
-
-          <View className="flex-1 pl-2">
-            <Text className="text-title text-white font-suitBold">
-              응급 처치 시작
-            </Text>
-            <Text className="text-coment text-white mt-2">
-              사고 유형 선택 및 맞춤형 가이드를 시작합니다.
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
       <View className="px-4 mt-5">
+        <Text className="mb-3 text-body font-suitSemiBold text-textDim">
+          빠른 상황 전달
+        </Text>
         <View className="flex-row justify-between gap-x-3">
           <TouchableOpacity
-            className="flex-1 h-[170px] bg-background border border-background rounded-2xl px-2 py-4"
+            className="h-[180px] flex-1 rounded-2xl border border-white bg-white px-2 py-4"
             style={cardShadow.elevated}
             disabled={isVoiceBusy}
             onPress={handleVoicePress}
           >
             <View className="items-center mt-2">
               {isVoiceBusy ? (
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color={colors.red} />
               ) : (
                 <MicIcon width={40} height={40} />
               )}
@@ -316,14 +299,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="flex-1 h-[170px] bg-background border border-background rounded-2xl px-2 py-4"
+            className="h-[180px] flex-1 rounded-2xl border border-white bg-white px-2 py-4"
             style={cardShadow.elevated}
             onPress={handlePhotoPress}
             disabled={isVisionUploading}
           >
             <View className="items-center mt-2">
               {isVisionUploading ? (
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color={colors.red} />
               ) : (
                 <CameraIcon width={40} height={40} />
               )}
@@ -350,27 +333,31 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
 
         <TouchableOpacity
-          className="h-[86px] bg-background border border-background rounded-2xl justify-center mt-3 px-4"
-          style={cardShadow.elevated}
-          onPress={() => navigation.navigate('MedicinesTab')}
+          className="mt-4 h-[86px] flex-row items-center rounded-2xl bg-red px-4"
+          onPress={handleEmergencyReportPress}
         >
-          <View className="flex-row items-center justify-between w-full">
-            <View className="flex-row items-center flex-1">
-              <MedicinesIcon width={40} height={40} />
-              <View className="ml-3 flex-1">
-                <Text className="text-title2 text-black font-suitBold">
-                  약품 메모
-                </Text>
-                <Text
-                  numberOfLines={2}
-                  ellipsizeMode="tail"
-                  className="mt-1 text-coment text-textDim"
-                >
-                  등록한 약품과 복용 메모를 한눈에 확인합니다
-                </Text>
-              </View>
-            </View>
+          <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white">
+            <Text className="text-coment font-suitBold text-white">SOS</Text>
           </View>
+          <View className="ml-4 flex-1">
+            <Text className="text-body font-suitBold text-white">
+              긴급 신고 문자 보내기
+            </Text>
+          </View>
+          <Text className="text-title2 font-suitRegular text-white">›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          className="mt-3 h-[68px] flex-row items-center rounded-2xl border border-red bg-camera_bg px-4"
+          onPress={() => navigation.navigate('FirstAid')}
+        >
+          <View className="h-9 w-9 items-center justify-center rounded-full border border-red">
+            <Text className="text-body font-suitBold text-red">!</Text>
+          </View>
+          <Text className="ml-4 flex-1 text-body font-suitBold text-black">
+            응급 처치 가이드
+          </Text>
+          <Text className="text-title2 font-suitRegular text-red">›</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
