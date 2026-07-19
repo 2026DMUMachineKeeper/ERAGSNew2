@@ -10,6 +10,8 @@ import type {
   RefreshTokenResponse,
 } from '@/types/auth.types';
 
+declare const atob: (encodedData: string) => string;
+
 const AUTH_TOKEN_SERVICE = 'erags.auth.token';
 
 export type StoredAuthTokens = {
@@ -158,9 +160,15 @@ export const register = async (
 export const login = async (
   authRequest: AuthRequest,
 ): Promise<LoginResponse> => {
-  const response = await postAuthRequest<unknown>('/api/auth/login', authRequest);
+  const response = await postAuthRequest<unknown>(
+    '/api/auth/login',
+    authRequest,
+  );
 
-  return normalizeAuthTokenResponse(response, authRequest.email) as LoginResponse;
+  return normalizeAuthTokenResponse(
+    response,
+    authRequest.email,
+  ) as LoginResponse;
 };
 
 export const saveAuthTokens = async (
@@ -213,8 +221,8 @@ const readStoredAuthTokens = async (): Promise<{
       typeof parsedTokens.accessToken === 'string'
         ? parsedTokens.accessToken
         : typeof parsedTokens.access_token === 'string'
-          ? parsedTokens.access_token
-          : '';
+        ? parsedTokens.access_token
+        : '';
 
     if (accessToken.trim().length > 0) {
       return {
@@ -225,14 +233,14 @@ const readStoredAuthTokens = async (): Promise<{
             typeof parsedTokens.refreshToken === 'string'
               ? parsedTokens.refreshToken
               : typeof parsedTokens.refresh_token === 'string'
-                ? parsedTokens.refresh_token
-                : '',
+              ? parsedTokens.refresh_token
+              : '',
           expiresIn:
             typeof parsedTokens.expiresIn === 'number'
               ? parsedTokens.expiresIn
               : typeof parsedTokens.expires_in === 'number'
-                ? parsedTokens.expires_in
-                : undefined,
+              ? parsedTokens.expires_in
+              : undefined,
         },
       };
     }
@@ -249,8 +257,43 @@ const readStoredAuthTokens = async (): Promise<{
   throw new Error('Stored auth token format is invalid.');
 };
 
+const getJwtExpiration = (token: string): number | undefined => {
+  const tokenParts = token.split('.');
+
+  // 이전 서버에서 발급한 비 JWT 토큰도 읽을 수 있도록 JWT 형식일 때만 exp를 검사합니다.
+  if (tokenParts.length !== 3) {
+    return undefined;
+  }
+
+  try {
+    const base64Payload = tokenParts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(tokenParts[1].length / 4) * 4, '=');
+    const payload = JSON.parse(atob(base64Payload)) as unknown;
+
+    if (
+      payload !== null &&
+      typeof payload === 'object' &&
+      'exp' in payload &&
+      typeof payload.exp === 'number'
+    ) {
+      return payload.exp;
+    }
+  } catch {
+    throw new Error('Stored auth token format is invalid.');
+  }
+
+  throw new Error('Stored auth token expiration is missing.');
+};
+
 export const getAuthToken = async (): Promise<string> => {
   const { tokens } = await readStoredAuthTokens();
+  const expiration = getJwtExpiration(tokens.accessToken);
+
+  if (expiration !== undefined && Date.now() >= expiration * 1000) {
+    throw new Error('Stored auth token has expired.');
+  }
 
   console.log('[auth.service] auth token loaded', {
     tokenLength: tokens.accessToken.length,
@@ -348,7 +391,13 @@ const findTokenPayload = (response: unknown): AuthTokenPayload => {
   console.warn('[auth.service] login token fields not found', {
     rootKeys: getObjectKeys(response),
     nestedKeys: getObjectKeys(
-      findNestedRecord(response, ['data', 'payload', 'result', 'body', 'tokens']),
+      findNestedRecord(response, [
+        'data',
+        'payload',
+        'result',
+        'body',
+        'tokens',
+      ]),
     ),
   });
 
@@ -418,12 +467,9 @@ export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
   }
 
   const refreshResponse = normalizeAuthTokenResponse(
-    await postAuthRequest<unknown>(
-      '/api/auth/refresh',
-      {
-        refresh_token: tokens.refreshToken,
-      },
-    ),
+    await postAuthRequest<unknown>('/api/auth/refresh', {
+      refresh_token: tokens.refreshToken,
+    }),
   );
 
   const nextTokens = {
@@ -441,8 +487,14 @@ export const restoreAuthSession = async (): Promise<string> => {
   try {
     return await getAuthToken();
   } catch {
-    const tokens = await refreshAuthTokens();
-    return tokens.accessToken;
+    try {
+      const tokens = await refreshAuthTokens();
+      return tokens.accessToken;
+    } catch (error: unknown) {
+      // 복원할 수 없는 인증 정보가 남아 있으면 다음 실행에서도 홈 진입을 시도하므로 제거합니다.
+      await clearAuthSession();
+      throw error;
+    }
   }
 };
 
