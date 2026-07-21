@@ -19,6 +19,8 @@ import {
 } from 'react-native-image-picker';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { postMedicineVision } from '../services/medicineApi';
+import { isAuthSessionExpiredError } from '../services/auth.service';
+import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 import tailwindConfig from '../../tailwind.config';
 import { CameraRedIcon } from '../assets';
 
@@ -111,6 +113,10 @@ const requestCameraPermission = async () => {
 export function MedicineAddScreen({ navigation }: Props) {
   const [isUploading, setIsUploading] = React.useState(false);
 
+  const handleAuthSessionExpired = React.useCallback((): void => {
+    redirectToLoginForExpiredSession(navigation);
+  }, [navigation]);
+
   const closeToMedicineMemo = React.useCallback(() => {
     navigation.reset({
       index: 1,
@@ -173,6 +179,12 @@ export function MedicineAddScreen({ navigation }: Props) {
         },
       ]);
     } catch (error) {
+      if (isAuthSessionExpiredError(error)) {
+        console.warn('[MedicineAddScreen] auth session expired:', error);
+        handleAuthSessionExpired();
+        return;
+      }
+
       console.error('[MedicineAddScreen] uploadCapturedPhoto failed', error);
       const message =
         error instanceof Error && error.message.trim().length > 0
