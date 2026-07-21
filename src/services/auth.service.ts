@@ -61,6 +61,7 @@ export type StoredAuthTokens = {
   accessToken: string;
   refreshToken: string;
   expiresIn?: number;
+  user?: AuthUser;
 };
 
 interface ErrorResponseBody {
@@ -234,6 +235,40 @@ export const saveAuthToken = async (
   });
 };
 
+const getStoredAuthUserFromPayload = (
+  userPayload: unknown,
+  fallbackEmail: string,
+): AuthUser | undefined => {
+  if (!isRecord(userPayload)) {
+    return undefined;
+  }
+
+  const id =
+    typeof userPayload.id === 'number' && Number.isFinite(userPayload.id)
+      ? userPayload.id
+      : 0;
+  const email =
+    typeof userPayload.email === 'string' && userPayload.email.trim().length > 0
+      ? userPayload.email
+      : fallbackEmail;
+  const name =
+    typeof userPayload.name === 'string' && userPayload.name.trim().length > 0
+      ? userPayload.name
+      : undefined;
+  const guardianPhone =
+    typeof userPayload.guardian_phone === 'string' &&
+    userPayload.guardian_phone.trim().length > 0
+      ? userPayload.guardian_phone
+      : undefined;
+
+  return {
+    id,
+    email,
+    ...(name ? { name } : {}),
+    ...(guardianPhone ? { guardian_phone: guardianPhone } : {}),
+  };
+};
+
 const readStoredAuthTokens = async (): Promise<{
   email: string;
   tokens: StoredAuthTokens;
@@ -259,6 +294,7 @@ const readStoredAuthTokens = async (): Promise<{
       access_token?: unknown;
       refresh_token?: unknown;
       expires_in?: unknown;
+      user?: unknown;
     };
 
     const accessToken =
@@ -269,6 +305,11 @@ const readStoredAuthTokens = async (): Promise<{
         : '';
 
     if (accessToken.trim().length > 0) {
+      const user = getStoredAuthUserFromPayload(
+        parsedTokens.user,
+        credentials.username,
+      );
+
       return {
         email: credentials.username,
         tokens: {
@@ -285,6 +326,7 @@ const readStoredAuthTokens = async (): Promise<{
               : typeof parsedTokens.expires_in === 'number'
               ? parsedTokens.expires_in
               : undefined,
+          ...(user ? { user } : {}),
         },
       };
     }
@@ -299,6 +341,34 @@ const readStoredAuthTokens = async (): Promise<{
   }
 
   throw new AuthSessionExpiredError();
+};
+
+export const getStoredAuthUser = async (): Promise<AuthUser | undefined> => {
+  const { email, tokens } = await readStoredAuthTokens();
+
+  return tokens.user ?? { id: 0, email };
+};
+
+export const updateStoredAuthUser = async (
+  nextProfile: Pick<AuthUser, 'name' | 'guardian_phone'>,
+): Promise<AuthUser> => {
+  const { email, tokens } = await readStoredAuthTokens();
+  const currentUser = tokens.user ?? { id: 0, email };
+  const nextName = nextProfile.name?.trim();
+  const nextGuardianPhone = nextProfile.guardian_phone?.trim();
+  const nextUser: AuthUser = {
+    id: currentUser.id,
+    email: currentUser.email || email,
+    ...(nextName ? { name: nextName } : {}),
+    ...(nextGuardianPhone ? { guardian_phone: nextGuardianPhone } : {}),
+  };
+
+  await saveAuthTokens(email, {
+    ...tokens,
+    user: nextUser,
+  });
+
+  return nextUser;
 };
 
 const getJwtExpiration = (token: string): number | undefined => {
@@ -531,10 +601,11 @@ export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
     throw error;
   }
 
-  const nextTokens = {
+  const nextTokens: StoredAuthTokens = {
     accessToken: refreshResponse.access_token,
     refreshToken: refreshResponse.refresh_token,
     expiresIn: refreshResponse.expires_in,
+    ...(tokens.user ? { user: tokens.user } : {}),
   };
 
   await saveAuthTokens(email, nextTokens);
