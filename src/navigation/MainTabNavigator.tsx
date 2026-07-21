@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import tailwindConfig from '../../tailwind.config';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -20,7 +20,7 @@ const { colors } = tailwindConfig;
 const tabItems = {
   HomeTab: { label: '홈', icon: '⌂' },
   MedicinesTab: { label: '약품', icon: 'medicine' },
-  SettingsTab: { label: '설정', icon: '⚙' },
+  SettingsTab: { label: '마이페이지', icon: 'profile' },
 } as const;
 
 type TabRouteName = keyof typeof tabItems;
@@ -46,6 +46,24 @@ const MedicineTabIcon = ({ color }: { color: string }) => (
   </Svg>
 );
 
+const MyPageTabIcon = ({ color }: { color: string }) => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Circle cx={12} cy={8} r={3.4} stroke={color} strokeWidth={1.9} />
+    <Path
+      d="M5.25 20C5.9 16.55 8.35 14.5 12 14.5C15.65 14.5 18.1 16.55 18.75 20"
+      stroke={color}
+      strokeWidth={1.9}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M4.5 12C4.5 7.86 7.86 4.5 12 4.5C16.14 4.5 19.5 7.86 19.5 12C19.5 16.14 16.14 19.5 12 19.5C7.86 19.5 4.5 16.14 4.5 12Z"
+      stroke={color}
+      strokeWidth={1.3}
+      strokeOpacity={0.28}
+    />
+  </Svg>
+);
+
 const renderTabIcon = (routeName: TabRouteName, focused: boolean) => {
   const item = tabItems[routeName];
   const iconColor = focused ? colors.red : colors.textDim;
@@ -58,12 +76,17 @@ const renderTabIcon = (routeName: TabRouteName, focused: boolean) => {
     );
   }
 
+  if (routeName === 'SettingsTab') {
+    return (
+      <View className="items-center justify-center">
+        <MyPageTabIcon color={iconColor} />
+      </View>
+    );
+  }
+
   return (
     <View className="items-center justify-center">
-      <Text
-        className="text-title2 font-suitBold"
-        style={{ color: iconColor }}
-      >
+      <Text className="text-title2 font-suitBold" style={{ color: iconColor }}>
         {item.icon}
       </Text>
     </View>

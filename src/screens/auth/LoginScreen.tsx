@@ -49,6 +49,7 @@ export const LoginScreen = ({
         accessToken: loginResponse.access_token,
         refreshToken: loginResponse.refresh_token,
         expiresIn: loginResponse.expires_in,
+        user: loginResponse.user,
       });
 
       navigation.reset({
