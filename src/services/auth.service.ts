@@ -13,6 +13,49 @@ import type {
 declare const atob: (encodedData: string) => string;
 
 const AUTH_TOKEN_SERVICE = 'erags.auth.token';
+const AUTH_SESSION_EXPIRED_MESSAGE = '';
+
+export class AuthSessionExpiredError extends Error {
+  constructor(message = AUTH_SESSION_EXPIRED_MESSAGE) {
+    super(message);
+    this.name = 'AuthSessionExpiredError';
+  }
+}
+
+export class AuthTokenExpiredError extends Error {
+  constructor(message = AUTH_SESSION_EXPIRED_MESSAGE) {
+    super(message);
+    this.name = 'AuthTokenExpiredError';
+  }
+}
+
+class AuthRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'AuthRequestError';
+    this.status = status;
+  }
+}
+
+export const isAuthSessionExpiredError = (
+  error: unknown,
+): error is AuthSessionExpiredError => {
+  return (
+    error instanceof AuthSessionExpiredError ||
+    (error instanceof Error && error.name === 'AuthSessionExpiredError')
+  );
+};
+
+export const isAuthTokenExpiredError = (
+  error: unknown,
+): error is AuthTokenExpiredError => {
+  return (
+    error instanceof AuthTokenExpiredError ||
+    (error instanceof Error && error.name === 'AuthTokenExpiredError')
+  );
+};
 
 export type StoredAuthTokens = {
   accessToken: string;
@@ -140,11 +183,12 @@ const postAuthRequest = async <TResponse>(
   }
 
   if (!response.ok) {
-    throw new Error(
+    throw new AuthRequestError(
       getErrorMessage(
         parsedResponseBody.payload,
         `Request failed. (${response.status})`,
       ),
+      response.status,
     );
   }
 
@@ -200,12 +244,12 @@ const readStoredAuthTokens = async (): Promise<{
 
   if (!credentials) {
     console.warn('[auth.service] auth token missing');
-    throw new Error('Login is required.');
+    throw new AuthSessionExpiredError();
   }
 
   if (credentials.password.trim().length === 0) {
     console.warn('[auth.service] auth token empty');
-    throw new Error('Stored auth token is empty.');
+    throw new AuthSessionExpiredError();
   }
 
   try {
@@ -254,7 +298,7 @@ const readStoredAuthTokens = async (): Promise<{
     };
   }
 
-  throw new Error('Stored auth token format is invalid.');
+  throw new AuthSessionExpiredError();
 };
 
 const getJwtExpiration = (token: string): number | undefined => {
@@ -281,10 +325,10 @@ const getJwtExpiration = (token: string): number | undefined => {
       return payload.exp;
     }
   } catch {
-    throw new Error('Stored auth token format is invalid.');
+    throw new AuthTokenExpiredError();
   }
 
-  throw new Error('Stored auth token expiration is missing.');
+  throw new AuthTokenExpiredError();
 };
 
 export const getAuthToken = async (): Promise<string> => {
@@ -292,7 +336,7 @@ export const getAuthToken = async (): Promise<string> => {
   const expiration = getJwtExpiration(tokens.accessToken);
 
   if (expiration !== undefined && Date.now() >= expiration * 1000) {
-    throw new Error('Stored auth token has expired.');
+    throw new AuthTokenExpiredError();
   }
 
   console.log('[auth.service] auth token loaded', {
@@ -463,14 +507,29 @@ export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
   const { email, tokens } = await readStoredAuthTokens();
 
   if (tokens.refreshToken.trim().length === 0) {
-    throw new Error('Stored refresh token is missing.');
+    await clearAuthSession();
+    throw new AuthSessionExpiredError();
   }
 
-  const refreshResponse = normalizeAuthTokenResponse(
-    await postAuthRequest<unknown>('/api/auth/refresh', {
-      refresh_token: tokens.refreshToken,
-    }),
-  );
+  let refreshResponse: AuthTokenResponse;
+
+  try {
+    refreshResponse = normalizeAuthTokenResponse(
+      await postAuthRequest<unknown>('/api/auth/refresh', {
+        refresh_token: tokens.refreshToken,
+      }),
+    );
+  } catch (error) {
+    if (
+      error instanceof AuthRequestError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      await clearAuthSession();
+      throw new AuthSessionExpiredError();
+    }
+
+    throw error;
+  }
 
   const nextTokens = {
     accessToken: refreshResponse.access_token,
@@ -486,14 +545,19 @@ export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
 export const restoreAuthSession = async (): Promise<string> => {
   try {
     return await getAuthToken();
-  } catch {
+  } catch (error) {
+    if (isAuthSessionExpiredError(error)) {
+      await clearAuthSession();
+      throw error;
+    }
+
     try {
       const tokens = await refreshAuthTokens();
       return tokens.accessToken;
-    } catch (error: unknown) {
+    } catch (refreshError: unknown) {
       // 복원할 수 없는 인증 정보가 남아 있으면 다음 실행에서도 홈 진입을 시도하므로 제거합니다.
       await clearAuthSession();
-      throw error;
+      throw refreshError;
     }
   }
 };
@@ -509,7 +573,7 @@ export const logout = async (): Promise<LogoutResponse> => {
 
   if (tokens.refreshToken.trim().length === 0) {
     await clearAuthSession();
-    throw new Error('Stored refresh token is missing. Please log in again.');
+    throw new AuthSessionExpiredError();
   }
 
   try {

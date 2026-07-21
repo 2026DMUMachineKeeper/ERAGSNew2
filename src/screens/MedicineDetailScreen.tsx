@@ -18,6 +18,8 @@ import {
   updateMedicine,
   type MedicineItem,
 } from '../services/medicineApi';
+import { isAuthSessionExpiredError } from '../services/auth.service';
+import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineDetail'>;
 
@@ -42,6 +44,10 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   const [efficacy, setEfficacy] = React.useState(medicine.efficacy);
   const [usage, setUsage] = React.useState(medicine.usage);
   const [quantity, setQuantity] = React.useState(String(medicine.qty));
+
+  const handleAuthSessionExpired = React.useCallback((): void => {
+    redirectToLoginForExpiredSession(navigation);
+  }, [navigation]);
 
   const openEdit = () => {
     setName(medicine.name);
@@ -86,6 +92,12 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       setIsEditOpen(false);
       Alert.alert('수정 완료', '약품 정보가 수정되었습니다.');
     } catch (error) {
+      if (isAuthSessionExpiredError(error)) {
+        console.warn('[MedicineDetailScreen] auth session expired:', error);
+        handleAuthSessionExpired();
+        return;
+      }
+
       console.error('[MedicineDetailScreen] update failed', error);
       const message =
         error instanceof Error && error.message.trim().length > 0
@@ -124,6 +136,12 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
         },
       ]);
     } catch (error) {
+      if (isAuthSessionExpiredError(error)) {
+        console.warn('[MedicineDetailScreen] auth session expired:', error);
+        handleAuthSessionExpired();
+        return;
+      }
+
       console.error('[MedicineDetailScreen] delete failed', error);
       const message =
         error instanceof Error && error.message.trim().length > 0
