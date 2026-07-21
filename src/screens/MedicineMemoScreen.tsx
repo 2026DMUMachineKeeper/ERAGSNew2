@@ -9,10 +9,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type {
+  NativeStackNavigationProp,
+  NativeStackScreenProps,
+} from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { fetchMedicines, type MedicineItem } from '../services/medicineApi';
+import { isAuthSessionExpiredError } from '../services/auth.service';
+import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 import tailwindConfig from '../../tailwind.config';
 import { BackIcon } from '../assets';
 type Props = CompositeScreenProps<
@@ -41,6 +46,14 @@ export function MedicineMemoScreen({ navigation }: Props) {
   const [medicines, setMedicines] = React.useState<MedicineItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const rootNavigation = React.useMemo(
+    () => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>(),
+    [navigation],
+  );
+
+  const handleAuthSessionExpired = React.useCallback((): void => {
+    redirectToLoginForExpiredSession(rootNavigation);
+  }, [rootNavigation]);
 
   React.useEffect(() => {
     let isActive = true;
@@ -56,6 +69,12 @@ export function MedicineMemoScreen({ navigation }: Props) {
         }
       } catch (error: unknown) {
         if (isActive) {
+          if (isAuthSessionExpiredError(error)) {
+            console.warn('[MedicineMemoScreen] auth session expired:', error);
+            handleAuthSessionExpired();
+            return;
+          }
+
           const errorMessage =
             error instanceof Error
               ? error.message
@@ -77,7 +96,7 @@ export function MedicineMemoScreen({ navigation }: Props) {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [handleAuthSessionExpired]);
 
   const goHome = React.useCallback(() => {
     navigation.navigate('HomeTab');

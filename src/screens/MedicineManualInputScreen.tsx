@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { postMedicineManual } from '../services/medicineApi';
+import { isAuthSessionExpiredError } from '../services/auth.service';
+import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 import tailwindConfig from '../../tailwind.config';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineManualInput'>;
@@ -35,6 +37,10 @@ export function MedicineManualInputScreen({ navigation }: Props) {
   const [usage, setUsage] = React.useState('');
   const [quantity, setQuantity] = React.useState(1);
   const [isSaving, setIsSaving] = React.useState(false);
+
+  const handleAuthSessionExpired = React.useCallback((): void => {
+    redirectToLoginForExpiredSession(navigation);
+  }, [navigation]);
 
   const closeToMedicineMemo = React.useCallback(() => {
     navigation.reset({
@@ -92,6 +98,12 @@ export function MedicineManualInputScreen({ navigation }: Props) {
         },
       ]);
     } catch (error) {
+      if (isAuthSessionExpiredError(error)) {
+        console.warn('[MedicineManualInputScreen] auth session expired:', error);
+        handleAuthSessionExpired();
+        return;
+      }
+
       console.error('[MedicineManualInputScreen] saveMedicine failed', error);
       const message =
         error instanceof Error && error.message.trim().length > 0

@@ -1,6 +1,10 @@
 import Config from 'react-native-config';
 
-import { getAuthToken, refreshAuthTokens } from './auth.service';
+import {
+  getAuthToken,
+  isAuthTokenExpiredError,
+  refreshAuthTokens,
+} from './auth.service';
 
 export type MedicineApiRecord = {
   id?: string | number;
@@ -53,8 +57,9 @@ const buildUrl = (path: string) => {
 
 const buildMedicineHeaders = async (
   hasJsonBody = false,
+  authToken?: string,
 ): Promise<Record<string, string>> => {
-  const token = await getAuthToken();
+  const token = authToken ?? (await getAuthToken());
   const headers = {
     Accept: 'application/json',
     Authorization: `Bearer ${token}`,
@@ -74,24 +79,35 @@ const authenticatedMedicineFetch = async (
   init: RequestInit = {},
   hasJsonBody = false,
 ): Promise<Response> => {
-  const request = async (): Promise<Response> =>
+  const request = async (authToken?: string): Promise<Response> =>
     fetch(buildUrl(path), {
       ...init,
       headers: {
-        ...(await buildMedicineHeaders(hasJsonBody)),
+        ...(await buildMedicineHeaders(hasJsonBody, authToken)),
         ...(init.headers as Record<string, string> | undefined),
       },
     });
 
-  const response = await request();
+  let response: Response;
+
+  try {
+    response = await request();
+  } catch (error) {
+    if (isAuthTokenExpiredError(error)) {
+      const refreshedTokens = await refreshAuthTokens();
+      return request(refreshedTokens.accessToken);
+    }
+
+    throw error;
+  }
 
   if (response.status !== 401) {
     return response;
   }
 
-  await refreshAuthTokens();
+  const refreshedTokens = await refreshAuthTokens();
 
-  return request();
+  return request(refreshedTokens.accessToken);
 };
 
 const readString = (
