@@ -35,6 +35,16 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface MyPageProfile {
+  name: string;
+  guardian_phone: string;
+}
+
+export interface MyPageResponse {
+  success: boolean;
+  data: MyPageProfile;
+}
+
 export interface RefreshTokenResponse {
   access_token: string;
   refresh_token: string;
