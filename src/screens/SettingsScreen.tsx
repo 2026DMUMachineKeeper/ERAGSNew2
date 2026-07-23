@@ -25,7 +25,9 @@ import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import {
   clearAuthSession,
+  getMyPage,
   getStoredAuthUser,
+  isAuthSessionExpiredError,
   logout,
   updateStoredAuthUser,
 } from '../services';
@@ -246,6 +248,9 @@ export const SettingsScreen = ({
     guardianPhone: '',
   });
   const [isProfileLoading, setIsProfileLoading] = React.useState(true);
+  const [profileLoadError, setProfileLoadError] = React.useState<string | null>(
+    null,
+  );
   const [isEditingProfile, setIsEditingProfile] = React.useState(false);
   const [isSavingProfile, setIsSavingProfile] = React.useState(false);
 
@@ -267,20 +272,56 @@ export const SettingsScreen = ({
     let isActive = true;
 
     const loadProfile = async (): Promise<void> => {
+      setProfileLoadError(null);
+
       try {
         const storedUser = await getStoredAuthUser();
+        const storedProfile = {
+          name: storedUser?.name?.trim() ?? '',
+          guardianPhone: storedUser?.guardian_phone?.trim() ?? '',
+        };
 
         if (isActive) {
-          const nextProfile = {
-            name: storedUser?.name?.trim() ?? '',
-            guardianPhone: storedUser?.guardian_phone?.trim() ?? '',
-          };
+          setProfile(storedProfile);
+          setDraftProfile(storedProfile);
+        }
 
+        if (!storedUser) {
+          return;
+        }
+
+        const myPageProfile = await getMyPage(storedUser.id);
+        const nextProfile = {
+          name: myPageProfile.name.trim(),
+          guardianPhone: myPageProfile.guardian_phone.trim(),
+        };
+
+        await updateStoredAuthUser(myPageProfile);
+
+        if (isActive) {
           setProfile(nextProfile);
           setDraftProfile(nextProfile);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.warn('[SettingsScreen] profile load failed:', error);
+
+        if (!isActive) {
+          return;
+        }
+
+        if (isAuthSessionExpiredError(error)) {
+          moveToLogin();
+          return;
+        }
+
+        const errorMessage =
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : '마이페이지 정보를 불러오지 못했습니다.';
+
+        setProfileLoadError(
+          `${errorMessage} 저장된 정보를 대신 표시하고 있습니다.`,
+        );
       } finally {
         if (isActive) {
           setIsProfileLoading(false);
@@ -293,7 +334,7 @@ export const SettingsScreen = ({
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [moveToLogin]);
 
   const handleEditProfilePress = (): void => {
     setDraftProfile(profile);
@@ -398,6 +439,17 @@ export const SettingsScreen = ({
             <Text className="text-title font-suitBold text-black">
               마이페이지
             </Text>
+
+            {profileLoadError ? (
+              <View className="mt-4 rounded-xl border border-red bg-camera_bg px-4 py-3">
+                <Text className="text-coment font-suitBold text-red">
+                  정보를 불러오지 못했습니다
+                </Text>
+                <Text className="mt-1 text-sm font-suitMedium leading-5 text-textDim">
+                  {profileLoadError}
+                </Text>
+              </View>
+            ) : null}
 
             <View
               className="mt-6 overflow-hidden rounded-2xl bg-white px-5 py-5"
