@@ -17,6 +17,17 @@ export interface RegisterResponse {
   message: string;
 }
 
+export interface ResetPasswordRequest {
+  name: string;
+  email: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  success: boolean;
+  message: string;
+}
+
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;

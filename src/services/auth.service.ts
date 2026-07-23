@@ -7,6 +7,8 @@ import type {
   LoginResponse,
   LogoutResponse,
   RegisterResponse,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
   RefreshTokenResponse,
 } from '@/types/auth.types';
 
@@ -200,6 +202,15 @@ export const register = async (
   authRequest: AuthRequest,
 ): Promise<RegisterResponse> => {
   return postAuthRequest<RegisterResponse>('/api/auth/register', authRequest);
+};
+
+export const resetPassword = async (
+  resetPasswordRequest: ResetPasswordRequest,
+): Promise<ResetPasswordResponse> => {
+  return postAuthRequest<ResetPasswordResponse>(
+    '/api/auth/reset-password',
+    resetPasswordRequest,
+  );
 };
 
 export const login = async (
