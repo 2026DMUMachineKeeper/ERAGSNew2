@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { BackIcon } from '../assets';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { resetPassword } from '@/services';
 import tailwindConfig from '../../tailwind.config';
 import AuthTextInput from './auth/components/AuthTextInput';
 
@@ -28,14 +30,52 @@ export const PasswordResetScreen = ({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isSubmitDisabled =
+  const hasEmptyRequiredField =
     name.trim().length === 0 ||
     email.trim().length === 0 ||
     newPassword.trim().length === 0;
 
   const handleBackPress = (): void => {
     navigation.goBack();
+  };
+
+  const handleResetPasswordPress = async (): Promise<void> => {
+    if (hasEmptyRequiredField) {
+      Alert.alert('입력 필요', '이름, 이메일, 새 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const resetPasswordResponse = await resetPassword({
+        name: name.trim(),
+        email: email.trim(),
+        newPassword,
+      });
+
+      Alert.alert(
+        '비밀번호 재설정 완료',
+        resetPasswordResponse?.message || '비밀번호가 재설정되었습니다.',
+        [
+          {
+            text: '확인',
+            onPress: () => navigation.goBack(),
+          },
+        ],
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : '비밀번호 재설정에 실패했습니다.';
+
+      Alert.alert('비밀번호 재설정 실패', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -118,12 +158,13 @@ export const PasswordResetScreen = ({
 
                 <Pressable
                   className={`mt-7 h-16 items-center justify-center rounded-xl ${
-                    isSubmitDisabled ? 'bg-disabled' : 'bg-red'
+                    isSubmitting ? 'bg-disabled' : 'bg-red'
                   }`}
-                  disabled={isSubmitDisabled}
+                  disabled={isSubmitting}
+                  onPress={handleResetPasswordPress}
                 >
                   <Text className="text-2xl font-suitBold text-white">
-                    재설정하기
+                    {isSubmitting ? '재설정 중...' : '재설정하기'}
                   </Text>
                 </Pressable>
               </View>
