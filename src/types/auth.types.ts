@@ -40,9 +40,14 @@ export interface MyPageProfile {
   guardian_phone: string;
 }
 
+export interface MyPageResponseProfile {
+  name: string;
+  guardian_phone: string | null;
+}
+
 export interface MyPageResponse {
   success: boolean;
-  data: MyPageProfile;
+  data: MyPageResponseProfile;
 }
 
 export interface RefreshTokenResponse {
