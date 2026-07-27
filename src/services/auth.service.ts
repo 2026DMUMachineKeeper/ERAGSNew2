@@ -464,6 +464,46 @@ const authenticatedAuthGet = async (path: string): Promise<Response> => {
   return request(refreshedTokens.accessToken);
 };
 
+const authenticatedAuthPut = async (
+  path: string,
+  body: unknown,
+): Promise<Response> => {
+  const request = async (accessToken?: string): Promise<Response> => {
+    const token = accessToken ?? (await getAuthToken());
+
+    return fetch(`${getAuthBaseUrl()}${path}`, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+  };
+
+  let response: Response;
+
+  try {
+    response = await request();
+  } catch (error) {
+    if (isAuthTokenExpiredError(error)) {
+      const refreshedTokens = await refreshAuthTokens();
+      return request(refreshedTokens.accessToken);
+    }
+
+    throw error;
+  }
+
+  if (response.status !== 401) {
+    return response;
+  }
+
+  const refreshedTokens = await refreshAuthTokens();
+
+  return request(refreshedTokens.accessToken);
+};
+
 export const getMyPage = async (userId: number): Promise<MyPageProfile> => {
   if (!Number.isInteger(userId) || userId <= 0) {
     throw new Error('로그인 사용자 ID를 확인할 수 없습니다.');
@@ -509,6 +549,66 @@ export const getMyPage = async (userId: number): Promise<MyPageProfile> => {
     typeof myPageResponse.data.guardian_phone !== 'string'
   ) {
     throw new Error('마이페이지 응답 형식이 올바르지 않습니다.');
+  }
+
+  return {
+    name: myPageResponse.data.name,
+    guardian_phone: myPageResponse.data.guardian_phone,
+  };
+};
+
+export const updateMyPage = async (
+  userId: number,
+  profile: MyPageProfile,
+): Promise<MyPageProfile> => {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new Error('로그인 사용자 ID를 확인할 수 없습니다.');
+  }
+
+  const response = await authenticatedAuthPut(
+    `/api/auth/mypage/${encodeURIComponent(String(userId))}`,
+    {
+      name: profile.name.trim(),
+      guardian_phone: profile.guardian_phone.trim(),
+    },
+  );
+
+  if (response.status === 401 || response.status === 403) {
+    await clearAuthSession();
+    throw new AuthSessionExpiredError();
+  }
+
+  const parsedResponseBody = await parseResponseBody(response);
+
+  if (!parsedResponseBody.isJson) {
+    throw new Error(
+      `마이페이지 수정 응답을 확인할 수 없습니다. (${response.status})`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new AuthRequestError(
+      getErrorMessage(
+        parsedResponseBody.payload,
+        `마이페이지 수정에 실패했습니다. (${response.status})`,
+      ),
+      response.status,
+    );
+  }
+
+  if (!isRecord(parsedResponseBody.payload)) {
+    throw new Error('마이페이지 수정 응답 형식이 올바르지 않습니다.');
+  }
+
+  const myPageResponse = parsedResponseBody.payload as unknown as MyPageResponse;
+
+  if (
+    myPageResponse.success !== true ||
+    !isRecord(myPageResponse.data) ||
+    typeof myPageResponse.data.name !== 'string' ||
+    typeof myPageResponse.data.guardian_phone !== 'string'
+  ) {
+    throw new Error('마이페이지 수정 응답 형식이 올바르지 않습니다.');
   }
 
   return {
