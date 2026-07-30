@@ -540,20 +540,84 @@ export const getMyPage = async (userId: number): Promise<MyPageProfile> => {
     throw new Error('마이페이지 응답 형식이 올바르지 않습니다.');
   }
 
-  const myPageResponse = parsedResponseBody.payload as unknown as MyPageResponse;
+  const myPageResponse =
+    parsedResponseBody.payload as unknown as MyPageResponse;
 
   if (
     myPageResponse.success !== true ||
     !isRecord(myPageResponse.data) ||
     typeof myPageResponse.data.name !== 'string' ||
-    typeof myPageResponse.data.guardian_phone !== 'string'
+    (typeof myPageResponse.data.guardian_phone !== 'string' &&
+      myPageResponse.data.guardian_phone !== null)
   ) {
     throw new Error('마이페이지 응답 형식이 올바르지 않습니다.');
   }
 
   return {
     name: myPageResponse.data.name,
-    guardian_phone: myPageResponse.data.guardian_phone,
+    guardian_phone: myPageResponse.data.guardian_phone ?? '',
+  };
+};
+
+export const updateMyPage = async (
+  userId: number,
+  profile: MyPageProfile,
+): Promise<MyPageProfile> => {
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new Error('로그인 사용자 ID를 확인할 수 없습니다.');
+  }
+
+  const response = await authenticatedAuthPut(
+    `/api/auth/mypage/${encodeURIComponent(String(userId))}`,
+    {
+      name: profile.name.trim(),
+      guardian_phone: profile.guardian_phone.trim(),
+    },
+  );
+
+  if (response.status === 401 || response.status === 403) {
+    await clearAuthSession();
+    throw new AuthSessionExpiredError();
+  }
+
+  const parsedResponseBody = await parseResponseBody(response);
+
+  if (!parsedResponseBody.isJson) {
+    throw new Error(
+      `마이페이지 수정 응답을 확인할 수 없습니다. (${response.status})`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new AuthRequestError(
+      getErrorMessage(
+        parsedResponseBody.payload,
+        `마이페이지 수정에 실패했습니다. (${response.status})`,
+      ),
+      response.status,
+    );
+  }
+
+  if (!isRecord(parsedResponseBody.payload)) {
+    throw new Error('마이페이지 수정 응답 형식이 올바르지 않습니다.');
+  }
+
+  const myPageResponse =
+    parsedResponseBody.payload as unknown as MyPageResponse;
+
+  if (
+    myPageResponse.success !== true ||
+    !isRecord(myPageResponse.data) ||
+    typeof myPageResponse.data.name !== 'string' ||
+    (typeof myPageResponse.data.guardian_phone !== 'string' &&
+      myPageResponse.data.guardian_phone !== null)
+  ) {
+    throw new Error('마이페이지 수정 응답 형식이 올바르지 않습니다.');
+  }
+
+  return {
+    name: myPageResponse.data.name,
+    guardian_phone: myPageResponse.data.guardian_phone ?? '',
   };
 };
 
