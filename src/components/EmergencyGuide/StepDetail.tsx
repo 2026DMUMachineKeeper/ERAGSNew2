@@ -8,9 +8,6 @@ type StepDetailStep = Partial<EmergencyGuideRuntimeStep> & {
 
 type Props = {
   step?: StepDetailStep | null;
-  isChecked: boolean;
-  showCheckpoint: boolean;
-  onToggle: (checked: boolean) => void;
   onStopPress?: () => void;
 };
 
@@ -21,13 +18,7 @@ const supplyNameById: Record<number, string> = {
 const getInstructionFromTitle = (title: string) =>
   title.replace(/^\d+\s*단계:\s*/, '').trim();
 
-export function StepDetail({
-  step,
-  isChecked,
-  showCheckpoint,
-  onToggle,
-  onStopPress,
-}: Props) {
+export function StepDetail({ step, onStopPress }: Props) {
   const [showStopModal, setShowStopModal] = React.useState(false);
   const title = typeof step?.title === 'string' ? step.title : '';
   const stepNo =

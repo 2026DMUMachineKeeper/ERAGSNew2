@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Pressable,
+  Text,
   TextInput,
   type KeyboardTypeOptions,
   type ReturnKeyTypeOptions,
@@ -10,6 +11,7 @@ import {
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 interface AuthTextInputProps {
+  errorMessage?: string;
   iconName: 'email' | 'lock' | 'phone' | 'user';
   inputProps: Pick<
     TextInputProps,
@@ -120,31 +122,47 @@ const renderEyeIcon = (): React.JSX.Element => {
 };
 
 export const AuthTextInput = ({
+  errorMessage,
   iconName,
   inputProps,
   isPassword = false,
 }: AuthTextInputProps): React.JSX.Element => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const inputContainerClassName = errorMessage
+    ? 'relative h-16 justify-center rounded-xl border border-red bg-white'
+    : 'relative h-16 justify-center rounded-xl border border-authInputBorder bg-white';
 
   const handlePasswordVisibilityPress = (): void => {
     setIsPasswordVisible(currentIsPasswordVisible => !currentIsPasswordVisible);
   };
 
   return (
-    <View className="relative h-16 justify-center rounded-xl border border-authInputBorder bg-white">
-      <View className="absolute left-5 z-10">{renderInputIcon(iconName)}</View>
-      <TextInput
-        {...inputProps}
-        className="h-full px-14 text-base font-suitRegular text-black"
-        secureTextEntry={isPassword && !isPasswordVisible}
-      />
-      {isPassword ? (
-        <Pressable
-          className="absolute right-5 z-10 h-10 w-10 items-center justify-center"
-          onPress={handlePasswordVisibilityPress}
+    <View>
+      <View className={inputContainerClassName}>
+        <View className="absolute left-5 z-10">
+          {renderInputIcon(iconName)}
+        </View>
+        <TextInput
+          {...inputProps}
+          className="h-full px-14 text-base font-suitRegular text-black"
+          secureTextEntry={isPassword && !isPasswordVisible}
+        />
+        {isPassword ? (
+          <Pressable
+            className="absolute right-5 z-10 h-10 w-10 items-center justify-center"
+            onPress={handlePasswordVisibilityPress}
+          >
+            {renderEyeIcon()}
+          </Pressable>
+        ) : null}
+      </View>
+      {errorMessage ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          className="mt-2 text-sm font-suitMedium text-red"
         >
-          {renderEyeIcon()}
-        </Pressable>
+          {errorMessage}
+        </Text>
       ) : null}
     </View>
   );

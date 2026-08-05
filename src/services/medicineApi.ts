@@ -22,11 +22,6 @@ export type MedicineApiRecord = {
   count?: number | string;
   stock?: number | string;
   threshold?: number | string;
-  expiry?: string;
-  expire_date?: string;
-  expiryDate?: string;
-  expirationDate?: string;
-  expiredAt?: string;
   [key: string]: unknown;
 };
 
@@ -35,7 +30,6 @@ export type MedicineItem = {
   name: string;
   info: string;
   qty: number;
-  expiry: string;
   threshold: number;
   barcode: string | null;
   usage: string;
@@ -60,18 +54,11 @@ const buildMedicineHeaders = async (
   authToken?: string,
 ): Promise<Record<string, string>> => {
   const token = authToken ?? (await getAuthToken());
-  const headers = {
+  return {
     Accept: 'application/json',
     Authorization: `Bearer ${token}`,
     ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
   };
-
-  console.log('[medicineApi] auth headers ready', {
-    hasAuthorization: headers.Authorization.length > 'Bearer '.length,
-    hasJsonBody,
-  });
-
-  return headers;
 };
 
 const authenticatedMedicineFetch = async (
@@ -241,11 +228,6 @@ export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
       .join(' · ') ||
     '설명 없음',
   qty: readNumber(record, ['qty', 'quantity', 'count', 'stock'], 0),
-  expiry: readString(
-    record,
-    ['expiry', 'expire_date', 'expiryDate', 'expirationDate', 'expiredAt'],
-    '미정',
-  ),
   threshold: readNumber(record, ['threshold'], 0),
   barcode: readOptionalString(record, ['barcode']),
   usage: readString(record, ['usage'], '정보 없음'),
@@ -253,16 +235,8 @@ export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
 });
 
 export async function fetchMedicines(): Promise<MedicineItem[]> {
-  const url = buildUrl('/api/medicines');
-  console.log('[medicineApi] fetchMedicines request', { url });
-
   const response = await authenticatedMedicineFetch('/api/medicines', {
     method: 'GET',
-  });
-
-  console.log('[medicineApi] fetchMedicines response', {
-    ok: response.ok,
-    status: response.status,
   });
 
   if (!response.ok) {
@@ -270,32 +244,16 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   }
 
   const payload = (await response.json()) as unknown;
-  console.log('[medicineApi] fetchMedicines payload shape', {
-    isArray: Array.isArray(payload),
-    dataIsArray: isRecord(payload) && Array.isArray(payload.data),
-    dataKeys:
-      isRecord(payload) && isRecord(payload.data)
-        ? Object.keys(payload.data)
-        : [],
-    keys:
-      payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? Object.keys(payload)
-        : [],
-  });
-
-  const records = readMedicineRecords(payload);
-
-  console.log('[medicineApi] fetchMedicines normalized count', {
-    count: records.length,
-  });
-
-  return records.map(normalizeMedicine);
+  return readMedicineRecords(payload).map(normalizeMedicine);
 }
 
 export async function fetchAvailableMedicines(): Promise<MedicineItem[]> {
-  const response = await authenticatedMedicineFetch('/api/medicines/available', {
-    method: 'GET',
-  });
+  const response = await authenticatedMedicineFetch(
+    '/api/medicines/available',
+    {
+      method: 'GET',
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Available medicines request failed: ${response.status}`);
@@ -337,34 +295,29 @@ export type MedicineMutationResult = {
   [key: string]: unknown;
 };
 
-const getBase64ImageKind = (base64: string) => {
-  if (base64.startsWith('/9j/')) {
-    return 'jpeg';
+const readMedicineMutationResult = async (
+  response: Response,
+  failureMessage: string,
+): Promise<MedicineMutationResult> => {
+  if (!response.ok) {
+    throw new Error(`${failureMessage}: ${response.status}`);
   }
 
-  if (base64.startsWith('iVBORw0KGgo')) {
-    return 'png';
+  if (response.status === 204) {
+    return {};
   }
 
-  if (base64.startsWith('data:image/')) {
-    return 'data-uri';
-  }
+  const responseBody = await response.text();
 
-  return 'unknown';
+  return responseBody.trim().length > 0
+    ? (JSON.parse(responseBody) as MedicineMutationResult)
+    : {};
 };
 
 export async function postMedicineVision(params: {
   imageBase64: string;
   quantityToAdd?: number;
 }): Promise<MedicineVisionUploadResult> {
-  console.log('[medicineApi] postMedicineVision start', {
-    imageBase64Length: params.imageBase64.length,
-    imageBase64Kind: getBase64ImageKind(params.imageBase64),
-    imageBase64Preview: params.imageBase64.slice(0, 80),
-    hasDataUriPrefix: params.imageBase64.startsWith('data:image/'),
-    quantityToAdd: params.quantityToAdd ?? 1,
-  });
-
   const response = await authenticatedMedicineFetch(
     '/api/medicines/vision',
     {
@@ -377,11 +330,6 @@ export async function postMedicineVision(params: {
     true,
   );
 
-  console.log('[medicineApi] postMedicineVision response', {
-    ok: response.ok,
-    status: response.status,
-  });
-
   if (!response.ok) {
     if (response.status === 413) {
       throw new Error(
@@ -393,14 +341,6 @@ export async function postMedicineVision(params: {
   }
 
   const payload = await response.json();
-  console.log(
-    '[medicineApi] postMedicineVision full response body',
-    JSON.stringify(payload),
-  );
-  console.log('[medicineApi] postMedicineVision payload keys', {
-    keys: Object.keys(payload ?? {}),
-  });
-
   return payload as MedicineVisionUploadResult;
 }
 
@@ -414,10 +354,6 @@ export async function postMedicineManual(
     quantityToAdd: params.quantityToAdd ?? 1,
   };
 
-  console.log('[medicineApi] postMedicineManual request', {
-    body,
-  });
-
   const response = await authenticatedMedicineFetch(
     '/api/medicines/manual',
     {
@@ -427,22 +363,7 @@ export async function postMedicineManual(
     true,
   );
 
-  console.log('[medicineApi] postMedicineManual response', {
-    ok: response.ok,
-    status: response.status,
-  });
-
-  const payload = await response.json();
-  console.log(
-    '[medicineApi] postMedicineManual full response body',
-    JSON.stringify(payload),
-  );
-
-  if (!response.ok) {
-    throw new Error(`약품 수동 등록 실패: ${response.status}`);
-  }
-
-  return payload as MedicineManualCreateResult;
+  return readMedicineMutationResult(response, '약품 수동 등록 실패');
 }
 
 export async function postMedicineUse(
@@ -463,13 +384,7 @@ export async function postMedicineUse(
     true,
   );
 
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(`Medicine use request failed: ${response.status}`);
-  }
-
-  return payload as MedicineMutationResult;
+  return readMedicineMutationResult(response, 'Medicine use request failed');
 }
 
 export async function updateMedicine(
@@ -480,8 +395,6 @@ export async function updateMedicine(
     Object.entries(params).filter(([, value]) => value !== undefined),
   );
 
-  console.log('[medicineApi] updateMedicine request', { id, body });
-
   const response = await authenticatedMedicineFetch(
     `/api/medicines/${id}`,
     {
@@ -491,47 +404,15 @@ export async function updateMedicine(
     true,
   );
 
-  console.log('[medicineApi] updateMedicine response', {
-    ok: response.ok,
-    status: response.status,
-  });
-
-  const payload = await response.json();
-  console.log(
-    '[medicineApi] updateMedicine full response body',
-    JSON.stringify(payload),
-  );
-
-  if (!response.ok) {
-    throw new Error(`약품 수정 실패: ${response.status}`);
-  }
-
-  return payload as MedicineMutationResult;
+  return readMedicineMutationResult(response, '약품 수정 실패');
 }
 
 export async function deleteMedicine(
   id: string,
 ): Promise<MedicineMutationResult> {
-  console.log('[medicineApi] deleteMedicine request', { id });
-
   const response = await authenticatedMedicineFetch(`/api/medicines/${id}`, {
     method: 'DELETE',
   });
 
-  console.log('[medicineApi] deleteMedicine response', {
-    ok: response.ok,
-    status: response.status,
-  });
-
-  const payload = await response.json();
-  console.log(
-    '[medicineApi] deleteMedicine full response body',
-    JSON.stringify(payload),
-  );
-
-  if (!response.ok) {
-    throw new Error(`약품 삭제 실패: ${response.status}`);
-  }
-
-  return payload as MedicineMutationResult;
+  return readMedicineMutationResult(response, '약품 삭제 실패');
 }

@@ -53,17 +53,12 @@ export function EmergencyGuideScreen({
     .slice(0, visibleStepCount)
     .map(toGuideRuntimeStep);
   const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
-  const [isChecked, setIsChecked] = React.useState(false);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
     const timer = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  React.useEffect(() => {
-    setIsChecked(false);
-  }, [currentStepIndex]);
 
   const currentStep = steps[currentStepIndex] ?? steps[0];
   const elapsedLabel = formatElapsed(elapsedSeconds);
@@ -108,13 +103,7 @@ export function EmergencyGuideScreen({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 16 }}
       >
-        <StepDetail
-          step={currentStep}
-          isChecked={isChecked}
-          showCheckpoint
-          onToggle={setIsChecked}
-          onStopPress={moveToComplete}
-        />
+        <StepDetail step={currentStep} onStopPress={moveToComplete} />
       </ScrollView>
 
       <View className="bg-background px-5 pb-5">

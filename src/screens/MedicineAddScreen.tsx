@@ -27,22 +27,12 @@ import { CameraRedIcon } from '../assets';
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineAdd'>;
 
 const { colors } = tailwindConfig;
-
-const getBase64ImageKind = (base64: string) => {
-  if (base64.startsWith('/9j/')) {
-    return 'jpeg';
-  }
-
-  if (base64.startsWith('iVBORw0KGgo')) {
-    return 'png';
-  }
-
-  if (base64.startsWith('data:image/')) {
-    return 'data-uri';
-  }
-
-  return 'unknown';
-};
+const CAMERA_START_ERROR_MESSAGE =
+  '카메라를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const MEDICINE_REGISTER_ERROR_MESSAGE =
+  '약품을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const MEDICINE_IMAGE_TOO_LARGE_MESSAGE =
+  '사진 용량이 너무 큽니다. 다시 촬영해 주세요.';
 
 const stripDataUriPrefix = (value: string) => {
   const marker = 'base64,';
@@ -89,8 +79,6 @@ const requestCameraPermission = async () => {
     PermissionsAndroid.PERMISSIONS.CAMERA,
   );
 
-  console.log('[MedicineAddScreen] camera permission current', { current });
-
   if (current) {
     return true;
   }
@@ -104,8 +92,6 @@ const requestCameraPermission = async () => {
       buttonNegative: '취소',
     },
   );
-
-  console.log('[MedicineAddScreen] camera permission requested', { granted });
 
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 };
@@ -124,16 +110,7 @@ export function MedicineAddScreen({ navigation }: Props) {
     });
   }, [navigation]);
 
-  const uploadCapturedPhoto = async (imageBase64: string, meta: object) => {
-    console.log('[MedicineAddScreen] photo base64 ready', {
-      ...meta,
-      hasBase64: imageBase64.length > 0,
-      base64Length: imageBase64.length,
-      base64Preview: imageBase64.slice(0, 80),
-      imageKind: getBase64ImageKind(imageBase64),
-      hasDataUriPrefix: imageBase64.startsWith('data:image/'),
-    });
-
+  const uploadCapturedPhoto = async (imageBase64: string) => {
     setIsUploading(true);
 
     try {
@@ -142,29 +119,25 @@ export function MedicineAddScreen({ navigation }: Props) {
         quantityToAdd: 1,
       });
 
-      console.log('[MedicineAddScreen] medicine registered from photo', {
-        result: registerResult,
-      });
-
       if (registerResult.isRegistered !== true) {
-        const message =
-          typeof registerResult.message === 'string' &&
-          registerResult.message.trim().length > 0
-            ? registerResult.message
-            : '약품 이름을 직접 입력해 주세요.';
+        console.warn(
+          '[MedicineAddScreen] medicine photo needs manual input:',
+          registerResult,
+        );
 
-        console.log('[MedicineAddScreen] medicine photo needs manual input', {
-          message,
-          data: registerResult.data,
-        });
-
-        Alert.alert('추가 입력 필요', message, [
-          {
-            text: '직접 입력',
-            onPress: () =>
-              navigation.dispatch(StackActions.replace('MedicineManualInput')),
-          },
-        ]);
+        Alert.alert(
+          '추가 입력 필요',
+          '사진에서 약품 정보를 확인하지 못했습니다. 약품 이름을 직접 입력해 주세요.',
+          [
+            {
+              text: '직접 입력',
+              onPress: () =>
+                navigation.dispatch(
+                  StackActions.replace('MedicineManualInput'),
+                ),
+            },
+          ],
+        );
         return;
       }
 
@@ -187,9 +160,10 @@ export function MedicineAddScreen({ navigation }: Props) {
 
       console.error('[MedicineAddScreen] uploadCapturedPhoto failed', error);
       const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 등록하지 못했습니다.';
+        error instanceof Error &&
+        error.message.includes('이미지 용량이 너무 큽니다')
+          ? MEDICINE_IMAGE_TOO_LARGE_MESSAGE
+          : MEDICINE_REGISTER_ERROR_MESSAGE;
 
       Alert.alert('등록 실패', message);
     } finally {
@@ -202,12 +176,9 @@ export function MedicineAddScreen({ navigation }: Props) {
       return;
     }
 
-    console.log('[MedicineAddScreen] openCamera start');
-
     const hasPermission = await requestCameraPermission();
 
     if (!hasPermission) {
-      console.log('[MedicineAddScreen] openCamera blocked: permission');
       Alert.alert('권한 필요', '카메라 권한을 허용해야 촬영할 수 있습니다.', [
         { text: '취소', style: 'cancel' },
         { text: '설정 열기', onPress: () => Linking.openSettings() },
@@ -226,19 +197,16 @@ export function MedicineAddScreen({ navigation }: Props) {
     try {
       const response: ImagePickerResponse = await launchCamera(options);
 
-      console.log('[MedicineAddScreen] image-picker response', {
-        didCancel: response.didCancel,
-        errorCode: response.errorCode,
-        errorMessage: response.errorMessage,
-        assetCount: response.assets?.length ?? 0,
-      });
-
       if (response.didCancel) {
         return;
       }
 
       if (response.errorCode) {
-        Alert.alert('촬영 실패', response.errorMessage ?? response.errorCode);
+        console.error('[MedicineAddScreen] image picker failed:', {
+          errorCode: response.errorCode,
+          errorMessage: response.errorMessage,
+        });
+        Alert.alert('촬영 실패', CAMERA_START_ERROR_MESSAGE);
         return;
       }
 
@@ -253,29 +221,18 @@ export function MedicineAddScreen({ navigation }: Props) {
         typeof asset.base64 === 'string' && asset.base64.length > 0
           ? asset.base64
           : asset.uri
-            ? await fileUriToBase64(asset.uri)
-            : '';
+          ? await fileUriToBase64(asset.uri)
+          : '';
 
       if (!imageBase64) {
         Alert.alert('촬영 실패', '촬영한 사진 데이터를 읽지 못했습니다.');
         return;
       }
 
-      await uploadCapturedPhoto(imageBase64, {
-        assetUri: asset.uri,
-        assetFileName: asset.fileName,
-        assetFileSize: asset.fileSize,
-        assetWidth: asset.width,
-        assetHeight: asset.height,
-      });
+      await uploadCapturedPhoto(imageBase64);
     } catch (error) {
       console.error('[MedicineAddScreen] launchCamera failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '사진 촬영에 실패했습니다.';
-
-      Alert.alert('촬영 실패', message);
+      Alert.alert('촬영 실패', CAMERA_START_ERROR_MESSAGE);
     }
   };
 
@@ -301,7 +258,7 @@ export function MedicineAddScreen({ navigation }: Props) {
             <CameraRedIcon width={48} height={48} />
           </View>
 
-          <Text className="text-base font-extrabold text-memoText">
+          <Text className="text-base font-suitBold text-memoText">
             약품 사진을 먼저 촬영해 주세요
           </Text>
 
@@ -318,7 +275,9 @@ export function MedicineAddScreen({ navigation }: Props) {
 
         <View className="mt-5 flex-row items-center">
           <View className="h-[1px] flex-1 bg-memoLine" />
-          <Text className="mx-4 text-sm font-bold text-memoSubText">또는</Text>
+          <Text className="mx-4 text-sm font-suitBold text-memoSubText">
+            또는
+          </Text>
           <View className="h-[1px] flex-1 bg-memoLine" />
         </View>
 
@@ -332,7 +291,7 @@ export function MedicineAddScreen({ navigation }: Props) {
           <Text className="mr-3 text-2xl text-memoBlue">+</Text>
 
           <View className="flex-1">
-            <Text className="text-base font-extrabold text-memoText">
+            <Text className="text-base font-suitBold text-memoText">
               직접 수동 입력하기
             </Text>
 

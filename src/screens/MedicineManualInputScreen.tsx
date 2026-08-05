@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,12 +22,34 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MedicineManualInput'>;
 
 const { colors } = tailwindConfig;
 
-const styles = StyleSheet.create({
-  scrollContent: {
-    paddingBottom: 32,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
+interface MedicineManualInputValues {
+  name: string;
+  efficacy: string;
+  usage: string;
+}
+
+interface MedicineManualInputErrors {
+  name: string | null;
+  efficacy: string | null;
+  usage: string | null;
+}
+
+const EMPTY_MEDICINE_MANUAL_INPUT_ERRORS: MedicineManualInputErrors = {
+  name: null,
+  efficacy: null,
+  usage: null,
+};
+const MEDICINE_REGISTER_ERROR_MESSAGE =
+  '약품을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+
+export const getMedicineManualInputErrors = ({
+  name,
+  efficacy,
+  usage,
+}: MedicineManualInputValues): MedicineManualInputErrors => ({
+  name: name.trim() ? null : '약 이름을 입력해 주세요.',
+  efficacy: efficacy.trim() ? null : '효능을 입력해 주세요.',
+  usage: usage.trim() ? null : '사용 방법을 입력해 주세요.',
 });
 
 export function MedicineManualInputScreen({ navigation }: Props) {
@@ -37,6 +58,10 @@ export function MedicineManualInputScreen({ navigation }: Props) {
   const [usage, setUsage] = React.useState('');
   const [quantity, setQuantity] = React.useState(1);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [inputErrors, setInputErrors] =
+    React.useState<MedicineManualInputErrors>(
+      EMPTY_MEDICINE_MANUAL_INPUT_ERRORS,
+    );
 
   const handleAuthSessionExpired = React.useCallback((): void => {
     redirectToLoginForExpiredSession(navigation);
@@ -49,23 +74,37 @@ export function MedicineManualInputScreen({ navigation }: Props) {
     });
   }, [navigation]);
 
+  const handleNameChange = (nextName: string): void => {
+    setName(nextName);
+    setInputErrors(currentErrors => ({ ...currentErrors, name: null }));
+  };
+
+  const handleEfficacyChange = (nextEfficacy: string): void => {
+    setEfficacy(nextEfficacy);
+    setInputErrors(currentErrors => ({ ...currentErrors, efficacy: null }));
+  };
+
+  const handleUsageChange = (nextUsage: string): void => {
+    setUsage(nextUsage);
+    setInputErrors(currentErrors => ({ ...currentErrors, usage: null }));
+  };
+
   const saveMedicine = async () => {
     const trimmedName = name.trim();
     const trimmedEfficacy = efficacy.trim();
     const trimmedUsage = usage.trim();
+    const nextInputErrors = getMedicineManualInputErrors({
+      name,
+      efficacy,
+      usage,
+    });
+    const hasInputError = Boolean(
+      nextInputErrors.name || nextInputErrors.efficacy || nextInputErrors.usage,
+    );
 
-    if (!trimmedName) {
-      Alert.alert('입력 필요', '약 이름을 입력해 주세요.');
-      return;
-    }
+    setInputErrors(nextInputErrors);
 
-    if (!trimmedEfficacy) {
-      Alert.alert('입력 필요', '효능을 입력해 주세요.');
-      return;
-    }
-
-    if (!trimmedUsage) {
-      Alert.alert('입력 필요', '사용 방법을 입력해 주세요.');
+    if (hasInputError) {
       return;
     }
 
@@ -76,15 +115,11 @@ export function MedicineManualInputScreen({ navigation }: Props) {
     try {
       setIsSaving(true);
 
-      const result = await postMedicineManual({
+      await postMedicineManual({
         name: trimmedName,
         efficacy: trimmedEfficacy,
         usage: trimmedUsage,
         quantityToAdd: quantity,
-      });
-
-      console.log('[MedicineManualInputScreen] medicine manually registered', {
-        result,
       });
 
       Alert.alert('등록 완료', '약품이 등록되었습니다.', [
@@ -99,22 +134,30 @@ export function MedicineManualInputScreen({ navigation }: Props) {
       ]);
     } catch (error) {
       if (isAuthSessionExpiredError(error)) {
-        console.warn('[MedicineManualInputScreen] auth session expired:', error);
+        console.warn(
+          '[MedicineManualInputScreen] auth session expired:',
+          error,
+        );
         handleAuthSessionExpired();
         return;
       }
 
       console.error('[MedicineManualInputScreen] saveMedicine failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 등록하지 못했습니다.';
-
-      Alert.alert('등록 실패', message);
+      Alert.alert('등록 실패', MEDICINE_REGISTER_ERROR_MESSAGE);
     } finally {
       setIsSaving(false);
     }
   };
+
+  const nameInputClassName = inputErrors.name
+    ? 'h-12 rounded-xl border border-red px-4 text-sm text-memoText'
+    : 'h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
+  const efficacyInputContainerClassName = inputErrors.efficacy
+    ? 'min-h-[92px] rounded-xl border border-red px-4 py-3'
+    : 'min-h-[92px] rounded-xl border border-memoLine px-4 py-3';
+  const usageInputContainerClassName = inputErrors.usage
+    ? 'min-h-[104px] rounded-xl border border-red px-4 py-3'
+    : 'min-h-[104px] rounded-xl border border-memoLine px-4 py-3';
 
   return (
     <SafeAreaView className="flex-1 bg-memoCard" edges={['top', 'bottom']}>
@@ -130,7 +173,7 @@ export function MedicineManualInputScreen({ navigation }: Props) {
             >
               <Text className="text-2xl text-memoText">x</Text>
             </TouchableOpacity>
-            <Text className="text-base font-extrabold text-memoText">
+            <Text className="text-base font-suitBold text-memoText">
               수동 입력
             </Text>
             <TouchableOpacity
@@ -141,9 +184,7 @@ export function MedicineManualInputScreen({ navigation }: Props) {
               {isSaving ? (
                 <ActivityIndicator color={colors.memoRed} />
               ) : (
-                <Text className="text-sm font-extrabold text-memoRed">
-                  저장
-                </Text>
+                <Text className="text-sm font-suitBold text-memoRed">저장</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -151,30 +192,37 @@ export function MedicineManualInputScreen({ navigation }: Props) {
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View>
-            <Text className="text-base font-extrabold text-memoText">
+          <View className="px-5 pb-8 pt-5">
+            <Text className="text-base font-suitBold text-memoText">
               기본 정보
             </Text>
 
             <View className="mt-4">
-              <Text className="mb-2 text-sm font-bold text-memoText">
+              <Text className="mb-2 text-sm font-suitBold text-memoText">
                 약 이름 <Text className="text-memoRed">*</Text>
               </Text>
               <TextInput
-                className="h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText"
+                className={nameInputClassName}
                 placeholder="예: 타이레놀"
                 placeholderTextColor={colors.memoSubText}
                 value={name}
-                onChangeText={setName}
+                onChangeText={handleNameChange}
               />
+              {inputErrors.name ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="mt-2 text-sm font-suitMedium text-red"
+                >
+                  {inputErrors.name}
+                </Text>
+              ) : null}
             </View>
 
             <View className="mt-4">
-              <Text className="mb-2 text-sm font-bold text-memoText">
+              <Text className="mb-2 text-sm font-suitBold text-memoText">
                 수량 <Text className="text-memoRed">*</Text>
               </Text>
               <View className="h-12 flex-row overflow-hidden rounded-xl border border-memoLine">
@@ -182,10 +230,12 @@ export function MedicineManualInputScreen({ navigation }: Props) {
                   className="w-16 items-center justify-center border-r border-memoLine"
                   onPress={() => setQuantity(value => Math.max(1, value - 1))}
                 >
-                  <Text className="text-xl font-bold text-memoSubText">-</Text>
+                  <Text className="text-xl font-suitBold text-memoSubText">
+                    -
+                  </Text>
                 </TouchableOpacity>
                 <View className="flex-1 items-center justify-center">
-                  <Text className="text-base font-extrabold text-memoText">
+                  <Text className="text-base font-suitBold text-memoText">
                     {quantity}
                   </Text>
                 </View>
@@ -193,19 +243,21 @@ export function MedicineManualInputScreen({ navigation }: Props) {
                   className="w-16 items-center justify-center border-l border-r border-memoLine"
                   onPress={() => setQuantity(value => value + 1)}
                 >
-                  <Text className="text-xl font-bold text-memoText">+</Text>
+                  <Text className="text-xl font-suitBold text-memoText">+</Text>
                 </TouchableOpacity>
                 <View className="w-12 items-center justify-center">
-                  <Text className="text-sm font-bold text-memoText">개</Text>
+                  <Text className="text-sm font-suitBold text-memoText">
+                    개
+                  </Text>
                 </View>
               </View>
             </View>
 
             <View className="mt-5">
-              <Text className="mb-2 text-sm font-bold text-memoText">
+              <Text className="mb-2 text-sm font-suitBold text-memoText">
                 효능 <Text className="text-memoRed">*</Text>
               </Text>
-              <View className="min-h-[92px] rounded-xl border border-memoLine px-4 py-3">
+              <View className={efficacyInputContainerClassName}>
                 <TextInput
                   multiline
                   className="min-h-[56px] text-sm text-memoText"
@@ -214,19 +266,27 @@ export function MedicineManualInputScreen({ navigation }: Props) {
                   textAlignVertical="top"
                   maxLength={200}
                   value={efficacy}
-                  onChangeText={setEfficacy}
+                  onChangeText={handleEfficacyChange}
                 />
                 <Text className="self-end text-xs text-memoSubText">
                   {efficacy.length}/200
                 </Text>
               </View>
+              {inputErrors.efficacy ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="mt-2 text-sm font-suitMedium text-red"
+                >
+                  {inputErrors.efficacy}
+                </Text>
+              ) : null}
             </View>
 
             <View className="mt-5">
-              <Text className="mb-2 text-sm font-bold text-memoText">
+              <Text className="mb-2 text-sm font-suitBold text-memoText">
                 사용 방법 <Text className="text-memoRed">*</Text>
               </Text>
-              <View className="min-h-[104px] rounded-xl border border-memoLine px-4 py-3">
+              <View className={usageInputContainerClassName}>
                 <TextInput
                   multiline
                   className="min-h-[68px] text-sm text-memoText"
@@ -235,12 +295,20 @@ export function MedicineManualInputScreen({ navigation }: Props) {
                   textAlignVertical="top"
                   maxLength={300}
                   value={usage}
-                  onChangeText={setUsage}
+                  onChangeText={handleUsageChange}
                 />
                 <Text className="self-end text-xs text-memoSubText">
                   {usage.length}/300
                 </Text>
               </View>
+              {inputErrors.usage ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="mt-2 text-sm font-suitMedium text-red"
+                >
+                  {inputErrors.usage}
+                </Text>
+              ) : null}
             </View>
           </View>
         </ScrollView>

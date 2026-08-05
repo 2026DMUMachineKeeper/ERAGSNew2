@@ -51,10 +51,6 @@ class ConfigurableMlInputSender implements MlInputSender {
 
   async submit(input: EmergencyMlInput): Promise<void> {
     if (!this.endpoint) {
-      console.log(
-        '[ERAGS ML INPUT] submit skipped; ML_INPUT_API_URL is not configured',
-        input,
-      );
       return;
     }
 
@@ -164,12 +160,21 @@ const redFlagSignals: RedFlagSignal[] = [
   'CYANOSIS',
 ];
 
-const parseGeminiResponseText = (payload: any): string | null => {
-  const textPart = payload?.candidates?.[0]?.content?.parts?.find(
-    (part: any) => typeof part?.text === 'string',
-  );
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object';
 
-  return typeof textPart?.text === 'string' ? textPart.text : null;
+const parseGeminiResponseText = (payload: unknown): string | null => {
+  const candidates = isRecord(payload) ? payload.candidates : undefined;
+  const candidate = Array.isArray(candidates) ? candidates[0] : undefined;
+  const content = isRecord(candidate) ? candidate.content : undefined;
+  const parts = isRecord(content) ? content.parts : undefined;
+  const textPart = Array.isArray(parts)
+    ? parts.find(part => isRecord(part) && typeof part.text === 'string')
+    : undefined;
+
+  return isRecord(textPart) && typeof textPart.text === 'string'
+    ? textPart.text
+    : null;
 };
 
 const bleedingSeverityPrompt = [
@@ -397,7 +402,6 @@ class OnDeviceSttService implements SttService {
 
   async transcribe(audioUri?: string): Promise<string> {
     if (this.activeTranscription) {
-      console.log('[ERAGS STT] reusing active transcription');
       return this.activeTranscription;
     }
 
@@ -425,9 +429,6 @@ class OnDeviceSttService implements SttService {
     const services = servicePromise
       ? await servicePromise.catch(() => [] as string[])
       : [];
-
-    console.log('[ERAGS STT] available:', isAvailable);
-    console.log('[ERAGS STT] services:', services);
 
     const hasRecognizerService = services.some((s: string) => {
       const id = (s || '').toLowerCase();
@@ -499,10 +500,6 @@ class OnDeviceSttService implements SttService {
 
         partialFallbackId = setTimeout(() => {
           if (lastText) {
-            console.log(
-              '[ERAGS STT] using delayed partial fallback:',
-              lastText,
-            );
             finish(lastText);
           }
         }, 1200);
@@ -510,11 +507,9 @@ class OnDeviceSttService implements SttService {
 
       const finish = (text: string) => {
         if (resolved) {
-          console.log('[ERAGS STT] finish ignored after resolve:', text);
           return;
         }
 
-        console.log('[ERAGS STT] resolved text:', text);
         resolved = true;
         resolve(text);
         cleanup();
@@ -528,7 +523,7 @@ class OnDeviceSttService implements SttService {
         // If recognizer reports `7/No match`, resolve with empty string
         // so callers can handle 'no transcription' gracefully instead of
         // entering an error state.
-        const code = (error as any)?.error?.code?.toString?.();
+        const code = error?.error?.code;
         if (code === '7' || code === '7/No match') {
           console.warn(
             '[ERAGS STT] recognizer returned No match; resolving empty string',
@@ -548,25 +543,18 @@ class OnDeviceSttService implements SttService {
 
         resolved = true;
         const message =
-          (error as any)?.error?.message ??
-          (error as any)?.error?.code ??
-          'On-device STT failed';
+          error?.error?.message ?? error?.error?.code ?? 'On-device STT failed';
         console.warn('[ERAGS STT] failing transcribe promise:', message, error);
         reject(new Error(String(message)));
         cleanup();
       };
 
-      Voice.onSpeechStart = event => {
-        console.log('[ERAGS STT] speech started:', event);
-      };
-      Voice.onSpeechEnd = event => {
-        console.log('[ERAGS STT] speech ended:', event);
+      Voice.onSpeechEnd = () => {
         if (lastText) {
           schedulePartialFallback();
         }
       };
       Voice.onSpeechResults = (event: SpeechResultsEvent) => {
-        console.log('[ERAGS STT] final results:', event.value);
         const text = this.pickBestSpeechText(event.value);
         if (text) {
           lastText = text;
@@ -575,29 +563,19 @@ class OnDeviceSttService implements SttService {
         }
 
         if (lastText) {
-          console.log('[ERAGS STT] using partial result fallback:', lastText);
           finish(lastText);
         }
       };
       Voice.onSpeechPartialResults = (event: SpeechResultsEvent) => {
-        console.log('[ERAGS STT] partial results:', event.value);
         const partialText = this.pickBestSpeechText(event.value);
         if (partialText && partialText.trim().length > 0) {
           lastText = partialText;
           if (this.hasEmergencyKeyword(partialText)) {
-            console.log(
-              '[ERAGS STT] scheduling emergency partial result:',
-              partialText,
-            );
             if (partialFallbackId) {
               clearTimeout(partialFallbackId);
             }
             partialFallbackId = setTimeout(() => {
               if (lastText) {
-                console.log(
-                  '[ERAGS STT] using emergency partial result:',
-                  lastText,
-                );
                 finish(lastText);
               }
             }, this.emergencyPartialDelayMs);
@@ -634,19 +612,15 @@ export function createDefaultEmergencyTriagePorts(): {
   triage?: VoiceTriageService;
   mlInputSender: MlInputSender;
 } {
-  const stt = new OnDeviceSttService();
-  const mlInputSender = new ConfigurableMlInputSender();
-  console.log('[ERAGS TRIAGE] provider: gemini');
-  console.log(
-    '[ERAGS TRIAGE] Gemini key configured:',
-    Boolean(Config.GEMINI_API_KEY),
-  );
-
   const triage = Config.GEMINI_API_KEY
     ? new GeminiVoiceTriageService(Config.GEMINI_API_KEY)
     : undefined;
 
-  return { stt, triage, mlInputSender };
+  return {
+    stt: new OnDeviceSttService(),
+    triage,
+    mlInputSender: new ConfigurableMlInputSender(),
+  };
 }
 
 export default createDefaultEmergencyTriagePorts;

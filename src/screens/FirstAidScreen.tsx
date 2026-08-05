@@ -6,6 +6,7 @@ import {
   FlatList,
   StyleSheet,
 } from 'react-native';
+import type { SvgProps } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,6 +39,13 @@ const accidentTypes = [
   { id: '6', label: '심정 / CPR', icon: 'med2' },
 ];
 
+const iconByName: Record<string, React.ComponentType<SvgProps>> = {
+  med: MedicinesIcon,
+  med2: MedicinesIcon2,
+  mic: MicIcon,
+  cam: CameraIcon,
+};
+
 export function FirstAidScreen({ navigation }: FirstAidProps) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = React.useState<string | null>(null);
@@ -67,13 +75,7 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
           numColumns={2}
           columnWrapperStyle={{ gap: 8, marginBottom: 10 }}
           renderItem={({ item }) => {
-            const iconMap: Record<string, any> = {
-              med: MedicinesIcon,
-              med2: MedicinesIcon2,
-              mic: MicIcon,
-              cam: CameraIcon,
-            };
-            const Icon = iconMap[item.icon] ?? MedicinesIcon;
+            const Icon = iconByName[item.icon] ?? MedicinesIcon;
             const selected = selectedId === item.id;
 
             return (
