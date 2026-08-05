@@ -422,10 +422,6 @@ export const getAuthToken = async (): Promise<string> => {
     throw new AuthTokenExpiredError();
   }
 
-  console.log('[auth.service] auth token loaded', {
-    tokenLength: tokens.accessToken.length,
-  });
-
   return tokens.accessToken;
 };
 

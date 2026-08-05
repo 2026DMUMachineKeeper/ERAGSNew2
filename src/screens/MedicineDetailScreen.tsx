@@ -2,8 +2,10 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
-  StyleSheet,
+  Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,15 +25,51 @@ import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineDetail'>;
 
-const styles = StyleSheet.create({
-  card: {
-    shadowColor: '#111827',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-});
+interface MedicineEditValues {
+  name: string;
+  efficacy: string;
+  usage: string;
+  quantity: string;
+}
+
+interface MedicineEditValidationErrors {
+  name: string | null;
+  efficacy: string | null;
+  usage: string | null;
+  quantity: string | null;
+}
+
+const EMPTY_MEDICINE_EDIT_ERRORS: MedicineEditValidationErrors = {
+  name: null,
+  efficacy: null,
+  usage: null,
+  quantity: null,
+};
+const MEDICINE_UPDATE_ERROR_MESSAGE =
+  '약품 정보를 수정하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const MEDICINE_DELETE_ERROR_MESSAGE =
+  '약품을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+
+export const getMedicineEditValidationErrors = ({
+  name,
+  efficacy,
+  usage,
+  quantity,
+}: MedicineEditValues): MedicineEditValidationErrors => {
+  const trimmedQuantity = quantity.trim();
+  const parsedQuantity = Number(trimmedQuantity);
+  const isQuantityInvalid =
+    !/^\d+$/.test(trimmedQuantity) || !Number.isSafeInteger(parsedQuantity);
+
+  return {
+    name: name.trim() ? null : '약 이름을 입력해 주세요.',
+    quantity: isQuantityInvalid
+      ? '수량은 0 이상의 정수로 입력해 주세요.'
+      : null,
+    efficacy: efficacy.trim() ? null : '효능을 입력해 주세요.',
+    usage: usage.trim() ? null : '사용 방법을 입력해 주세요.',
+  };
+};
 
 export function MedicineDetailScreen({ navigation, route }: Props) {
   const [medicine, setMedicine] = React.useState<MedicineItem>(
@@ -44,6 +82,8 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   const [efficacy, setEfficacy] = React.useState(medicine.efficacy);
   const [usage, setUsage] = React.useState(medicine.usage);
   const [quantity, setQuantity] = React.useState(String(medicine.qty));
+  const [editErrors, setEditErrors] =
+    React.useState<MedicineEditValidationErrors>(EMPTY_MEDICINE_EDIT_ERRORS);
 
   const handleAuthSessionExpired = React.useCallback((): void => {
     redirectToLoginForExpiredSession(navigation);
@@ -54,39 +94,73 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
     setEfficacy(medicine.efficacy);
     setUsage(medicine.usage);
     setQuantity(String(medicine.qty));
+    setEditErrors(EMPTY_MEDICINE_EDIT_ERRORS);
     setIsEditOpen(true);
+  };
+
+  const closeEdit = (): void => {
+    setIsEditOpen(false);
+  };
+
+  const handleNameChange = (nextName: string): void => {
+    setName(nextName);
+    setEditErrors(currentErrors => ({ ...currentErrors, name: null }));
+  };
+
+  const handleQuantityChange = (nextQuantity: string): void => {
+    setQuantity(nextQuantity);
+    setEditErrors(currentErrors => ({ ...currentErrors, quantity: null }));
+  };
+
+  const handleEfficacyChange = (nextEfficacy: string): void => {
+    setEfficacy(nextEfficacy);
+    setEditErrors(currentErrors => ({ ...currentErrors, efficacy: null }));
+  };
+
+  const handleUsageChange = (nextUsage: string): void => {
+    setUsage(nextUsage);
+    setEditErrors(currentErrors => ({ ...currentErrors, usage: null }));
   };
 
   const saveEdit = async () => {
     const trimmedName = name.trim();
-    const parsedQuantity = Number(quantity);
+    const trimmedEfficacy = efficacy.trim();
+    const trimmedUsage = usage.trim();
+    const nextEditErrors = getMedicineEditValidationErrors({
+      name,
+      efficacy,
+      usage,
+      quantity,
+    });
+    const hasValidationError = Boolean(
+      nextEditErrors.name ||
+        nextEditErrors.quantity ||
+        nextEditErrors.efficacy ||
+        nextEditErrors.usage,
+    );
 
-    if (!trimmedName) {
-      Alert.alert('입력 필요', '약 이름을 입력해 주세요.');
+    setEditErrors(nextEditErrors);
+
+    if (hasValidationError) {
       return;
     }
 
-    if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
-      Alert.alert('입력 확인', '수량은 0 이상의 숫자로 입력해 주세요.');
-      return;
-    }
+    const parsedQuantity = Number(quantity.trim());
 
     try {
       setIsSaving(true);
-      const result = await updateMedicine(medicine.id, {
+      await updateMedicine(medicine.id, {
         name: trimmedName,
-        efficacy: efficacy.trim(),
-        usage: usage.trim(),
+        efficacy: trimmedEfficacy,
+        usage: trimmedUsage,
         quantity: parsedQuantity,
       });
-
-      console.log('[MedicineDetailScreen] medicine updated', { result });
 
       setMedicine(current => ({
         ...current,
         name: trimmedName,
-        efficacy: efficacy.trim() || current.efficacy,
-        usage: usage.trim() || current.usage,
+        efficacy: trimmedEfficacy,
+        usage: trimmedUsage,
         qty: parsedQuantity,
       }));
       setIsEditOpen(false);
@@ -99,11 +173,7 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       }
 
       console.error('[MedicineDetailScreen] update failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 수정하지 못했습니다.';
-      Alert.alert('수정 실패', message);
+      Alert.alert('수정 실패', MEDICINE_UPDATE_ERROR_MESSAGE);
     } finally {
       setIsSaving(false);
     }
@@ -123,8 +193,7 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   const deleteCurrentMedicine = async () => {
     try {
       setIsDeleting(true);
-      const result = await deleteMedicine(medicine.id);
-      console.log('[MedicineDetailScreen] medicine deleted', { result });
+      await deleteMedicine(medicine.id);
       Alert.alert('삭제 완료', '약품이 삭제되었습니다.', [
         {
           text: '확인',
@@ -143,15 +212,24 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       }
 
       console.error('[MedicineDetailScreen] delete failed', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '약품을 삭제하지 못했습니다.';
-      Alert.alert('삭제 실패', message);
+      Alert.alert('삭제 실패', MEDICINE_DELETE_ERROR_MESSAGE);
     } finally {
       setIsDeleting(false);
     }
   };
+
+  const nameInputClassName = editErrors.name
+    ? 'mt-4 h-12 rounded-xl border border-red px-4 text-sm text-memoText'
+    : 'mt-4 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
+  const quantityInputClassName = editErrors.quantity
+    ? 'mt-3 h-12 rounded-xl border border-red px-4 text-sm text-memoText'
+    : 'mt-3 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
+  const efficacyInputClassName = editErrors.efficacy
+    ? 'mt-3 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
+    : 'mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
+  const usageInputClassName = editErrors.usage
+    ? 'mt-3 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
+    : 'mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -163,55 +241,61 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
           >
             <BackIcon width={24} height={24} />
           </TouchableOpacity>
-          <Text className="flex-1 text-sm font-extrabold text-memoText">
+          <Text className="flex-1 text-center text-sm font-suitBold text-memoText">
             약품 상세
           </Text>
-          <Text className="text-xl text-memoText">...</Text>
+          <View className="h-9 w-9" />
         </View>
 
-        <View className="mt-5 rounded-2xl bg-white p-4" style={styles.card}>
-          <View className="flex-row items-center">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-red">
-              <Text className="text-white text-lg">약</Text>
+        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+          <View className="pb-4">
+            <View className="mt-5 rounded-2xl bg-white p-4 shadow-md">
+              <View className="flex-row items-center">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-red">
+                  <Text className="text-lg text-white">약</Text>
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-base font-suitBold text-memoText">
+                    {medicine.name}
+                  </Text>
+                  <Text className="mt-1 text-sm font-suitBold text-red">
+                    {medicine.qty}개
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View className="ml-3 flex-1">
-              <Text className="text-base font-extrabold text-memoText">
-                {medicine.name}
+
+            <View className="mt-3 rounded-2xl bg-white p-4 shadow-md">
+              <Text className="text-sm font-suitBold text-memoText">효능</Text>
+              <Text className="mt-3 text-sm leading-6 text-memoSubText">
+                {medicine.efficacy}
               </Text>
-              <Text className="mt-1 text-sm font-extrabold text-red">
-                {medicine.qty}개
+            </View>
+
+            <View className="mt-3 rounded-2xl bg-white p-4 shadow-md">
+              <Text className="text-sm font-suitBold text-memoText">
+                사용 방법
               </Text>
+              <Text className="mt-3 text-sm leading-6 text-memoSubText">
+                {medicine.usage}
+              </Text>
+            </View>
+
+            <View className="mt-3 rounded-2xl bg-white p-4 shadow-md">
+              <Text className="text-sm font-suitBold text-memoText">
+                추가 정보
+              </Text>
+              <View className="mt-3 flex-row">
+                <Text className="w-20 text-sm font-suitBold text-memoText">
+                  메모
+                </Text>
+                <Text className="flex-1 text-sm text-memoSubText">
+                  {medicine.info}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-
-        <View className="mt-3 rounded-2xl bg-white p-4" style={styles.card}>
-          <Text className="text-sm font-extrabold text-memoText">효능</Text>
-          <Text className="mt-3 text-sm leading-6 text-memoSubText">
-            {medicine.efficacy}
-          </Text>
-        </View>
-
-        <View className="mt-3 rounded-2xl bg-white p-4" style={styles.card}>
-          <Text className="text-sm font-extrabold text-memoText">
-            사용 방법
-          </Text>
-          <Text className="mt-3 text-sm leading-6 text-memoSubText">
-            {medicine.usage}
-          </Text>
-        </View>
-
-        <View className="mt-3 rounded-2xl bg-white p-4" style={styles.card}>
-          <Text className="text-sm font-extrabold text-memoText">
-            추가 정보
-          </Text>
-          <View className="mt-3 flex-row">
-            <Text className="w-20 text-sm font-bold text-memoText">메모</Text>
-            <Text className="flex-1 text-sm text-memoSubText">
-              {medicine.info}
-            </Text>
-          </View>
-        </View>
+        </ScrollView>
       </View>
 
       <View className="bg-background px-4 pb-5">
@@ -221,7 +305,7 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
             disabled={isDeleting}
             onPress={openEdit}
           >
-            <Text className="font-bold text-memoText">수정</Text>
+            <Text className="font-suitBold text-memoText">수정</Text>
           </TouchableOpacity>
           <TouchableOpacity
             className="h-12 flex-1 items-center justify-center rounded-xl border border-red bg-white"
@@ -231,71 +315,119 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
             {isDeleting ? (
               <ActivityIndicator />
             ) : (
-              <Text className="font-bold text-red">삭제</Text>
+              <Text className="font-suitBold text-red">삭제</Text>
             )}
           </TouchableOpacity>
         </View>
       </View>
 
-      <Modal visible={isEditOpen} transparent animationType="fade">
-        <View className="flex-1 justify-center bg-black/50 px-5">
-          <View className="rounded-2xl bg-white p-5">
-            <Text className="text-base font-extrabold text-memoText">
-              약품 수정
-            </Text>
+      <Modal
+        visible={isEditOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeEdit}
+      >
+        <KeyboardAvoidingView
+          className="flex-1 bg-black/50"
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ScrollView
+            className="flex-1"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="min-h-full justify-center px-5 py-6">
+              <View className="rounded-2xl bg-white p-5">
+                <Text className="text-base font-suitBold text-memoText">
+                  약품 수정
+                </Text>
 
-            <TextInput
-              className="mt-4 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText"
-              value={name}
-              onChangeText={setName}
-              placeholder="약 이름"
-            />
-            <TextInput
-              className="mt-3 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText"
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="number-pad"
-              placeholder="수량"
-            />
-            <TextInput
-              className="mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText"
-              value={efficacy}
-              onChangeText={setEfficacy}
-              multiline
-              textAlignVertical="top"
-              placeholder="효능"
-            />
-            <TextInput
-              className="mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText"
-              value={usage}
-              onChangeText={setUsage}
-              multiline
-              textAlignVertical="top"
-              placeholder="사용 방법"
-            />
+                <TextInput
+                  className={nameInputClassName}
+                  value={name}
+                  onChangeText={handleNameChange}
+                  placeholder="약 이름"
+                />
+                {editErrors.name ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="mt-2 text-sm font-suitMedium text-red"
+                  >
+                    {editErrors.name}
+                  </Text>
+                ) : null}
+                <TextInput
+                  className={quantityInputClassName}
+                  value={quantity}
+                  onChangeText={handleQuantityChange}
+                  keyboardType="number-pad"
+                  placeholder="수량"
+                />
+                {editErrors.quantity ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="mt-2 text-sm font-suitMedium text-red"
+                  >
+                    {editErrors.quantity}
+                  </Text>
+                ) : null}
+                <TextInput
+                  className={efficacyInputClassName}
+                  value={efficacy}
+                  onChangeText={handleEfficacyChange}
+                  multiline
+                  textAlignVertical="top"
+                  placeholder="효능"
+                />
+                {editErrors.efficacy ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="mt-2 text-sm font-suitMedium text-red"
+                  >
+                    {editErrors.efficacy}
+                  </Text>
+                ) : null}
+                <TextInput
+                  className={usageInputClassName}
+                  value={usage}
+                  onChangeText={handleUsageChange}
+                  multiline
+                  textAlignVertical="top"
+                  placeholder="사용 방법"
+                />
+                {editErrors.usage ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="mt-2 text-sm font-suitMedium text-red"
+                  >
+                    {editErrors.usage}
+                  </Text>
+                ) : null}
 
-            <View className="mt-5 flex-row gap-3">
-              <TouchableOpacity
-                className="h-12 flex-1 items-center justify-center rounded-xl border border-memoLine"
-                disabled={isSaving}
-                onPress={() => setIsEditOpen(false)}
-              >
-                <Text className="font-bold text-memoText">취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="h-12 flex-1 items-center justify-center rounded-xl bg-red"
-                disabled={isSaving}
-                onPress={saveEdit}
-              >
-                {isSaving ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="font-bold text-white">저장</Text>
-                )}
-              </TouchableOpacity>
+                <View className="mt-5 flex-row gap-3">
+                  <TouchableOpacity
+                    className="h-12 flex-1 items-center justify-center rounded-xl border border-memoLine"
+                    disabled={isSaving}
+                    onPress={closeEdit}
+                  >
+                    <Text className="font-suitBold text-memoText">취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="h-12 flex-1 items-center justify-center rounded-xl bg-red"
+                    disabled={isSaving}
+                    onPress={saveEdit}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text className="font-suitBold text-white">저장</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

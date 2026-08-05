@@ -14,33 +14,70 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { register } from '@/services';
+import {
+  INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
+  normalizeOptionalKoreanPhoneNumber,
+} from '@/utils';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
 type SignUpScreenProps = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
 const { colors } = tailwindConfig;
+const SIGN_UP_ERROR_MESSAGE =
+  '회원가입을 완료하지 못했습니다. 입력 내용을 확인하고 다시 시도해 주세요.';
 
 export const SignUpScreen = ({
   navigation,
 }: SignUpScreenProps): React.JSX.Element => {
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [guardianPhoneNumber, setGuardianPhoneNumber] = useState('');
+  const [guardianPhoneError, setGuardianPhoneError] = useState<string | null>(
+    null,
+  );
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isSignUpDisabled =
-    isSubmitting ||
-    name.trim().length === 0 ||
-    email.trim().length === 0 ||
-    password.trim().length === 0 ||
-    passwordConfirm.trim().length === 0;
+  const isSignUpDisabled = isSubmitting;
+
+  const handleNameChange = (nextName: string): void => {
+    setNameError(null);
+    setName(nextName);
+  };
+
+  const handleEmailChange = (nextEmail: string): void => {
+    setEmailError(null);
+    setEmail(nextEmail);
+  };
+
+  const handleGuardianPhoneChange = (phoneNumber: string): void => {
+    setGuardianPhoneError(null);
+    setGuardianPhoneNumber(phoneNumber);
+  };
 
   const handleSignUpPress = async (): Promise<void> => {
-    if (isSignUpDisabled) {
-      Alert.alert('입력 필요', '회원가입 정보를 모두 입력해주세요.');
+    if (isSubmitting) {
+      return;
+    }
+
+    const nextNameError =
+      name.trim().length === 0 ? '이름을 입력해 주세요.' : null;
+    const nextEmailError =
+      email.trim().length === 0 ? '이메일을 입력해 주세요.' : null;
+
+    setNameError(nextNameError);
+    setEmailError(nextEmailError);
+
+    if (nextNameError || nextEmailError) {
+      return;
+    }
+
+    if (password.trim().length === 0 || passwordConfirm.trim().length === 0) {
+      Alert.alert('입력 필요', '회원가입 정보를 모두 입력해 주세요.');
       return;
     }
 
@@ -49,16 +86,24 @@ export const SignUpScreen = ({
       return;
     }
 
+    const normalizedGuardianPhoneNumber =
+      normalizeOptionalKoreanPhoneNumber(guardianPhoneNumber);
+
+    if (normalizedGuardianPhoneNumber === null) {
+      setGuardianPhoneError(INVALID_KOREAN_PHONE_NUMBER_MESSAGE);
+      return;
+    }
+
+    setGuardianPhoneError(null);
     setIsSubmitting(true);
 
     try {
-      const trimmedGuardianPhoneNumber = guardianPhoneNumber.trim();
       const registerResponse = await register({
         name: name.trim(),
         email: email.trim(),
         password,
-        ...(trimmedGuardianPhoneNumber.length > 0
-          ? { guardian_phone: trimmedGuardianPhoneNumber }
+        ...(normalizedGuardianPhoneNumber.length > 0
+          ? { guardian_phone: normalizedGuardianPhoneNumber }
           : {}),
       });
 
@@ -69,11 +114,8 @@ export const SignUpScreen = ({
         },
       ]);
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : '회원가입에 실패했습니다.';
-
       console.error('[SignUpScreen] 회원가입 실패', error);
-      Alert.alert('회원가입 실패', errorMessage);
+      Alert.alert('회원가입 실패', SIGN_UP_ERROR_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }
@@ -107,11 +149,12 @@ export const SignUpScreen = ({
 
               <View className="mt-12">
                 <AuthTextInput
+                  errorMessage={nameError ?? undefined}
                   iconName="user"
                   inputProps={{
                     autoCapitalize: 'words',
                     autoCorrect: false,
-                    onChangeText: setName,
+                    onChangeText: handleNameChange,
                     placeholder: '이름을 입력하세요',
                     placeholderTextColor: colors.placeholder,
                     returnKeyType: 'next',
@@ -122,12 +165,13 @@ export const SignUpScreen = ({
 
                 <View className="mt-5">
                   <AuthTextInput
+                    errorMessage={emailError ?? undefined}
                     iconName="email"
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
                       keyboardType: 'email-address',
-                      onChangeText: setEmail,
+                      onChangeText: handleEmailChange,
                       placeholder: '이메일을 입력하세요',
                       placeholderTextColor: colors.placeholder,
                       returnKeyType: 'next',
@@ -139,12 +183,13 @@ export const SignUpScreen = ({
 
                 <View className="mt-5">
                   <AuthTextInput
+                    errorMessage={guardianPhoneError ?? undefined}
                     iconName="phone"
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
                       keyboardType: 'phone-pad',
-                      onChangeText: setGuardianPhoneNumber,
+                      onChangeText: handleGuardianPhoneChange,
                       placeholder: '보호자 전화번호를 입력하세요 (선택)',
                       placeholderTextColor: colors.placeholder,
                       returnKeyType: 'next',

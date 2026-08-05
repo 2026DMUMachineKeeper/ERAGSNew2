@@ -33,6 +33,10 @@ import {
   updateMyPage,
   updateStoredAuthUser,
 } from '../services';
+import {
+  INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
+  normalizeOptionalKoreanPhoneNumber,
+} from '../utils';
 import tailwindConfig from '../../tailwind.config';
 
 type SettingsScreenProps = CompositeScreenProps<
@@ -41,6 +45,10 @@ type SettingsScreenProps = CompositeScreenProps<
 >;
 
 const { colors } = tailwindConfig;
+const PROFILE_LOAD_ERROR_MESSAGE =
+  '마이페이지 정보를 불러오지 못했습니다. 저장된 정보를 대신 표시합니다.';
+const PROFILE_SAVE_ERROR_MESSAGE =
+  '개인 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
 const styles = StyleSheet.create({
   actionCard: {
@@ -74,6 +82,10 @@ export const SettingsScreen = ({
     name: '',
     guardianPhone: '',
   });
+  const [nameError, setNameError] = React.useState<string | null>(null);
+  const [guardianPhoneError, setGuardianPhoneError] = React.useState<
+    string | null
+  >(null);
   const [isProfileLoading, setIsProfileLoading] = React.useState(true);
   const [profileLoadError, setProfileLoadError] = React.useState<string | null>(
     null,
@@ -141,14 +153,7 @@ export const SettingsScreen = ({
           return;
         }
 
-        const errorMessage =
-          error instanceof Error && error.message.trim().length > 0
-            ? error.message
-            : '마이페이지 정보를 불러오지 못했습니다.';
-
-        setProfileLoadError(
-          `${errorMessage} 저장된 정보를 대신 표시하고 있습니다.`,
-        );
+        setProfileLoadError(PROFILE_LOAD_ERROR_MESSAGE);
       } finally {
         if (isActive) {
           setIsProfileLoading(false);
@@ -165,20 +170,32 @@ export const SettingsScreen = ({
 
   const handleEditProfilePress = (): void => {
     setDraftProfile(profile);
+    setNameError(null);
+    setGuardianPhoneError(null);
     setIsEditingProfile(true);
   };
 
   const handleCancelProfilePress = (): void => {
     setDraftProfile(profile);
+    setNameError(null);
+    setGuardianPhoneError(null);
     setIsEditingProfile(false);
   };
 
   const handleSaveProfilePress = async (): Promise<void> => {
     const nextName = draftProfile.name.trim();
-    const nextGuardianPhone = draftProfile.guardianPhone.trim();
+    const nextGuardianPhone = normalizeOptionalKoreanPhoneNumber(
+      draftProfile.guardianPhone,
+    );
+    const nextNameError =
+      nextName.length === 0 ? '이름을 입력해 주세요.' : null;
+    const nextGuardianPhoneError =
+      nextGuardianPhone === null ? INVALID_KOREAN_PHONE_NUMBER_MESSAGE : null;
 
-    if (nextName.length === 0) {
-      Alert.alert('입력 필요', '이름을 입력해주세요.');
+    setNameError(nextNameError);
+    setGuardianPhoneError(nextGuardianPhoneError);
+
+    if (nextNameError || nextGuardianPhone === null) {
       return;
     }
 
@@ -215,13 +232,8 @@ export const SettingsScreen = ({
         return;
       }
 
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : '개인 정보를 수정하지 못했습니다.';
-
       console.warn('[SettingsScreen] profile update failed:', error);
-      Alert.alert('저장 실패', errorMessage);
+      Alert.alert('저장 실패', PROFILE_SAVE_ERROR_MESSAGE);
     } finally {
       setIsSavingProfile(false);
     }
@@ -313,12 +325,14 @@ export const SettingsScreen = ({
                   placeholder: namePlaceholder,
                 }}
                 editable={isProfileEditable}
-                onChangeText={value =>
+                errorMessage={nameError ?? undefined}
+                onChangeText={value => {
+                  setNameError(null);
                   setDraftProfile(currentProfile => ({
                     ...currentProfile,
                     name: value,
-                  }))
-                }
+                  }));
+                }}
                 value={draftProfile.name}
               />
               <ProfileField
@@ -329,12 +343,14 @@ export const SettingsScreen = ({
                   placeholder: guardianPhonePlaceholder,
                 }}
                 editable={isProfileEditable}
-                onChangeText={value =>
+                errorMessage={guardianPhoneError ?? undefined}
+                onChangeText={value => {
+                  setGuardianPhoneError(null);
                   setDraftProfile(currentProfile => ({
                     ...currentProfile,
                     guardianPhone: value,
-                  }))
-                }
+                  }));
+                }}
                 value={draftProfile.guardianPhone}
               />
 
