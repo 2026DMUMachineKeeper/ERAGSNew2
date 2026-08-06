@@ -14,4 +14,5 @@ export { default as FractureBruiseIcon } from './fractureBruise.svg';
 export { default as FeverIcon } from './fever.svg';
 export { default as SkinRashIcon } from './skinRash.svg';
 export { default as AirwayObstructionImage } from './airwayObstructionImage.png';
+export { default as FirstAidGuideIcon } from './firstAidGuide.svg';
 // (no default export)
