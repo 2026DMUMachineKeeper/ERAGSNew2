@@ -56,11 +56,17 @@ export const FirstAidScreen = ({
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <View className="px-5 pt-8">
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <BackIcon width={24} height={24} />
+        <TouchableOpacity
+          accessibilityLabel="뒤로 가기"
+          accessibilityRole="button"
+          className="h-11 w-11 items-start justify-center"
+          hitSlop={10}
+          onPress={() => navigation.goBack()}
+        >
+          <BackIcon width={26} height={26} />
         </TouchableOpacity>
 
-        <Text className="mt-8 text-title text-black font-suitBold font-black">
+        <Text className="mt-2 text-title text-black font-suitBold font-black">
           <Text className="text-red font-suitBold font-black">사고 유형</Text>을
           선택하세요
         </Text>
