@@ -18,7 +18,15 @@ import {
   type CameraOptions,
   type ImagePickerResponse,
 } from 'react-native-image-picker';
-import { CameraIcon, MicIcon, MainIcon, EragsLogo } from '../assets/icons';
+import Tts from 'react-native-tts';
+
+import {
+  CameraIcon,
+  EragsLogo,
+  FirstAidGuideIcon,
+  MainIcon,
+  MicIcon,
+} from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { useEmergencyTriage } from '../erags-sm1/hooks/useEmergencyTriage';
@@ -29,6 +37,8 @@ import type {
 import tailwindConfig from '../../tailwind.config';
 
 const { colors } = tailwindConfig;
+
+const TEMPORARY_TTS_MESSAGE = '안녕하세요. 응급 상황 음성 안내 테스트입니다.';
 
 type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'HomeTab'>,
@@ -192,6 +202,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     );
   }, []);
 
+  const handleTtsPress = React.useCallback(async (): Promise<void> => {
+    try {
+      await Tts.getInitStatus();
+      await Tts.stop();
+      await Tts.setDefaultLanguage('ko-KR');
+      Tts.speak(TEMPORARY_TTS_MESSAGE);
+    } catch (error) {
+      console.error('[HomeScreen] TTS 재생 실패:', error);
+      Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
+    }
+  }, []);
+
   const handleVoicePress = React.useCallback(async () => {
     if (voiceRequestInFlightRef.current) {
       return;
@@ -332,8 +354,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
         </View>
 
+        <View className="mb-3 mt-5">
+          <Text className="text-body font-suitSemiBold text-textDim">
+            응급 상황 지원
+          </Text>
+          <Text className="mt-1 text-coment font-suitRegular text-textDim">
+            필요한 응급 지원을 선택하세요.
+          </Text>
+        </View>
+
         <TouchableOpacity
-          className="mt-4 h-[86px] flex-row items-center rounded-2xl bg-red px-4"
+          className="h-[86px] flex-row items-center rounded-2xl bg-red px-4"
           onPress={handleEmergencyReportPress}
         >
           <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white">
@@ -348,16 +379,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          className="mt-3 h-[68px] flex-row items-center rounded-2xl border border-red bg-camera_bg px-4"
+          accessibilityHint="사고 유형 선택 화면으로 이동합니다"
+          accessibilityLabel="응급 처치 가이드"
+          accessibilityRole="button"
+          className="mt-3 h-[86px] flex-row items-center rounded-2xl border border-red bg-camera_bg px-4"
           onPress={() => navigation.navigate('FirstAid')}
         >
-          <View className="h-9 w-9 items-center justify-center rounded-full border border-red">
-            <Text className="text-body font-suitBold text-red">!</Text>
+          <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-red">
+            <FirstAidGuideIcon width={28} height={28} />
           </View>
           <Text className="ml-4 flex-1 text-body font-suitBold text-black">
             응급 처치 가이드
           </Text>
           <Text className="text-title2 font-suitRegular text-red">›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          accessibilityLabel="임시 음성 안내 재생"
+          accessibilityRole="button"
+          className="mt-3 h-[68px] flex-row items-center rounded-2xl border border-red bg-camera_bg px-4"
+          onPress={handleTtsPress}
+        >
+          <View className="h-9 w-9 items-center justify-center rounded-full bg-red">
+            <Text className="text-body font-suitBold text-white">▶</Text>
+          </View>
+          <Text className="ml-4 flex-1 text-body font-suitBold text-black">
+            TTS 음성 안내 테스트
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
