@@ -8,6 +8,12 @@ declare module '*.svg' {
 	export default content;
 }
 
+declare module '*.png' {
+	import type { ImageSourcePropType } from 'react-native';
+	const content: ImageSourcePropType;
+	export default content;
+}
+
 declare module '*tailwind.config.js' {
 	const config: {
 		colors: Record<string, string>;
