@@ -5,22 +5,31 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
+  Image,
 } from 'react-native';
 import type { SvgProps } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  AirwayObstructionImage,
   BackIcon,
+  BleedingIcon,
+  BurnIcon,
+  FeverIcon,
+  FractureBruiseIcon,
   MedicinesIcon,
-  MedicinesIcon2,
-  MicIcon,
-  CameraIcon,
+  SkinRashIcon,
 } from '../assets';
+import { FIRST_AID_CATEGORIES } from '../constants';
 
 type FirstAidProps = NativeStackScreenProps<RootStackParamList, 'FirstAid'>;
 
 const styles = StyleSheet.create({
+  columnWrapper: {
+    gap: 8,
+    marginBottom: 10,
+  },
   optionCard: {
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
@@ -30,23 +39,17 @@ const styles = StyleSheet.create({
   },
 });
 
-const accidentTypes = [
-  { id: '1', label: '화재 / 화염', icon: 'med' },
-  { id: '2', label: '약물 / 중독', icon: 'med2' },
-  { id: '3', label: '호흡 곤란', icon: 'mic' },
-  { id: '4', label: '골절 / 타박', icon: 'cam' },
-  { id: '5', label: '출혈 / 저상', icon: 'med' },
-  { id: '6', label: '심정 / CPR', icon: 'med2' },
-];
-
-const iconByName: Record<string, React.ComponentType<SvgProps>> = {
-  med: MedicinesIcon,
-  med2: MedicinesIcon2,
-  mic: MicIcon,
-  cam: CameraIcon,
+const iconByCategoryId: Record<string, React.ComponentType<SvgProps>> = {
+  bleeding: BleedingIcon,
+  burn: BurnIcon,
+  fractureBruise: FractureBruiseIcon,
+  fever: FeverIcon,
+  skinRash: SkinRashIcon,
 };
 
-export function FirstAidScreen({ navigation }: FirstAidProps) {
+export const FirstAidScreen = ({
+  navigation,
+}: FirstAidProps): React.JSX.Element => {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = React.useState<string | null>(null);
 
@@ -70,13 +73,14 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
       <View className="px-5 mt-6 flex-1">
         <FlatList
           scrollEnabled={false}
-          data={accidentTypes}
+          data={FIRST_AID_CATEGORIES}
           keyExtractor={item => item.id}
           numColumns={2}
-          columnWrapperStyle={{ gap: 8, marginBottom: 10 }}
+          columnWrapperStyle={styles.columnWrapper}
           renderItem={({ item }) => {
-            const Icon = iconByName[item.icon] ?? MedicinesIcon;
+            const Icon = iconByCategoryId[item.id] ?? MedicinesIcon;
             const selected = selectedId === item.id;
+            const isAirwayObstruction = item.id === 'airwayObstruction';
 
             return (
               <TouchableOpacity
@@ -89,8 +93,16 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
                   setSelectedLabel(item.id === selectedId ? null : item.label);
                 }}
               >
-                <View className="mb-4">
-                  <Icon width={40} height={40} />
+                <View className="mb-2">
+                  {isAirwayObstruction ? (
+                    <Image
+                      className="h-12 w-12"
+                      resizeMode="contain"
+                      source={AirwayObstructionImage}
+                    />
+                  ) : (
+                    <Icon width={48} height={48} />
+                  )}
                 </View>
                 <Text
                   className={`text-coment font-suitBold ${
@@ -116,6 +128,18 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
               return;
             }
 
+            const selectedCategory = FIRST_AID_CATEGORIES.find(
+              category => category.id === selectedId,
+            );
+
+            if (selectedCategory?.subtypes.length === 0) {
+              navigation.navigate('EmergencyGuide', {
+                mainLabel: selectedLabel,
+                source: 'manual',
+              });
+              return;
+            }
+
             navigation.navigate('FirstAidDetail', {
               mainId: selectedId,
               mainLabel: selectedLabel,
@@ -127,4 +151,6 @@ export function FirstAidScreen({ navigation }: FirstAidProps) {
       </View>
     </SafeAreaView>
   );
-}
+};
+
+export default FirstAidScreen;

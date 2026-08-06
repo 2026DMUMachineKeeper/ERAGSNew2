@@ -1,9 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon } from '../assets';
+import { FIRST_AID_CATEGORIES } from '../constants';
 
 type DetailProps = NativeStackScreenProps<RootStackParamList, 'FirstAidDetail'>;
 
@@ -15,40 +22,31 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 4,
   },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
 });
 
-const levels = [
-  {
-    id: 'mild',
-    name: '경미한 출혈',
-    description: '간단한 압박으로 지혈 가능',
-    icon: '●',
-    color: '#FBBF24',
-    bg: '#FFFBEB',
-    message: '침착하게 압박 지혈을 시작하세요.',
-  },
-  {
-    id: 'normal',
-    name: '일반 출혈',
-    description: '지속적인 압박 필요',
-    icon: '●',
-    color: '#F97316',
-    bg: '#FFF7ED',
-    message: '출혈 부위를 계속 압박해주세요.',
-  },
-  {
-    id: 'severe',
-    name: '대량 출혈',
-    description: '즉시 강한 압박 및 119 신고 필요',
-    icon: '●',
-    color: '#EF4444',
-    bg: '#FEF2F2',
-    message: '즉각적인 응급처치가 필요합니다.',
-  },
-];
+const LEVEL_COLORS = ['#FBBF24', '#F97316', '#EF4444', '#DC2626'];
+const LEVEL_BACKGROUNDS = ['#FFFBEB', '#FFF7ED', '#FEF2F2', '#FEF2F2'];
 
-export function FirstAidDetail({ navigation, route }: DetailProps) {
-  const main = route.params?.mainLabel ?? 'CPR';
+export const FirstAidDetail = ({
+  navigation,
+  route,
+}: DetailProps): React.JSX.Element => {
+  const mainId = route.params?.mainId ?? '';
+  const main = route.params?.mainLabel ?? '응급';
+  const category = FIRST_AID_CATEGORIES.find(item => item.id === mainId);
+  const levels = (category?.subtypes ?? []).map((name, index) => ({
+    id: `${mainId}-${index}`,
+    name,
+    icon: '●',
+    color: LEVEL_COLORS[index] ?? LEVEL_COLORS[LEVEL_COLORS.length - 1],
+    bg:
+      LEVEL_BACKGROUNDS[index] ??
+      LEVEL_BACKGROUNDS[LEVEL_BACKGROUNDS.length - 1],
+  }));
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const selected = levels.find(item => item.id === selectedId);
 
@@ -66,7 +64,11 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
-      <View className="flex-1 px-5 pt-8 pb-5">
+      <ScrollView
+        className="flex-1 px-5 pt-8"
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <TouchableOpacity
           className="h-10 w-10 justify-center"
           onPress={() => navigation.goBack()}
@@ -118,7 +120,7 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
                       {item.name}
                     </Text>
                     <Text className="mt-1 text-coment text-textDim">
-                      {item.description}
+                      {main} 상태에 맞는 항목입니다.
                     </Text>
                   </View>
 
@@ -147,7 +149,9 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
             {selected ? selected.name : '아직 선택되지 않음'}
           </Text>
           <Text className="mt-2 text-coment text-textDim">
-            {selected ? selected.message : '현재 상태를 선택하면 안내가 표시됩니다.'}
+            {selected
+              ? `${selected.name}에 맞는 응급처치 안내를 시작합니다.`
+              : '현재 상태를 선택하면 안내가 표시됩니다.'}
           </Text>
         </View>
 
@@ -160,7 +164,9 @@ export function FirstAidDetail({ navigation, route }: DetailProps) {
         >
           <Text className="text-white font-bold">다음 단계로 이동</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
-}
+};
+
+export default FirstAidDetail;

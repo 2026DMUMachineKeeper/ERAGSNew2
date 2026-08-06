@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Svg, { Circle, Path } from 'react-native-svg';
 
@@ -18,12 +18,24 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 const { colors } = tailwindConfig;
 
 const tabItems = {
-  HomeTab: { label: '홈', icon: '⌂' },
-  MedicinesTab: { label: '약품', icon: 'medicine' },
-  SettingsTab: { label: '마이페이지', icon: 'profile' },
+  HomeTab: { label: '홈' },
+  MedicinesTab: { label: '약품' },
+  SettingsTab: { label: '마이페이지' },
 } as const;
 
 type TabRouteName = keyof typeof tabItems;
+
+const HomeTabIcon = ({ color }: { color: string }) => (
+  <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M4.5 10.5L12 4L19.5 10.5V19C19.5 19.55 19.05 20 18.5 20H14.5V14H9.5V20H5.5C4.95 20 4.5 19.55 4.5 19V10.5Z"
+      fill={color}
+      stroke={color}
+      strokeLinejoin="round"
+      strokeWidth={1.5}
+    />
+  </Svg>
+);
 
 const MedicineTabIcon = ({ color }: { color: string }) => (
   <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
@@ -55,17 +67,10 @@ const MyPageTabIcon = ({ color }: { color: string }) => (
       strokeWidth={1.9}
       strokeLinecap="round"
     />
-    <Path
-      d="M4.5 12C4.5 7.86 7.86 4.5 12 4.5C16.14 4.5 19.5 7.86 19.5 12C19.5 16.14 16.14 19.5 12 19.5C7.86 19.5 4.5 16.14 4.5 12Z"
-      stroke={color}
-      strokeWidth={1.3}
-      strokeOpacity={0.28}
-    />
   </Svg>
 );
 
 const renderTabIcon = (routeName: TabRouteName, focused: boolean) => {
-  const item = tabItems[routeName];
   const iconColor = focused ? colors.red : colors.textDim;
 
   if (routeName === 'MedicinesTab') {
@@ -86,9 +91,7 @@ const renderTabIcon = (routeName: TabRouteName, focused: boolean) => {
 
   return (
     <View className="items-center justify-center">
-      <Text className="text-title2 font-suitBold" style={{ color: iconColor }}>
-        {item.icon}
-      </Text>
+      <HomeTabIcon color={iconColor} />
     </View>
   );
 };
@@ -105,12 +108,19 @@ export function MainTabNavigator(): React.JSX.Element {
         tabBarIcon: ({ focused }) =>
           renderTabIcon(route.name as TabRouteName, focused),
         tabBarStyle: {
-          height: 72,
-          paddingTop: 8,
+          height: 78,
+          marginHorizontal: 16,
+          marginBottom: 12,
+          paddingTop: 10,
           paddingBottom: 10,
-          borderTopWidth: 1,
-          borderTopColor: '#EEF0F4',
+          borderTopWidth: 0,
+          borderRadius: 24,
           backgroundColor: colors.white,
+          shadowColor: colors.black,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.1,
+          shadowRadius: 18,
+          elevation: 10,
         },
         tabBarLabelStyle: {
           fontFamily: 'SUIT-Bold',
