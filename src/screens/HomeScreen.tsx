@@ -13,6 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Geolocation, {
+  type GeolocationResponse,
+} from '@react-native-community/geolocation';
 import {
   launchCamera,
   type CameraOptions,
@@ -34,6 +37,7 @@ import type {
   AccidentClassification,
   PatientContext,
 } from '../erags-sm1/types';
+import { getAddressFromCoordinates, hasLocationPermission } from '../services';
 import tailwindConfig from '../../tailwind.config';
 
 const { colors } = tailwindConfig;
@@ -84,6 +88,15 @@ const requestMicrophonePermission = async () => {
 
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 };
+
+const getCurrentPosition = (): Promise<GeolocationResponse> =>
+  new Promise((resolve, reject) => {
+    Geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 10000,
+    });
+  });
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const triage = useEmergencyTriage();
@@ -195,12 +208,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [isListening, setIsListening] = React.useState(false);
   const isVoiceBusy = isListening || triage.isBusy;
 
-  const handleEmergencyReportPress = React.useCallback((): void => {
-    Alert.alert(
-      '긴급 신고 문자',
-      '보호자 연락처와 현재 위치 전송 기능을 연결한 뒤 사용할 수 있습니다.',
-    );
-  }, []);
+  const handleEmergencyReportPress =
+    React.useCallback(async (): Promise<void> => {
+      try {
+        const hasPermission = await hasLocationPermission();
+        if (!hasPermission) {
+          Alert.alert(
+            '위치 정보 없음',
+            '위치 권한이 없어 현재 위치를 표시할 수 없습니다.',
+          );
+          return;
+        }
+
+        const { coords } = await getCurrentPosition();
+        const address = await getAddressFromCoordinates(
+          coords.latitude,
+          coords.longitude,
+        );
+        const addressText = address ? `주소: ${address}\n` : '';
+        Alert.alert(
+          '긴급 신고 문자',
+          `현재 위치\n${addressText}위도: ${coords.latitude}\n경도: ${coords.longitude}`,
+        );
+      } catch (error) {
+        console.error('[HomeScreen] 현재 위치 조회 실패:', error);
+        Alert.alert(
+          '위치 조회 실패',
+          '현재 위치를 가져오지 못했습니다. 위치 설정을 확인해 주세요.',
+        );
+      }
+    }, []);
 
   const handleTtsPress = React.useCallback(async (): Promise<void> => {
     try {
