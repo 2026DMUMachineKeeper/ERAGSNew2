@@ -13,7 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { login, saveAuthTokens } from '@/services';
+import {
+  consumeLocationPermissionPrompt,
+  login,
+  saveAuthTokens,
+} from '@/services';
+import { showLocationPermissionPrompt } from '@/utils';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
 
@@ -51,11 +56,17 @@ export const LoginScreen = ({
         expiresIn: loginResponse.expires_in,
         user: loginResponse.user,
       });
+      const shouldShowLocationPermissionPrompt =
+        await consumeLocationPermissionPrompt(loginResponse.user.email);
 
       navigation.reset({
         index: 0,
         routes: [{ name: 'Home' }],
       });
+
+      if (shouldShowLocationPermissionPrompt) {
+        showLocationPermissionPrompt();
+      }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : '로그인에 실패했습니다.';

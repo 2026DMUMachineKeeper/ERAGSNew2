@@ -36,6 +36,7 @@ import {
 import {
   INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
   normalizeOptionalKoreanPhoneNumber,
+  showLocationPermissionPrompt,
 } from '../utils';
 import tailwindConfig from '../../tailwind.config';
 
@@ -221,11 +222,21 @@ export const SettingsScreen = ({
         name: updatedUser.name ?? '',
         guardianPhone: updatedUser.guardian_phone ?? '',
       };
+      const isGuardianPhoneFirstRegistered =
+        profile.guardianPhone.length === 0 &&
+        nextProfile.guardianPhone.length > 0;
 
       setProfile(nextProfile);
       setDraftProfile(nextProfile);
       setIsEditingProfile(false);
-      Alert.alert('저장 완료', '개인 정보가 수정되었습니다.');
+      Alert.alert('저장 완료', '개인 정보가 수정되었습니다.', [
+        {
+          text: '확인',
+          onPress: isGuardianPhoneFirstRegistered
+            ? showLocationPermissionPrompt
+            : undefined,
+        },
+      ]);
     } catch (error: unknown) {
       if (isAuthSessionExpiredError(error)) {
         moveToLogin();
