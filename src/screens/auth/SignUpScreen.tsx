@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { register } from '@/services';
+import { markLocationPermissionPromptPending, register } from '@/services';
 import {
   INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
   normalizeOptionalKoreanPhoneNumber,
@@ -106,6 +106,10 @@ export const SignUpScreen = ({
           ? { guardian_phone: normalizedGuardianPhoneNumber }
           : {}),
       });
+
+      if (normalizedGuardianPhoneNumber.length > 0) {
+        await markLocationPermissionPromptPending(email.trim());
+      }
 
       Alert.alert('회원가입 완료', registerResponse.message, [
         {
