@@ -1,5 +1,13 @@
+export type EmergencyCategoryId =
+  | 'bleeding'
+  | 'burn'
+  | 'fractureBruise'
+  | 'fever'
+  | 'skinRash'
+  | 'airwayObstruction';
+
 export interface FirstAidCategory {
-  id: string;
+  id: EmergencyCategoryId;
   label: string;
   subtypes: readonly string[];
 }

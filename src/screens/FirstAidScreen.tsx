@@ -50,9 +50,6 @@ const iconByCategoryId: Record<string, React.ComponentType<SvgProps>> = {
 export const FirstAidScreen = ({
   navigation,
 }: FirstAidProps): React.JSX.Element => {
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [selectedLabel, setSelectedLabel] = React.useState<string | null>(null);
-
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <View className="px-5 pt-8">
@@ -85,19 +82,18 @@ export const FirstAidScreen = ({
           columnWrapperStyle={styles.columnWrapper}
           renderItem={({ item }) => {
             const Icon = iconByCategoryId[item.id] ?? MedicinesIcon;
-            const selected = selectedId === item.id;
             const isAirwayObstruction = item.id === 'airwayObstruction';
 
             return (
               <TouchableOpacity
-                className={`h-[112px] flex-1 bg-white rounded-xl items-center justify-center border ${
-                  selected ? 'border-red' : 'border-memoLine'
-                }`}
+                className="h-[112px] flex-1 items-center justify-center rounded-xl border border-memoLine bg-white"
                 style={styles.optionCard}
-                onPress={() => {
-                  setSelectedId(item.id === selectedId ? null : item.id);
-                  setSelectedLabel(item.id === selectedId ? null : item.label);
-                }}
+                onPress={() =>
+                  navigation.navigate('FirstAidDetail', {
+                    mainId: item.id,
+                    mainLabel: item.label,
+                  })
+                }
               >
                 <View className="mb-2">
                   {isAirwayObstruction ? (
@@ -110,11 +106,7 @@ export const FirstAidScreen = ({
                     <Icon width={48} height={48} />
                   )}
                 </View>
-                <Text
-                  className={`text-coment font-suitBold ${
-                    selected ? 'text-red' : 'text-black'
-                  }`}
-                >
+                <Text className="text-coment font-suitBold text-black">
                   {item.label}
                 </Text>
               </TouchableOpacity>
@@ -124,36 +116,9 @@ export const FirstAidScreen = ({
       </View>
 
       <View className="bg-background px-5 pb-5">
-        <TouchableOpacity
-          className={`h-14 rounded-lg justify-center items-center ${
-            selectedId ? 'bg-red' : 'bg-disabled'
-          }`}
-          disabled={!selectedId}
-          onPress={() => {
-            if (!selectedId || !selectedLabel) {
-              return;
-            }
-
-            const selectedCategory = FIRST_AID_CATEGORIES.find(
-              category => category.id === selectedId,
-            );
-
-            if (selectedCategory?.subtypes.length === 0) {
-              navigation.navigate('EmergencyGuide', {
-                mainLabel: selectedLabel,
-                source: 'manual',
-              });
-              return;
-            }
-
-            navigation.navigate('FirstAidDetail', {
-              mainId: selectedId,
-              mainLabel: selectedLabel,
-            });
-          }}
-        >
-          <Text className="text-white font-bold">다음 - AI 분석 시작</Text>
-        </TouchableOpacity>
+        <Text className="text-center text-coment font-suitMedium text-textDim">
+          유형을 누르면 맞춤 질문이 시작됩니다.
+        </Text>
       </View>
     </SafeAreaView>
   );
