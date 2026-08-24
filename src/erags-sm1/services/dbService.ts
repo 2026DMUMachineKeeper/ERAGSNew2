@@ -1,5 +1,3 @@
-export const DEFAULT_DATABASE_API_BASE_URL = 'http://13.125.213.48:4000';
-
 export interface InventoryPort {
   decreaseQuantity(id: number, amount?: number): Promise<void>;
 }
@@ -20,7 +18,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export class ServerInventoryService implements InventoryPort {
   constructor(
-    private readonly baseUrl: string = DEFAULT_DATABASE_API_BASE_URL,
+    private readonly baseUrl: string,
     private readonly fetcher: FetchLike = fetch,
   ) {}
 

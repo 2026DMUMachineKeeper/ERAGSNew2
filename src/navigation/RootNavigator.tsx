@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
 import { restoreAuthSession } from '@/services';
+import type { EmergencyGuideResponse } from '@/types';
 
 import { MainTabNavigator } from './MainTabNavigator';
 import type { MedicineItem } from '../services/medicineApi';
@@ -27,6 +28,7 @@ export type RootStackParamList = {
         mainLabel?: string;
         subtypeLabel?: string;
         source?: 'manual' | 'machine';
+        guide?: EmergencyGuideResponse;
       }
     | undefined;
   QRCode: undefined;
@@ -102,7 +104,9 @@ export const RootNavigator = (): React.JSX.Element => {
       />
       <Stack.Screen
         name="PasswordReset"
-        component={require('../screens/PasswordResetScreen').PasswordResetScreen}
+        component={
+          require('../screens/PasswordResetScreen').PasswordResetScreen
+        }
       />
       <Stack.Screen
         name="FirstAid"

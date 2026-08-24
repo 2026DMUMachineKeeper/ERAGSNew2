@@ -12,6 +12,8 @@ export interface EmergencyGuideRuntimeStep {
   instruction: string;
   checkpointQuestion: string;
   requiredItemId: number | null;
+  requiredItemName: string | null;
+  requiredQuantity: number;
   requiredSlotId: number | null;
   imageResource: string;
 }
