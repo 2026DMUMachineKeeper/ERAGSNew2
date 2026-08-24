@@ -11,7 +11,40 @@ export interface EmergencyQuestion {
   prompt: string;
   isMultiple: boolean;
   options: readonly EmergencyQuestionOption[];
+  exclusiveAnswerIds?: readonly string[];
+  mutuallyExclusiveGroups?: readonly (readonly string[])[];
 }
+
+export const getNextEmergencyAnswerIds = (
+  question: EmergencyQuestion,
+  previousAnswerIds: readonly string[],
+  answerId: string,
+): readonly string[] => {
+  if (!question.isMultiple) {
+    return [answerId];
+  }
+
+  if (previousAnswerIds.includes(answerId)) {
+    return previousAnswerIds.filter(id => id !== answerId);
+  }
+
+  const exclusiveAnswerIds = question.exclusiveAnswerIds ?? [];
+
+  if (exclusiveAnswerIds.includes(answerId)) {
+    return [answerId];
+  }
+
+  const selectedGroup = question.mutuallyExclusiveGroups?.find(group =>
+    group.includes(answerId),
+  );
+
+  return [
+    ...previousAnswerIds.filter(
+      id => !exclusiveAnswerIds.includes(id) && !selectedGroup?.includes(id),
+    ),
+    answerId,
+  ];
+};
 
 const COMMON_QUESTIONS: readonly EmergencyQuestion[] = [
   {
@@ -19,6 +52,7 @@ const COMMON_QUESTIONS: readonly EmergencyQuestion[] = [
     title: '즉시 위험 신호',
     prompt: '지금 환자에게 보이는 위험 신호를 모두 선택해 주세요.',
     isMultiple: true,
+    exclusiveAnswerIds: ['NONE'],
     options: [
       { id: 'UNCONSCIOUS', label: '의식이 없거나 깨워도 반응이 없음' },
       {
@@ -39,8 +73,8 @@ const COMMON_QUESTIONS: readonly EmergencyQuestion[] = [
   {
     id: 'visibleSymptoms',
     title: '현재 보이는 증상',
-    prompt: '현재 보이거나 확인되는 증상을 모두 선택해 주세요.',
-    isMultiple: true,
+    prompt: '현재 가장 대표적인 증상 하나를 선택해 주세요.',
+    isMultiple: false,
     options: [
       { id: 'BLEEDING', label: '피가 나거나 상처가 있음' },
       { id: 'BURN', label: '데었거나 피부가 화상을 입음' },
@@ -69,6 +103,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '출혈 양상',
       prompt: '출혈 상태에 해당하는 항목을 모두 선택해 주세요.',
       isMultiple: true,
+      exclusiveAnswerIds: ['BLEEDING_UNKNOWN'],
       options: [
         { id: 'BLEEDING_OOZING', label: '피가 조금씩 배어 나옴' },
         { id: 'BLEEDING_CONTINUOUS', label: '피가 계속 흐름' },
@@ -82,6 +117,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '상처 상태와 추가 위험',
       prompt: '상처 상태에 해당하는 항목을 모두 선택해 주세요.',
       isMultiple: true,
+      exclusiveAnswerIds: ['NONE'],
       options: [
         { id: 'WOUND_DEEP', label: '상처가 깊거나 벌어져 있음' },
         { id: 'FOREIGN_OBJECT', label: '이물질이 박혀 있음' },
@@ -101,6 +137,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '화상 위치와 원인',
       prompt: '화상 부위나 원인에 해당하는 항목을 모두 선택해 주세요.',
       isMultiple: true,
+      mutuallyExclusiveGroups: [['BURN_LARGE_AREA', 'BURN_SMALL_AREA']],
       options: [
         { id: 'BURN_FACE_NECK', label: '얼굴, 목 또는 기도 주변' },
         { id: 'BURN_LARGE_AREA', label: '넓은 부위' },
@@ -115,6 +152,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '피부 상태',
       prompt: '화상 부위의 피부 상태에 해당하는 항목을 모두 선택해 주세요.',
       isMultiple: true,
+      exclusiveAnswerIds: ['UNKNOWN'],
       options: [
         { id: 'RED_PAINFUL', label: '붉고 통증이 있음' },
         { id: 'BLISTER', label: '물집이 생김' },
@@ -130,6 +168,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '손상 상태',
       prompt: '다친 부위에 해당하는 상태를 모두 선택해 주세요.',
       isMultiple: true,
+      exclusiveAnswerIds: ['MINOR_BRUISE'],
       options: [
         { id: 'DEFORMITY', label: '모양이 평소와 다르게 변함' },
         { id: 'OPEN_FRACTURE', label: '뼈가 보이거나 피부 밖으로 나옴' },
@@ -144,6 +183,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '말단 혈액순환·감각',
       prompt: '다친 부위 아래쪽의 손이나 발 상태를 선택해 주세요.',
       isMultiple: true,
+      exclusiveAnswerIds: ['NORMAL_DISTAL', 'UNKNOWN'],
       options: [
         { id: 'NUMBNESS', label: '감각이 없거나 저림' },
         { id: 'PALE_COLD', label: '창백하거나 차가움' },
@@ -174,6 +214,7 @@ const CATEGORY_QUESTIONS: Record<
       title: '알레르기 위험 신호',
       prompt: '현재 나타나는 증상을 모두 선택해 주세요.',
       isMultiple: true,
+      exclusiveAnswerIds: ['UNKNOWN'],
       options: [
         { id: 'LOCAL_RASH', label: '일부 부위에만 발진이나 가려움이 있음' },
         { id: 'WIDESPREAD_HIVES', label: '전신에 두드러기가 퍼짐' },
@@ -190,6 +231,9 @@ const CATEGORY_QUESTIONS: Record<
       title: '체온과 동반 증상',
       prompt: '체온과 함께 나타나는 증상을 선택해 주세요.',
       isMultiple: true,
+      mutuallyExclusiveGroups: [
+        ['TEMP_UNDER_39', 'TEMP_39_OR_HIGHER', 'TEMP_UNKNOWN'],
+      ],
       options: [
         { id: 'TEMP_UNDER_39', label: '측정 체온이 39도 미만' },
         { id: 'TEMP_39_OR_HIGHER', label: '측정 체온이 39도 이상' },

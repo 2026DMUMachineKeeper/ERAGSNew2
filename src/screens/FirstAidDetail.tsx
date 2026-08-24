@@ -1,16 +1,71 @@
 import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackIcon } from '@/assets';
 import { EmergencyQuestionOption } from '@/components/EmergencyGuide';
-import { FIRST_AID_CATEGORIES, getEmergencyQuestions } from '@/constants';
+import {
+  FIRST_AID_CATEGORIES,
+  getNextEmergencyAnswerIds,
+  getEmergencyQuestions,
+} from '@/constants';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
+import type { EmergencyGuideQuestionnaireAnswer } from '@/types';
 
 interface QuestionAnswers {
   [questionId: string]: readonly string[];
 }
+
+const SERVER_QUESTION_ID_BY_SCREEN_ID: Record<string, string> = {
+  immediateDanger: 'Q1_IMMEDIATE_DANGER',
+  visibleSymptoms: 'Q2_VISIBLE_SYMPTOMS',
+  bleedingPattern: 'B1_BLEEDING_PATTERN',
+  woundRisk: 'B2_BLEEDING_RISKS',
+  burnCause: 'U1_BURN_LOCATION_CAUSE',
+  burnSkinState: 'U2_BURN_SKIN_STATE',
+  injuryState: 'F1_INJURY_STATE',
+  distalCondition: 'F2_DISTAL_STATE',
+  speakOrCough: 'A1_SPEAK_COUGH',
+  allergyRisk: 'R1_ALLERGY_RISK',
+  feverSymptoms: 'T1_FEVER_NEUROLOGIC',
+  ageGroup: 'C1_AGE_GROUP',
+};
+
+const SCREEN_QUESTION_IDS_IN_ORDER = [
+  'immediateDanger',
+  'visibleSymptoms',
+  'bleedingPattern',
+  'woundRisk',
+  'burnCause',
+  'burnSkinState',
+  'injuryState',
+  'distalCondition',
+  'speakOrCough',
+  'allergyRisk',
+  'feverSymptoms',
+  'ageGroup',
+] as const;
+
+export const toEmergencyGuideQuestionnaire = (
+  questionAnswers: QuestionAnswers,
+): EmergencyGuideQuestionnaireAnswer[] =>
+  SCREEN_QUESTION_IDS_IN_ORDER.flatMap(questionId => {
+    const answerIds = questionAnswers[questionId] ?? [];
+    const serverQuestionId = SERVER_QUESTION_ID_BY_SCREEN_ID[questionId];
+
+    return serverQuestionId && answerIds.length > 0
+      ? [{ questionId: serverQuestionId, answerIds }]
+      : [];
+  });
 
 type FirstAidDetailProps = NativeStackScreenProps<
   RootStackParamList,
@@ -31,6 +86,7 @@ export const FirstAidDetail = ({
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
   const [questionAnswers, setQuestionAnswers] =
     React.useState<QuestionAnswers>({});
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   if (!category) {
     return (
@@ -53,24 +109,12 @@ export const FirstAidDetail = ({
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
   const handleOptionPress = (answerId: string): void => {
     setQuestionAnswers(currentAnswers => {
-      if (!currentQuestion.isMultiple) {
-        return { ...currentAnswers, [currentQuestion.id]: [answerId] };
-      }
-
       const previousAnswerIds = currentAnswers[currentQuestion.id] ?? [];
-      const isExclusiveAnswer = answerId === 'NONE';
-      let nextAnswerIds: readonly string[];
-
-      if (previousAnswerIds.includes(answerId)) {
-        nextAnswerIds = previousAnswerIds.filter(id => id !== answerId);
-      } else if (isExclusiveAnswer) {
-        nextAnswerIds = [answerId];
-      } else {
-        nextAnswerIds = [
-          ...previousAnswerIds.filter(id => id !== 'NONE'),
-          answerId,
-        ];
-      }
+      const nextAnswerIds = getNextEmergencyAnswerIds(
+        currentQuestion,
+        previousAnswerIds,
+        answerId,
+      );
 
       return { ...currentAnswers, [currentQuestion.id]: nextAnswerIds };
     });
@@ -85,16 +129,50 @@ export const FirstAidDetail = ({
     setCurrentQuestionIndex(index => index - 1);
   };
 
-  const handleNextPress = (): void => {
+  const handleNextPress = async (): Promise<void> => {
     if (!isLastQuestion) {
       setCurrentQuestionIndex(index => index + 1);
       return;
     }
 
-    navigation.navigate('EmergencyGuide', {
-      mainLabel: category.label,
-      source: 'manual',
-    });
+    setIsSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append(
+        'request',
+        JSON.stringify({
+          requestId: `manual-${Date.now()}`,
+          language: 'ko-KR',
+        }),
+      );
+      formData.append(
+        'questionnaire',
+        JSON.stringify(toEmergencyGuideQuestionnaire(questionAnswers)),
+      );
+
+      const createdGuide = await createEmergencyGuide(formData);
+      const guide =
+        createdGuide.treatment.steps.length === 0
+          ? await retryEmergencyGuide(createdGuide.sessionId)
+          : createdGuide;
+
+      navigation.replace('EmergencyGuide', {
+        mainLabel: category.label,
+        source: 'manual',
+        guide,
+      });
+    } catch (error) {
+      console.error('[FirstAidDetail] 응급 가이드 생성 실패:', error);
+      Alert.alert(
+        '응급 가이드 생성 실패',
+        error instanceof Error
+          ? error.message
+          : '응급 가이드를 불러오지 못했습니다.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -161,14 +239,20 @@ export const FirstAidDetail = ({
       <View className="bg-background px-5 pb-5 pt-3">
         <TouchableOpacity
           className={`h-14 items-center justify-center rounded-lg ${
-            selectedAnswerIds.length > 0 ? 'bg-red' : 'bg-disabled'
+            selectedAnswerIds.length > 0 && !isSubmitting
+              ? 'bg-red'
+              : 'bg-disabled'
           }`}
-          disabled={selectedAnswerIds.length === 0}
+          disabled={selectedAnswerIds.length === 0 || isSubmitting}
           onPress={handleNextPress}
         >
-          <Text className="text-body font-suitBold text-white">
-            {isLastQuestion ? '응급처치 가이드 시작' : '다음 질문'}
-          </Text>
+          {isSubmitting ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text className="text-body font-suitBold text-white">
+              {isLastQuestion ? '응급처치 가이드 시작' : '다음 질문'}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

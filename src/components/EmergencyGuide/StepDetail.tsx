@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity } from 'react-native';
+import { Image, Modal, Text, TouchableOpacity, View } from 'react-native';
 import type { EmergencyGuideRuntimeStep } from '../../constants/emergencyGuideData';
 
 type StepDetailStep = Partial<EmergencyGuideRuntimeStep> & {
@@ -11,15 +11,12 @@ type Props = {
   onStopPress?: () => void;
 };
 
-const supplyNameById: Record<number, string> = {
-  1: '붕대',
-};
-
 const getInstructionFromTitle = (title: string) =>
   title.replace(/^\d+\s*단계:\s*/, '').trim();
 
-export function StepDetail({ step, onStopPress }: Props) {
+export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
   const [showStopModal, setShowStopModal] = React.useState(false);
+  const imageResource = step?.imageResource?.trim() ?? '';
   const title = typeof step?.title === 'string' ? step.title : '';
   const stepNo =
     typeof step?.stepNo === 'number'
@@ -33,9 +30,11 @@ export function StepDetail({ step, onStopPress }: Props) {
     step?.checkpointQuestion?.trim() ||
     step?.description?.trim() ||
     '현재 단계를 확인하고 다음 안내를 진행하세요.';
+  const requiredItemName = step?.requiredItemName?.trim() ?? '';
+  const requiredQuantity = step?.requiredQuantity ?? 0;
   const requiredSupply =
-    typeof step?.requiredItemId === 'number'
-      ? supplyNameById[step.requiredItemId] ?? '필요 약품'
+    requiredItemName && requiredQuantity > 0
+      ? `${requiredItemName} x${requiredQuantity}`
       : null;
 
   return (
@@ -104,8 +103,36 @@ export function StepDetail({ step, onStopPress }: Props) {
       </View>
 
       <View className="mt-6 items-center">
-        <View className="w-[260px] h-[200px] bg-offWhite rounded-lg items-center justify-center">
-          <Text className="text-gray">이미지</Text>
+        <View className="h-[200px] w-[260px] items-center justify-center overflow-hidden rounded-lg bg-offWhite">
+          {imageResource ? (
+            <Image
+              key={imageResource}
+              accessibilityLabel={`${stepNo}단계 응급처치 이미지`}
+              className="h-full w-full"
+              resizeMode="contain"
+              source={{ uri: imageResource }}
+              onLoadStart={(): void => {
+                console.warn('[EmergencyGuide Image][Request]', {
+                  requestUrl: imageResource,
+                });
+              }}
+              onLoad={(): void => {
+                console.warn('[EmergencyGuide Image][Response]', {
+                  requestUrl: imageResource,
+                  status: 'LOADED',
+                });
+              }}
+              onError={(event): void => {
+                console.error('[EmergencyGuide Image][Response]', {
+                  requestUrl: imageResource,
+                  status: 'FAILED',
+                  error: event.nativeEvent.error,
+                });
+              }}
+            />
+          ) : (
+            <Text className="text-gray">제공된 이미지가 없습니다.</Text>
+          )}
         </View>
       </View>
 
@@ -121,4 +148,4 @@ export function StepDetail({ step, onStopPress }: Props) {
       ) : null}
     </View>
   );
-}
+};

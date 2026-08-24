@@ -3,7 +3,7 @@ import 'react-native-gesture-handler/jestSetup';
 /* global jest */
 
 jest.mock('react-native-config', () => ({
-  API_BASE_URL: 'http://localhost:3000',
+  API_BASE_URL: 'test-api-base-url',
 }));
 
 jest.mock('react-native-keychain', () => ({

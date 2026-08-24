@@ -1,0 +1,221 @@
+import Config from 'react-native-config';
+
+import type { ApiError, EmergencyGuideResponse } from '@/types';
+
+interface EmergencyGuideSuccessEnvelope {
+  success: true;
+  data: EmergencyGuideResponse;
+  message?: string;
+}
+
+export class EmergencyGuideRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code: string,
+    public readonly requestUrl: string,
+  ) {
+    super(message);
+    this.name = 'EmergencyGuideRequestError';
+  }
+}
+
+const getEmergencyGuideBaseUrl = (): string => {
+  const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
+    /\/+$/,
+    '',
+  );
+
+  if (!baseUrl) {
+    throw new Error('API_BASE_URL이 설정되지 않았습니다. .env를 확인하세요.');
+  }
+
+  return baseUrl;
+};
+
+export const getEmergencyGuideImageUrl = (
+  imageUrl: string | null,
+  imageResource: string | null,
+): string => {
+  const normalizedImageUrl = imageUrl?.trim() ?? '';
+  const normalizedImageResource = imageResource?.trim() ?? '';
+
+  if (!normalizedImageUrl && !normalizedImageResource) {
+    return '';
+  }
+
+  if (normalizedImageUrl) {
+    const imagePathWithoutOrigin = normalizedImageUrl.replace(
+      /^https?:\/\/[^/]+/i,
+      '',
+    );
+    const imagePath = imagePathWithoutOrigin.startsWith('/')
+      ? imagePathWithoutOrigin
+      : `/${imagePathWithoutOrigin}`;
+
+    return `${getEmergencyGuideBaseUrl()}${imagePath}`;
+  }
+
+  return `${getEmergencyGuideBaseUrl()}/images/${encodeURIComponent(
+    normalizedImageResource,
+  )}`;
+};
+
+const isRecord = (payload: unknown): payload is Record<string, unknown> =>
+  payload !== null && typeof payload === 'object';
+
+const stringifyForLog = (payload: unknown): string => {
+  try {
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return String(payload);
+  }
+};
+
+const readFormDataParts = (formData: FormData): unknown => {
+  const reactNativeFormData = formData as unknown as {
+    getParts?: () => readonly unknown[];
+  };
+
+  if (typeof reactNativeFormData.getParts === 'function') {
+    return reactNativeFormData.getParts();
+  }
+
+  const standardFormData = formData as unknown as {
+    entries?: () => Iterable<readonly [string, unknown]>;
+  };
+
+  return typeof standardFormData.entries === 'function'
+    ? Array.from(standardFormData.entries())
+    : [];
+};
+
+const logRequest = (requestUrl: string, body: unknown): void => {
+  console.warn(
+    `[EmergencyGuide API][Request]\n${stringifyForLog({
+      requestUrl,
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      body,
+    })}`,
+  );
+};
+
+const readFailure = (payload: unknown): ApiError | null => {
+  if (!isRecord(payload) || !isRecord(payload.error)) {
+    return null;
+  }
+
+  const { code, message, details } = payload.error;
+
+  if (typeof code !== 'string' || typeof message !== 'string') {
+    return null;
+  }
+
+  return {
+    code,
+    message,
+    details: Array.isArray(details)
+      ? details.filter((detail): detail is string => typeof detail === 'string')
+      : [],
+  };
+};
+
+const readEmergencyGuideResponse = async (
+  response: Response,
+  requestUrl: string,
+): Promise<EmergencyGuideResponse> => {
+  let payload: unknown;
+
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    console.error(
+      `[EmergencyGuide API][Response]\n${stringifyForLog({
+        requestUrl,
+        status: response.status,
+        ok: response.ok,
+        body: 'JSON 파싱 실패',
+      })}`,
+    );
+    throw new EmergencyGuideRequestError(
+      '응급 가이드 응답 형식이 올바르지 않습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  console.warn(
+    `[EmergencyGuide API][Response]\n${stringifyForLog({
+      requestUrl,
+      status: response.status,
+      ok: response.ok,
+      body: payload,
+    })}`,
+  );
+
+  const failure = readFailure(payload);
+
+  if (!response.ok || failure) {
+    throw new EmergencyGuideRequestError(
+      failure?.message ??
+        `응급 가이드 요청에 실패했습니다. (${response.status})`,
+      response.status,
+      failure?.code ?? 'REQUEST_FAILED',
+      requestUrl,
+    );
+  }
+
+  if (
+    !isRecord(payload) ||
+    payload.success !== true ||
+    !isRecord(payload.data) ||
+    typeof payload.data.sessionId !== 'string' ||
+    payload.data.sessionId.trim().length === 0
+  ) {
+    throw new EmergencyGuideRequestError(
+      '응급 가이드 sessionId가 없습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  return (payload as unknown as EmergencyGuideSuccessEnvelope).data;
+};
+
+export const createEmergencyGuide = async (
+  formData: FormData,
+): Promise<EmergencyGuideResponse> => {
+  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
+  logRequest(requestUrl, readFormDataParts(formData));
+  const response = await fetch(requestUrl, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: formData,
+  });
+
+  return readEmergencyGuideResponse(response, requestUrl);
+};
+
+export const retryEmergencyGuide = async (
+  sessionId: string,
+): Promise<EmergencyGuideResponse> => {
+  const normalizedSessionId = sessionId.trim();
+
+  if (!normalizedSessionId) {
+    throw new Error('응급 가이드 sessionId가 없습니다.');
+  }
+
+  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions/${encodeURIComponent(
+    normalizedSessionId,
+  )}/guide`;
+  logRequest(requestUrl, null);
+  const response = await fetch(requestUrl, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  });
+
+  return readEmergencyGuideResponse(response, requestUrl);
+};
