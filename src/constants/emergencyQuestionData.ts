@@ -73,8 +73,8 @@ const COMMON_QUESTIONS: readonly EmergencyQuestion[] = [
   {
     id: 'visibleSymptoms',
     title: '현재 보이는 증상',
-    prompt: '현재 가장 대표적인 증상 하나를 선택해 주세요.',
-    isMultiple: false,
+    prompt: '현재 보이거나 확인되는 증상을 모두 선택해 주세요.',
+    isMultiple: true,
     options: [
       { id: 'BLEEDING', label: '피가 나거나 상처가 있음' },
       { id: 'BURN', label: '데었거나 피부가 화상을 입음' },

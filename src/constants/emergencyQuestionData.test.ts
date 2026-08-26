@@ -105,23 +105,17 @@ describe('getEmergencyQuestions', () => {
     ).toEqual(['SEIZURE', 'TEMP_39_OR_HIGHER']);
   });
 
-  it('Q2 대표 사고 유형을 변경하면 기존 선택을 교체한다', (): void => {
+  it('Q2에서 다른 증상과 알 수 없음을 다중 선택할 수 있다', (): void => {
     const visibleSymptomsQuestion = getEmergencyQuestions('bleeding').find(
       question => question.id === 'visibleSymptoms',
     );
 
-    expect(visibleSymptomsQuestion).toBeDefined();
-
-    if (!visibleSymptomsQuestion) {
-      throw new Error('현재 증상 질문을 찾을 수 없습니다.');
-    }
-
+    expect(visibleSymptomsQuestion?.isMultiple).toBe(true);
     expect(
-      getNextEmergencyAnswerIds(
-        visibleSymptomsQuestion,
-        ['BLEEDING'],
-        'OTHER_UNKNOWN',
+      visibleSymptomsQuestion?.options.some(
+        option => option.id === 'OTHER_UNKNOWN',
       ),
-    ).toEqual(['OTHER_UNKNOWN']);
+    ).toBe(true);
   });
+
 });
