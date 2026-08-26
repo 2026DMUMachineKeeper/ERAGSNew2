@@ -17,6 +17,7 @@ import {
   getNextEmergencyAnswerIds,
   getEmergencyQuestions,
 } from '@/constants';
+import type { EmergencyCategoryId } from '@/constants';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
 import type { EmergencyGuideQuestionnaireAnswer } from '@/types';
@@ -55,6 +56,15 @@ const SCREEN_QUESTION_IDS_IN_ORDER = [
   'ageGroup',
 ] as const;
 
+const SERVER_SYMPTOM_ID_BY_CATEGORY: Record<EmergencyCategoryId, string> = {
+  bleeding: 'BLEEDING',
+  burn: 'BURN',
+  fractureBruise: 'FRACTURE_BRUISE',
+  fever: 'FEVER_NEUROLOGIC',
+  skinRash: 'ALLERGY_RASH',
+  airwayObstruction: 'AIRWAY_OBSTRUCTION',
+};
+
 export const toEmergencyGuideQuestionnaire = (
   questionAnswers: QuestionAnswers,
 ): EmergencyGuideQuestionnaireAnswer[] =>
@@ -84,8 +94,17 @@ export const FirstAidDetail = ({
     [category],
   );
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
-  const [questionAnswers, setQuestionAnswers] =
-    React.useState<QuestionAnswers>({});
+  const [questionAnswers, setQuestionAnswers] = React.useState<QuestionAnswers>(
+    (): QuestionAnswers => {
+      if (!category) {
+        return {};
+      }
+
+      return {
+        visibleSymptoms: [SERVER_SYMPTOM_ID_BY_CATEGORY[category.id]],
+      };
+    },
+  );
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   if (!category) {
@@ -110,6 +129,15 @@ export const FirstAidDetail = ({
   const handleOptionPress = (answerId: string): void => {
     setQuestionAnswers(currentAnswers => {
       const previousAnswerIds = currentAnswers[currentQuestion.id] ?? [];
+
+      if (
+        currentQuestion.id === 'visibleSymptoms' &&
+        answerId === SERVER_SYMPTOM_ID_BY_CATEGORY[category.id] &&
+        previousAnswerIds.includes(answerId)
+      ) {
+        return currentAnswers;
+      }
+
       const nextAnswerIds = getNextEmergencyAnswerIds(
         currentQuestion,
         previousAnswerIds,
