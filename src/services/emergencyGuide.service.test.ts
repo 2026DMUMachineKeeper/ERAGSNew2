@@ -1,5 +1,7 @@
 import {
+  createAudioEmergencyGuide,
   createEmergencyGuide,
+  createImageEmergencyGuide,
   EmergencyGuideRequestError,
   getEmergencyGuideImageUrl,
   retryEmergencyGuide,
@@ -103,6 +105,54 @@ describe('emergencyGuide.service', () => {
     expect(consoleWarnMock).toHaveBeenCalledWith(
       expect.stringContaining('"status": 200'),
     );
+  });
+
+  it('음성과 이미지를 필수 요청 정보와 함께 전송한다', async (): Promise<void> => {
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(200, {
+          success: true,
+          data: createGuidePayload('voice-session'),
+        }),
+      )
+      .mockResolvedValueOnce(
+        createMockResponse(200, {
+          success: true,
+          data: createGuidePayload('image-session'),
+        }),
+      );
+
+    await createAudioEmergencyGuide({
+      uri: 'file:///voice.m4a',
+      name: 'voice.m4a',
+      type: 'audio/mp4',
+    });
+    await createImageEmergencyGuide({
+      uri: 'file:///injury.jpg',
+      name: 'injury.jpg',
+      type: 'image/jpeg',
+    });
+
+    const getFieldNames = (callIndex: number): string[] => {
+      const requestInit = fetchMock.mock.calls[callIndex]?.[1] as
+        | RequestInit
+        | undefined;
+      const formData = requestInit?.body as FormData | undefined;
+      if (!formData) {
+        throw new Error('미디어 요청 FormData가 없습니다.');
+      }
+
+      const standardFormData = formData as unknown as {
+        entries: () => Iterable<readonly [string, unknown]>;
+      };
+
+      return Array.from(standardFormData.entries()).map(
+        ([fieldName]) => fieldName,
+      );
+    };
+
+    expect(getFieldNames(0)).toEqual(['request', 'audio']);
+    expect(getFieldNames(1)).toEqual(['request', 'image']);
   });
 
   it('빈 sessionId는 요청하지 않는다', async (): Promise<void> => {

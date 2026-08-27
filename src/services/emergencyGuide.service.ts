@@ -1,11 +1,21 @@
 import Config from 'react-native-config';
 
-import type { ApiError, EmergencyGuideResponse } from '@/types';
+import type {
+  ApiError,
+  EmergencyGuideMediaFile,
+  EmergencyGuideResponse,
+} from '@/types';
 
 interface EmergencyGuideSuccessEnvelope {
   success: true;
   data: EmergencyGuideResponse;
   message?: string;
+}
+
+interface ReactNativeFile {
+  uri: string;
+  name: string;
+  type: string;
 }
 
 export class EmergencyGuideRequestError extends Error {
@@ -198,6 +208,36 @@ export const createEmergencyGuide = async (
 
   return readEmergencyGuideResponse(response, requestUrl);
 };
+
+const createMediaEmergencyGuide = (
+  fieldName: 'audio' | 'image',
+  mediaFile: EmergencyGuideMediaFile,
+): Promise<EmergencyGuideResponse> => {
+  const formData = new FormData();
+  const requestIdPrefix = fieldName === 'audio' ? 'voice' : 'image';
+  const reactNativeFile: ReactNativeFile = mediaFile;
+
+  formData.append(
+    'request',
+    JSON.stringify({
+      requestId: `${requestIdPrefix}-${Date.now()}`,
+      language: 'ko-KR',
+    }),
+  );
+  formData.append(fieldName, reactNativeFile as unknown as Blob);
+
+  return createEmergencyGuide(formData);
+};
+
+export const createAudioEmergencyGuide = (
+  audioFile: EmergencyGuideMediaFile,
+): Promise<EmergencyGuideResponse> =>
+  createMediaEmergencyGuide('audio', audioFile);
+
+export const createImageEmergencyGuide = (
+  imageFile: EmergencyGuideMediaFile,
+): Promise<EmergencyGuideResponse> =>
+  createMediaEmergencyGuide('image', imageFile);
 
 export const retryEmergencyGuide = async (
   sessionId: string,

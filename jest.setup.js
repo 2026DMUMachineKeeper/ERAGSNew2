@@ -47,10 +47,13 @@ jest.mock('react-native-image-picker', () => ({
   launchCamera: jest.fn(),
 }));
 
-jest.mock('@react-native-voice/voice', () => ({
-  destroy: jest.fn(() => Promise.resolve()),
-  isAvailable: jest.fn(() => Promise.resolve(true)),
-  removeAllListeners: jest.fn(),
-  start: jest.fn(() => Promise.resolve()),
-  stop: jest.fn(() => Promise.resolve()),
+jest.mock('react-native-nitro-sound', () => ({
+  __esModule: true,
+  default: {
+    startRecorder: jest.fn(() => Promise.resolve('file:///voice.m4a')),
+    stopRecorder: jest.fn(() => Promise.resolve('file:///voice.m4a')),
+  },
+  AudioEncoderAndroidType: { AAC: 3 },
+  AudioSourceAndroidType: { MIC: 1 },
+  OutputFormatAndroidType: { MPEG_4: 2 },
 }));
