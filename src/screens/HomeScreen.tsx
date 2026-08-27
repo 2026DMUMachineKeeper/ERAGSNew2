@@ -32,12 +32,15 @@ import {
 } from '../assets/icons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
-import { useEmergencyTriage } from '../erags-sm1/hooks/useEmergencyTriage';
-import type {
-  AccidentClassification,
-  PatientContext,
-} from '../erags-sm1/types';
-import { getAddressFromCoordinates, hasLocationPermission } from '../services';
+import {
+  createAudioEmergencyGuide,
+  createImageEmergencyGuide,
+  getAddressFromCoordinates,
+  hasLocationPermission,
+  retryEmergencyGuide,
+  startAudioRecording,
+  stopAudioRecording,
+} from '../services';
 import tailwindConfig from '../../tailwind.config';
 
 const { colors } = tailwindConfig;
@@ -48,18 +51,6 @@ type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'HomeTab'>,
   NativeStackScreenProps<RootStackParamList>
 >;
-
-const defaultPatientContext: PatientContext = {
-  bleedingLevel: 'MEDIUM',
-  consciousness: 'UNKNOWN',
-  ageGroup: 'ADULT',
-};
-
-const defaultImageAccident: AccidentClassification = {
-  type: 'BLEEDING',
-  confidence: 0,
-  rawInputType: 'IMAGE',
-};
 
 const cardShadow = StyleSheet.create({
   elevated: {
@@ -99,7 +90,6 @@ const getCurrentPosition = (): Promise<GeolocationResponse> =>
   });
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
-  const triage = useEmergencyTriage();
   const [isVisionUploading, setIsVisionUploading] = React.useState(false);
   const [visionStatus, setVisionStatus] = React.useState<string | null>(null);
 
@@ -138,7 +128,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
     const options: CameraOptions = {
       mediaType: 'photo',
-      includeBase64: true,
       saveToPhotos: false,
       quality: 0.9,
       cameraType: 'back',
@@ -172,24 +161,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         return;
       }
 
-      const result = await triage.sendImageTriage(
-        // 사진 버튼
-        asset.uri,
-        defaultImageAccident,
-        defaultPatientContext,
-      );
-
-      if (!result.ok) {
-        setVisionStatus('이미지 입력을 ML로 전달하지 못했습니다.');
-        Alert.alert(
-          '이미지 전송 실패',
-          '이미지 입력을 ML로 전달하지 못했습니다.',
-        );
-        return;
-      }
-
-      setVisionStatus('이미지 입력을 ML로 전달했습니다.');
-      Alert.alert('전송 완료', '이미지 입력을 ML로 전달했습니다.');
+      const createdGuide = await createImageEmergencyGuide({
+        uri: asset.uri,
+        name: asset.fileName ?? `emergency-${Date.now()}.jpg`,
+        type: asset.type ?? 'image/jpeg',
+      });
+      const guide =
+        createdGuide.treatment.steps.length === 0
+          ? await retryEmergencyGuide(createdGuide.sessionId)
+          : createdGuide;
+      navigation.navigate('EmergencyGuide', { source: 'image', guide });
     } catch (error) {
       console.error('[HomeScreen] 사진 전송 실패:', error);
       const message =
@@ -206,7 +187,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const voiceRequestInFlightRef = React.useRef(false);
   const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
   const [isListening, setIsListening] = React.useState(false);
-  const isVoiceBusy = isListening || triage.isBusy;
+  const [isVoiceProcessing, setIsVoiceProcessing] = React.useState(false);
 
   const handleEmergencyReportPress =
     React.useCallback(async (): Promise<void> => {
@@ -251,7 +232,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, []);
 
-  const handleVoicePress = React.useCallback(async () => {
+  const handleVoicePress = React.useCallback(async (): Promise<void> => {
     if (voiceRequestInFlightRef.current) {
       return;
     }
@@ -259,51 +240,38 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     voiceRequestInFlightRef.current = true;
 
     try {
+      if (isListening) {
+        setIsListening(false);
+        setIsVoiceProcessing(true);
+        setVoiceStatus('녹음을 마치고 음성 파일을 전송 중입니다.');
+        const audioFile = await stopAudioRecording();
+        const createdGuide = await createAudioEmergencyGuide(audioFile);
+        const guide =
+          createdGuide.treatment.steps.length === 0
+            ? await retryEmergencyGuide(createdGuide.sessionId)
+            : createdGuide;
+        navigation.navigate('EmergencyGuide', { source: 'voice', guide });
+        return;
+      }
+
       const hasPermission = await requestMicrophonePermission();
       if (!hasPermission) {
         setVoiceStatus('마이크 권한이 필요합니다.');
-        voiceRequestInFlightRef.current = false;
         return;
       }
 
-      setVoiceStatus('음성을 듣고 있습니다.');
+      await startAudioRecording();
       setIsListening(true);
-      const result = await triage.startVoiceTriage(
-        // 음성 버튼
-        undefined,
-        defaultPatientContext,
-      );
-
-      if (!result.ok) {
-        if (result.reason === 'NO_CLASSIFICATION' && result.text) {
-          setVoiceStatus(`인식됨 : ${result.text}`);
-          return;
-        }
-        if (result.reason === 'EMPTY_TEXT') {
-          setVoiceStatus('음성이 비어 있습니다. 조금 더 길게 말해 주세요.');
-          return;
-        }
-        if (result.reason === 'STT_UNAVAILABLE') {
-          setVoiceStatus('음성 인식 서비스가 꺼져 있거나 없습니다.');
-          return;
-        }
-        if (result.reason === 'ML_REQUEST_FAILED') {
-          setVoiceStatus('ML 입력 전달에 실패했습니다.');
-          return;
-        }
-        setVoiceStatus('음성을 인식하지 못했습니다. 다시 시도해 주세요.');
-        return;
-      }
-
-      setVoiceStatus('음성 입력을 ML로 전달했습니다.');
+      setVoiceStatus('녹음 중입니다. 한 번 더 누르면 전송합니다.');
     } catch (error) {
-      console.error('[HomeScreen] voice input failed:', error);
-      setVoiceStatus('음성 입력 처리 중 오류가 발생했습니다.');
-    } finally {
+      console.error('[HomeScreen] 음성 파일 처리 실패:', error);
       setIsListening(false);
+      setVoiceStatus('음성 파일을 전송하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setIsVoiceProcessing(false);
       voiceRequestInFlightRef.current = false;
     }
-  }, [triage]);
+  }, [isListening, navigation]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -331,11 +299,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <TouchableOpacity
             className="h-[180px] flex-1 rounded-2xl border border-white bg-white px-2 py-4"
             style={cardShadow.elevated}
-            disabled={isVoiceBusy}
+            disabled={isVoiceProcessing}
             onPress={handleVoicePress}
           >
             <View className="items-center mt-2">
-              {isVoiceBusy ? (
+              {isVoiceProcessing ? (
                 <ActivityIndicator color={colors.red} />
               ) : (
                 <MicIcon width={40} height={40} />
@@ -343,7 +311,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <View className="mt-4 items-center">
               <Text className="text-body text-black text-center font-suitBold">
-                음성으로 설명
+                {isListening ? '입력 종료 및 전송' : '음성으로 설명'}
               </Text>
             </View>
             <View className="mt-2 items-center w-full px-4">

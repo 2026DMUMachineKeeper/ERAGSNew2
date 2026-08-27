@@ -9,6 +9,12 @@ export interface EmergencyGuideQuestionnaireAnswer {
   answerIds: readonly string[];
 }
 
+export interface EmergencyGuideMediaFile {
+  uri: string;
+  name: string;
+  type: string;
+}
+
 export interface EmergencyGuidePatientContext {
   consciousness: 'CONSCIOUS' | 'UNCONSCIOUS' | 'UNKNOWN';
   ageGroup: 'CHILD' | 'ADULT' | 'ELDERLY' | 'UNKNOWN';

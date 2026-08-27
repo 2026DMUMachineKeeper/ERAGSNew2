@@ -1,3 +1,4 @@
+export * from './audioRecording.service';
 export * from './auth.service';
 export * from './emergencyGuide.service';
 export * from './location.service';

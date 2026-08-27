@@ -27,7 +27,7 @@ export type RootStackParamList = {
     | {
         mainLabel?: string;
         subtypeLabel?: string;
-        source?: 'manual' | 'machine';
+        source?: 'manual' | 'machine' | 'voice' | 'image';
         guide?: EmergencyGuideResponse;
       }
     | undefined;
