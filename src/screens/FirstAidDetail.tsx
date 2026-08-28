@@ -20,6 +20,7 @@ import {
 import type { EmergencyCategoryId } from '@/constants';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
+import { useEmergencyGuideStore } from '@/store';
 import type { EmergencyGuideQuestionnaireAnswer } from '@/types';
 
 interface QuestionAnswers {
@@ -86,6 +87,7 @@ export const FirstAidDetail = ({
   navigation,
   route,
 }: FirstAidDetailProps): React.JSX.Element => {
+  const startGuide = useEmergencyGuideStore(state => state.startGuide);
   const category = FIRST_AID_CATEGORIES.find(
     item => item.id === route.params?.mainId,
   );
@@ -185,11 +187,12 @@ export const FirstAidDetail = ({
           ? await retryEmergencyGuide(createdGuide.sessionId)
           : createdGuide;
 
-      navigation.replace('EmergencyGuide', {
+      startGuide({
+        guide,
         mainLabel: category.label,
         source: 'manual',
-        guide,
       });
+      navigation.replace('EmergencyGuide');
     } catch (error) {
       console.error('[FirstAidDetail] 응급 가이드 생성 실패:', error);
       Alert.alert(

@@ -35,14 +35,6 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }) => children,
 }));
 
-jest.mock('react-native-camera-kit', () => ({
-  Camera: 'Camera',
-  CameraType: {
-    Back: 'back',
-    Front: 'front',
-  },
-}));
-
 jest.mock('react-native-image-picker', () => ({
   launchCamera: jest.fn(),
 }));

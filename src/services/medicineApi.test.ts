@@ -1,4 +1,4 @@
-import { deleteMedicine } from './medicineApi';
+import { deleteMedicine, fetchMedicineById } from './medicineApi';
 
 jest.mock('./auth.service', () => ({
   getAuthToken: jest.fn(async (): Promise<string> => 'test-token'),
@@ -59,5 +59,27 @@ describe('deleteMedicine', () => {
 
     await expect(deleteMedicine('1')).rejects.toThrow('약품 삭제 실패: 500');
     expect(text).not.toHaveBeenCalled();
+  });
+
+  it('약품 상세는 목록 응답에서 ID가 같은 항목을 반환한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => [
+        {
+          id: 'medicine-1',
+          name: '붕대',
+          efficacy: '상처 보호',
+          usage: '상처 부위에 감습니다.',
+          quantity: 2,
+        },
+      ],
+    } as Response);
+
+    await expect(fetchMedicineById('medicine-1')).resolves.toMatchObject({
+      id: 'medicine-1',
+      name: '붕대',
+      qty: 2,
+    });
   });
 });

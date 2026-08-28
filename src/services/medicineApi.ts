@@ -1,10 +1,9 @@
-import Config from 'react-native-config';
-
 import {
   getAuthToken,
   isAuthTokenExpiredError,
   refreshAuthTokens,
 } from './auth.service';
+import { authenticatedFetch } from './authenticatedFetch.service';
 
 export type MedicineApiRecord = {
   id?: string | number;
@@ -36,65 +35,25 @@ export type MedicineItem = {
   efficacy: string;
 };
 
-const buildUrl = (path: string) => {
-  const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
-    /\/+$/,
-    '',
-  );
-
-  if (!baseUrl) {
-    throw new Error('Base_URL이 설정되지 않았습니다. .env를 확인하세요.');
-  }
-
-  return `${baseUrl}${path}`;
-};
-
-const buildMedicineHeaders = async (
-  hasJsonBody = false,
-  authToken?: string,
-): Promise<Record<string, string>> => {
-  const token = authToken ?? (await getAuthToken());
-  return {
-    Accept: 'application/json',
-    Authorization: `Bearer ${token}`,
-    ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
-  };
-};
-
 const authenticatedMedicineFetch = async (
   path: string,
   init: RequestInit = {},
   hasJsonBody = false,
 ): Promise<Response> => {
-  const request = async (authToken?: string): Promise<Response> =>
-    fetch(buildUrl(path), {
+  return authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: {
       ...init,
       headers: {
-        ...(await buildMedicineHeaders(hasJsonBody, authToken)),
+        ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
         ...(init.headers as Record<string, string> | undefined),
       },
-    });
-
-  let response: Response;
-
-  try {
-    response = await request();
-  } catch (error) {
-    if (isAuthTokenExpiredError(error)) {
-      const refreshedTokens = await refreshAuthTokens();
-      return request(refreshedTokens.accessToken);
-    }
-
-    throw error;
-  }
-
-  if (response.status !== 401) {
-    return response;
-  }
-
-  const refreshedTokens = await refreshAuthTokens();
-
-  return request(refreshedTokens.accessToken);
+    },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (await refreshAuthTokens()).accessToken,
+  });
 };
 
 const readString = (
@@ -245,6 +204,16 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
 
   const payload = (await response.json()) as unknown;
   return readMedicineRecords(payload).map(normalizeMedicine);
+}
+
+export async function fetchMedicineById(id: string): Promise<MedicineItem> {
+  const medicine = (await fetchMedicines()).find(item => item.id === id);
+
+  if (!medicine) {
+    throw new Error('약품 정보를 찾을 수 없습니다.');
+  }
+
+  return medicine;
 }
 
 export async function fetchAvailableMedicines(): Promise<MedicineItem[]> {
