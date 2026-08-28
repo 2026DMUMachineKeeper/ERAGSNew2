@@ -1,418 +1,89 @@
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  PermissionsAndroid,
-  Platform,
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import type { CompositeScreenProps } from '@react-navigation/native';
+import { Text, View } from 'react-native';
+
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import Geolocation, {
-  type GeolocationResponse,
-} from '@react-native-community/geolocation';
-import {
-  launchCamera,
-  type CameraOptions,
-  type ImagePickerResponse,
-} from 'react-native-image-picker';
-import Tts from 'react-native-tts';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { CameraIcon, MicIcon } from '@/assets/icons';
+import type { MainTabParamList } from '@/navigation/MainTabNavigator';
+import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { useEmergencyGuideStore } from '@/store';
+import type { EmergencyGuideResponse } from '@/types';
 
 import {
-  CameraIcon,
-  EragsLogo,
-  FirstAidGuideIcon,
-  MainIcon,
-  MicIcon,
-} from '../assets/icons';
-import type { RootStackParamList } from '../navigation/RootNavigator';
-import type { MainTabParamList } from '../navigation/MainTabNavigator';
-import {
-  createAudioEmergencyGuide,
-  createImageEmergencyGuide,
-  getAddressFromCoordinates,
-  hasLocationPermission,
-  retryEmergencyGuide,
-  startAudioRecording,
-  stopAudioRecording,
-} from '../services';
-import tailwindConfig from '../../tailwind.config';
-
-const { colors } = tailwindConfig;
-
-const TEMPORARY_TTS_MESSAGE = '안녕하세요. 응급 상황 음성 안내 테스트입니다.';
+  EmergencySupportSection,
+  HomeHeader,
+  QuickActionCard,
+} from './home/components';
+import { useHomeEmergencyActions } from './home/useHomeEmergencyActions';
 
 type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'HomeTab'>,
   NativeStackScreenProps<RootStackParamList>
 >;
 
-const cardShadow = StyleSheet.create({
-  elevated: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-});
-
-const requestMicrophonePermission = async () => {
-  if (Platform.OS !== 'android') {
-    return true;
-  }
-
-  const granted = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-    {
-      title: '마이크 권한 필요',
-      message: '음성으로 응급 상황을 설명하려면 마이크 권한이 필요합니다.',
-      buttonPositive: '허용',
-      buttonNegative: '취소',
+export const HomeScreen = ({
+  navigation,
+}: HomeScreenProps): React.JSX.Element => {
+  const startGuide = useEmergencyGuideStore(state => state.startGuide);
+  const handleGuideCreated = React.useCallback(
+    (source: 'image' | 'voice', guide: EmergencyGuideResponse): void => {
+      startGuide({ guide, source });
+      navigation.navigate('EmergencyGuide');
     },
+    [navigation, startGuide],
   );
-
-  return granted === PermissionsAndroid.RESULTS.GRANTED;
-};
-
-const getCurrentPosition = (): Promise<GeolocationResponse> =>
-  new Promise((resolve, reject) => {
-    Geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 10000,
-    });
-  });
-
-export function HomeScreen({ navigation }: HomeScreenProps) {
-  const [isVisionUploading, setIsVisionUploading] = React.useState(false);
-  const [visionStatus, setVisionStatus] = React.useState<string | null>(null);
-
-  const requestCameraPermission = async () => {
-    if (Platform.OS !== 'android') {
-      return true;
-    }
-
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.CAMERA,
-      {
-        title: '카메라 권한 필요',
-        message:
-          '사진을 찍어 약품 비전 분석을 하려면 카메라 권한이 필요합니다.',
-        buttonPositive: '허용',
-        buttonNegative: '취소',
-      },
-    );
-
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
-  };
-
-  const handlePhotoPress = async () => {
-    if (isVisionUploading) {
-      return;
-    }
-
-    const hasPermission = await requestCameraPermission();
-    if (!hasPermission) {
-      Alert.alert(
-        '권한 필요',
-        '카메라 권한이 있어야 사진을 촬영할 수 있습니다.',
-      );
-      return;
-    }
-
-    const options: CameraOptions = {
-      mediaType: 'photo',
-      saveToPhotos: false,
-      quality: 0.9,
-      cameraType: 'back',
-    };
-
-    setIsVisionUploading(true);
-    setVisionStatus('사진 입력을 ML로 전송하는 중입니다.');
-
-    try {
-      const response: ImagePickerResponse = await launchCamera(options);
-
-      if (response.didCancel) {
-        return;
-      }
-
-      if (response.errorCode) {
-        Alert.alert('촬영 실패', response.errorMessage ?? response.errorCode);
-        return;
-      }
-
-      const asset = response.assets?.[0];
-      if (!asset) {
-        Alert.alert('촬영 실패', '카메라 결과를 가져오지 못했습니다.');
-        setVisionStatus('카메라 결과를 가져오지 못했습니다.');
-        return;
-      }
-
-      if (!asset.uri) {
-        Alert.alert('촬영 실패', '사진 경로를 가져오지 못했습니다.');
-        setVisionStatus('사진 경로를 가져오지 못했습니다.');
-        return;
-      }
-
-      const createdGuide = await createImageEmergencyGuide({
-        uri: asset.uri,
-        name: asset.fileName ?? `emergency-${Date.now()}.jpg`,
-        type: asset.type ?? 'image/jpeg',
-      });
-      const guide =
-        createdGuide.treatment.steps.length === 0
-          ? await retryEmergencyGuide(createdGuide.sessionId)
-          : createdGuide;
-      navigation.navigate('EmergencyGuide', { source: 'image', guide });
-    } catch (error) {
-      console.error('[HomeScreen] 사진 전송 실패:', error);
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : '사진을 서버로 전송하지 못했습니다. 네트워크와 서버 상태를 확인해 주세요.';
-
-      setVisionStatus(message);
-      Alert.alert('사진 전송 실패', message);
-    } finally {
-      setIsVisionUploading(false);
-    }
-  };
-  const voiceRequestInFlightRef = React.useRef(false);
-  const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
-  const [isListening, setIsListening] = React.useState(false);
-  const [isVoiceProcessing, setIsVoiceProcessing] = React.useState(false);
-
-  const handleEmergencyReportPress =
-    React.useCallback(async (): Promise<void> => {
-      try {
-        const hasPermission = await hasLocationPermission();
-        if (!hasPermission) {
-          Alert.alert(
-            '위치 정보 없음',
-            '위치 권한이 없어 현재 위치를 표시할 수 없습니다.',
-          );
-          return;
-        }
-
-        const { coords } = await getCurrentPosition();
-        const address = await getAddressFromCoordinates(
-          coords.latitude,
-          coords.longitude,
-        );
-        const addressText = address ? `주소: ${address}\n` : '';
-        Alert.alert(
-          '긴급 신고 문자',
-          `현재 위치\n${addressText}위도: ${coords.latitude}\n경도: ${coords.longitude}`,
-        );
-      } catch (error) {
-        console.error('[HomeScreen] 현재 위치 조회 실패:', error);
-        Alert.alert(
-          '위치 조회 실패',
-          '현재 위치를 가져오지 못했습니다. 위치 설정을 확인해 주세요.',
-        );
-      }
-    }, []);
-
-  const handleTtsPress = React.useCallback(async (): Promise<void> => {
-    try {
-      await Tts.getInitStatus();
-      await Tts.stop();
-      await Tts.setDefaultLanguage('ko-KR');
-      Tts.speak(TEMPORARY_TTS_MESSAGE);
-    } catch (error) {
-      console.error('[HomeScreen] TTS 재생 실패:', error);
-      Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
-    }
-  }, []);
-
-  const handleVoicePress = React.useCallback(async (): Promise<void> => {
-    if (voiceRequestInFlightRef.current) {
-      return;
-    }
-
-    voiceRequestInFlightRef.current = true;
-
-    try {
-      if (isListening) {
-        setIsListening(false);
-        setIsVoiceProcessing(true);
-        setVoiceStatus('녹음을 마치고 음성 파일을 전송 중입니다.');
-        const audioFile = await stopAudioRecording();
-        const createdGuide = await createAudioEmergencyGuide(audioFile);
-        const guide =
-          createdGuide.treatment.steps.length === 0
-            ? await retryEmergencyGuide(createdGuide.sessionId)
-            : createdGuide;
-        navigation.navigate('EmergencyGuide', { source: 'voice', guide });
-        return;
-      }
-
-      const hasPermission = await requestMicrophonePermission();
-      if (!hasPermission) {
-        setVoiceStatus('마이크 권한이 필요합니다.');
-        return;
-      }
-
-      await startAudioRecording();
-      setIsListening(true);
-      setVoiceStatus('녹음 중입니다. 한 번 더 누르면 전송합니다.');
-    } catch (error) {
-      console.error('[HomeScreen] 음성 파일 처리 실패:', error);
-      setIsListening(false);
-      setVoiceStatus('음성 파일을 전송하지 못했습니다. 다시 시도해 주세요.');
-    } finally {
-      setIsVoiceProcessing(false);
-      voiceRequestInFlightRef.current = false;
-    }
-  }, [isListening, navigation]);
+  const {
+    isListening,
+    isVisionUploading,
+    isVoiceProcessing,
+    visionStatus,
+    voiceStatus,
+    handleEmergencyReportPress,
+    handlePhotoPress,
+    handleVoicePress,
+  } = useHomeEmergencyActions(handleGuideCreated);
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
-      <View className=" mt-15 px-4 pt-6">
-        <View className="flex-row items-center mt-3 relative overflow-visible">
-          <View className="z-10 flex-1">
-            <EragsLogo />
-            <Text className="text-coment text-textDim mt-1 z-10">
-              EMERGENCY RESPONSE AID GUIDANCE
-            </Text>
-            <View className=" mt-10 z-10" />
-          </View>
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+      <HomeHeader />
 
-          <View className="absolute right-[-18px] top-2 z-0 pointer-events-none">
-            <MainIcon width={200} height={100} />
-          </View>
-        </View>
-      </View>
-
-      <View className="px-4 mt-5">
+      <View className="mt-5 px-4">
         <Text className="mb-3 text-body font-suitSemiBold text-textDim">
           빠른 상황 전달
         </Text>
-        <View className="flex-row justify-between gap-x-3">
-          <TouchableOpacity
-            className="h-[180px] flex-1 rounded-2xl border border-white bg-white px-2 py-4"
-            style={cardShadow.elevated}
-            disabled={isVoiceProcessing}
-            onPress={handleVoicePress}
-          >
-            <View className="items-center mt-2">
-              {isVoiceProcessing ? (
-                <ActivityIndicator color={colors.red} />
-              ) : (
-                <MicIcon width={40} height={40} />
-              )}
-            </View>
-            <View className="mt-4 items-center">
-              <Text className="text-body text-black text-center font-suitBold">
-                {isListening ? '입력 종료 및 전송' : '음성으로 설명'}
-              </Text>
-            </View>
-            <View className="mt-2 items-center w-full px-4">
-              <Text
-                numberOfLines={2}
-                ellipsizeMode="tail"
-                className="text-coment text-textDim text-center"
-              >
-                {voiceStatus ?? '다친 부분을 음성으로 설명해 주세요.'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="h-[180px] flex-1 rounded-2xl border border-white bg-white px-2 py-4"
-            style={cardShadow.elevated}
-            onPress={handlePhotoPress}
-            disabled={isVisionUploading}
-          >
-            <View className="items-center mt-2">
-              {isVisionUploading ? (
-                <ActivityIndicator color={colors.red} />
-              ) : (
-                <CameraIcon width={40} height={40} />
-              )}
-            </View>
-            <View className="mt-4 items-center">
-              <Text className="text-body text-black text-center font-suitBold">
-                사진 촬영
-              </Text>
-            </View>
-
-            <View className="mt-2 items-center w-full px-4">
-              <Text
-                numberOfLines={2}
-                ellipsizeMode="tail"
-                className="text-coment text-textDim text-center"
-              >
-                {visionStatus ??
-                  (isVisionUploading
-                    ? '사진 입력을 ML로 전송하고 있습니다.'
-                    : '다친 부분을 촬영해주세요.')}
-              </Text>
-            </View>
-          </TouchableOpacity>
+        <View className="w-full flex-row">
+          <View className="mr-1.5 flex-1">
+            <QuickActionCard
+              description={
+                voiceStatus ?? '다친 부분을 음성으로\n설명해 주세요.'
+              }
+              icon={<MicIcon height={40} width={40} />}
+              isLoading={isVoiceProcessing}
+              title={isListening ? '입력 종료 및 전송' : '음성으로 설명'}
+              onPress={handleVoicePress}
+            />
+          </View>
+          <View className="ml-1.5 flex-1">
+            <QuickActionCard
+              description={visionStatus ?? '다친 부분을 촬영해\n주세요.'}
+              icon={<CameraIcon height={40} width={40} />}
+              isLoading={isVisionUploading}
+              title="사진 촬영"
+              onPress={handlePhotoPress}
+            />
+          </View>
         </View>
 
-        <View className="mb-3 mt-5">
-          <Text className="text-body font-suitSemiBold text-textDim">
-            응급 상황 지원
-          </Text>
-          <Text className="mt-1 text-coment font-suitRegular text-textDim">
-            필요한 응급 지원을 선택하세요.
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          className="h-[86px] flex-row items-center rounded-2xl bg-red px-4"
-          onPress={handleEmergencyReportPress}
-        >
-          <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white">
-            <Text className="text-coment font-suitBold text-white">SOS</Text>
-          </View>
-          <View className="ml-4 flex-1">
-            <Text className="text-body font-suitBold text-white">
-              긴급 신고 문자 보내기
-            </Text>
-          </View>
-          <Text className="text-title2 font-suitRegular text-white">›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          accessibilityHint="사고 유형 선택 화면으로 이동합니다"
-          accessibilityLabel="응급 처치 가이드"
-          accessibilityRole="button"
-          className="mt-3 h-[86px] flex-row items-center rounded-2xl border border-red bg-camera_bg px-4"
-          onPress={() => navigation.navigate('FirstAid')}
-        >
-          <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-red">
-            <FirstAidGuideIcon width={28} height={28} />
-          </View>
-          <Text className="ml-4 flex-1 text-body font-suitBold text-black">
-            응급 처치 가이드
-          </Text>
-          <Text className="text-title2 font-suitRegular text-red">›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          accessibilityLabel="임시 음성 안내 재생"
-          accessibilityRole="button"
-          className="mt-3 h-[68px] flex-row items-center rounded-2xl border border-red bg-camera_bg px-4"
-          onPress={handleTtsPress}
-        >
-          <View className="h-9 w-9 items-center justify-center rounded-full bg-red">
-            <Text className="text-body font-suitBold text-white">▶</Text>
-          </View>
-          <Text className="ml-4 flex-1 text-body font-suitBold text-black">
-            TTS 음성 안내 테스트
-          </Text>
-        </TouchableOpacity>
+        <EmergencySupportSection
+          onFirstAidPress={() => navigation.navigate('FirstAid')}
+          onReportPress={handleEmergencyReportPress}
+        />
       </View>
     </SafeAreaView>
   );
-}
+};
+
+export default HomeScreen;

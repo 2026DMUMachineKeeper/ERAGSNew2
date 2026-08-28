@@ -17,6 +17,7 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon } from '../assets';
 import {
   deleteMedicine,
+  fetchMedicineById,
   updateMedicine,
   type MedicineItem,
 } from '../services/medicineApi';
@@ -49,6 +50,8 @@ const MEDICINE_UPDATE_ERROR_MESSAGE =
   '약품 정보를 수정하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const MEDICINE_DELETE_ERROR_MESSAGE =
   '약품을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const MEDICINE_LOAD_ERROR_MESSAGE =
+  '약품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
 export const getMedicineEditValidationErrors = ({
   name,
@@ -72,16 +75,16 @@ export const getMedicineEditValidationErrors = ({
 };
 
 export function MedicineDetailScreen({ navigation, route }: Props) {
-  const [medicine, setMedicine] = React.useState<MedicineItem>(
-    route.params.medicine,
-  );
+  const [medicine, setMedicine] = React.useState<MedicineItem | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
-  const [name, setName] = React.useState(medicine.name);
-  const [efficacy, setEfficacy] = React.useState(medicine.efficacy);
-  const [usage, setUsage] = React.useState(medicine.usage);
-  const [quantity, setQuantity] = React.useState(String(medicine.qty));
+  const [name, setName] = React.useState('');
+  const [efficacy, setEfficacy] = React.useState('');
+  const [usage, setUsage] = React.useState('');
+  const [quantity, setQuantity] = React.useState('0');
   const [editErrors, setEditErrors] =
     React.useState<MedicineEditValidationErrors>(EMPTY_MEDICINE_EDIT_ERRORS);
 
@@ -89,7 +92,51 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
     redirectToLoginForExpiredSession(navigation);
   }, [navigation]);
 
+  React.useEffect(() => {
+    let isActive = true;
+
+    const loadMedicine = async (): Promise<void> => {
+      try {
+        const nextMedicine = await fetchMedicineById(route.params.medicineId);
+
+        if (isActive) {
+          setMedicine(nextMedicine);
+          setName(nextMedicine.name);
+          setEfficacy(nextMedicine.efficacy);
+          setUsage(nextMedicine.usage);
+          setQuantity(String(nextMedicine.qty));
+        }
+      } catch (error: unknown) {
+        if (!isActive) {
+          return;
+        }
+
+        if (isAuthSessionExpiredError(error)) {
+          handleAuthSessionExpired();
+          return;
+        }
+
+        console.error('[MedicineDetailScreen] load failed', error);
+        setLoadError(MEDICINE_LOAD_ERROR_MESSAGE);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadMedicine();
+
+    return () => {
+      isActive = false;
+    };
+  }, [handleAuthSessionExpired, route.params.medicineId]);
+
   const openEdit = () => {
+    if (!medicine) {
+      return;
+    }
+
     setName(medicine.name);
     setEfficacy(medicine.efficacy);
     setUsage(medicine.usage);
@@ -123,6 +170,10 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   };
 
   const saveEdit = async () => {
+    if (!medicine) {
+      return;
+    }
+
     const trimmedName = name.trim();
     const trimmedEfficacy = efficacy.trim();
     const trimmedUsage = usage.trim();
@@ -156,13 +207,17 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
         quantity: parsedQuantity,
       });
 
-      setMedicine(current => ({
-        ...current,
-        name: trimmedName,
-        efficacy: trimmedEfficacy,
-        usage: trimmedUsage,
-        qty: parsedQuantity,
-      }));
+      setMedicine(current =>
+        current
+          ? {
+              ...current,
+              name: trimmedName,
+              efficacy: trimmedEfficacy,
+              usage: trimmedUsage,
+              qty: parsedQuantity,
+            }
+          : current,
+      );
       setIsEditOpen(false);
       Alert.alert('수정 완료', '약품 정보가 수정되었습니다.');
     } catch (error) {
@@ -191,6 +246,10 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   };
 
   const deleteCurrentMedicine = async () => {
+    if (!medicine) {
+      return;
+    }
+
     try {
       setIsDeleting(true);
       await deleteMedicine(medicine.id);
@@ -199,8 +258,8 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
           text: '확인',
           onPress: () =>
             navigation.reset({
-              index: 1,
-              routes: [{ name: 'Home' }, { name: 'MedicineMemo' }],
+              index: 0,
+              routes: [{ name: 'Home', params: { screen: 'MedicinesTab' } }],
             }),
         },
       ]);
@@ -230,6 +289,30 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   const usageInputClassName = editErrors.usage
     ? 'mt-3 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
     : 'mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator />
+      </SafeAreaView>
+    );
+  }
+
+  if (!medicine) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-background px-5">
+        <Text className="text-center text-body font-suitBold text-memoText">
+          {loadError ?? MEDICINE_LOAD_ERROR_MESSAGE}
+        </Text>
+        <TouchableOpacity
+          className="mt-5 h-12 items-center justify-center rounded-xl bg-red px-6"
+          onPress={() => navigation.goBack()}
+        >
+          <Text className="text-body font-suitBold text-white">돌아가기</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">

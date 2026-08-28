@@ -1,10 +1,10 @@
-import Config from 'react-native-config';
-
 import type {
   ApiError,
   EmergencyGuideMediaFile,
   EmergencyGuideResponse,
 } from '@/types';
+
+import { getApiBaseUrl } from './authenticatedFetch.service';
 
 interface EmergencyGuideSuccessEnvelope {
   success: true;
@@ -30,18 +30,7 @@ export class EmergencyGuideRequestError extends Error {
   }
 }
 
-const getEmergencyGuideBaseUrl = (): string => {
-  const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
-    /\/+$/,
-    '',
-  );
-
-  if (!baseUrl) {
-    throw new Error('API_BASE_URL이 설정되지 않았습니다. .env를 확인하세요.');
-  }
-
-  return baseUrl;
-};
+const getEmergencyGuideBaseUrl = getApiBaseUrl;
 
 export const getEmergencyGuideImageUrl = (
   imageUrl: string | null,

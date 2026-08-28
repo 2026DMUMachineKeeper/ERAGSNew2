@@ -105,8 +105,8 @@ export function MedicineAddScreen({ navigation }: Props) {
 
   const closeToMedicineMemo = React.useCallback(() => {
     navigation.reset({
-      index: 1,
-      routes: [{ name: 'Home' }, { name: 'MedicineMemo' }],
+      index: 0,
+      routes: [{ name: 'Home', params: { screen: 'MedicinesTab' } }],
     });
   }, [navigation]);
 
@@ -146,8 +146,8 @@ export function MedicineAddScreen({ navigation }: Props) {
           text: '확인',
           onPress: () =>
             navigation.reset({
-              index: 1,
-              routes: [{ name: 'Home' }, { name: 'MedicineMemo' }],
+              index: 0,
+              routes: [{ name: 'Home', params: { screen: 'MedicinesTab' } }],
             }),
         },
       ]);

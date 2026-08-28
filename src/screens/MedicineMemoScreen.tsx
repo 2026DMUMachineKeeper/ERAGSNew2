@@ -32,7 +32,7 @@ import tailwindConfig from '../../tailwind.config';
 interface MedicineMemoScreenProps
   extends CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList, 'MedicinesTab'>,
-    NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>
+    NativeStackScreenProps<RootStackParamList, 'Home'>
   > {}
 
 const { colors } = tailwindConfig;
@@ -128,7 +128,7 @@ export const MedicineMemoScreen = ({
 
   const handleMedicinePress = React.useCallback(
     (medicine: MedicineItem): void => {
-      navigation.navigate('MedicineDetail', { medicine });
+      navigation.navigate('MedicineDetail', { medicineId: medicine.id });
     },
     [navigation],
   );

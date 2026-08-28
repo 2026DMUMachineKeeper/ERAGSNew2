@@ -17,7 +17,13 @@ import {
 import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
-import { getEmergencyGuideImageUrl, retryEmergencyGuide } from '../services';
+import {
+  getEmergencyGuideImageUrl,
+  retryEmergencyGuide,
+  speakTts,
+  stopTts,
+} from '../services';
+import { useEmergencyGuideStore } from '../store';
 import type { EmergencyGuideTreatmentStep } from '../types';
 
 type EmergencyGuideProps = NativeStackScreenProps<
@@ -67,13 +73,28 @@ const toServerGuideRuntimeStep = (
   imageResource: getEmergencyGuideImageUrl(step.imageUrl, step.imageResource),
 });
 
-export function EmergencyGuideScreen({
-  navigation,
-  route,
-}: EmergencyGuideProps) {
-  const mainLabel = route.params?.mainLabel ?? '응급';
-  const subtypeLabel = route.params?.subtypeLabel ?? '';
-  const [guide, setGuide] = React.useState(route.params?.guide);
+export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
+  const storedGuide = useEmergencyGuideStore(state => state.guide);
+  const storedMainLabel = useEmergencyGuideStore(state => state.mainLabel);
+  const storedSubtypeLabel = useEmergencyGuideStore(
+    state => state.subtypeLabel,
+  );
+  const currentStepIndex = useEmergencyGuideStore(
+    state => state.currentStepIndex,
+  );
+  const elapsedSeconds = useEmergencyGuideStore(state => state.elapsedSeconds);
+  const incrementElapsedSeconds = useEmergencyGuideStore(
+    state => state.incrementElapsedSeconds,
+  );
+  const moveToNextStep = useEmergencyGuideStore(state => state.moveToNextStep);
+  const moveToPreviousStep = useEmergencyGuideStore(
+    state => state.moveToPreviousStep,
+  );
+  const setGuide = useEmergencyGuideStore(state => state.setGuide);
+  const guide = storedGuide;
+  const mainLabel = storedMainLabel;
+  const subtypeLabel = storedSubtypeLabel;
+  const lastSpokenMessageRef = React.useRef('');
   const [isRetrying, setIsRetrying] = React.useState(false);
   const visibleStepCount = getVisibleStepCount(subtypeLabel);
   const fallbackSteps = emergencyGuideSteps
@@ -82,18 +103,45 @@ export function EmergencyGuideScreen({
   const serverSteps =
     guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
   const steps = guide ? serverSteps : fallbackSteps;
-  const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
-    const timer = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    const timer = setInterval(incrementElapsedSeconds, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [incrementElapsedSeconds]);
 
   const currentStep = steps[currentStepIndex] ?? steps[0];
   const elapsedLabel = formatElapsed(elapsedSeconds);
   const progress = steps.length ? (currentStepIndex + 1) / steps.length : 0;
   const isLastStep = currentStepIndex >= steps.length - 1;
+  const currentInstruction = currentStep?.instruction?.trim() ?? '';
+
+  React.useEffect(() => {
+    if (
+      !currentInstruction ||
+      lastSpokenMessageRef.current === currentInstruction
+    ) {
+      return undefined;
+    }
+
+    lastSpokenMessageRef.current = currentInstruction;
+
+    const speakCurrentStep = async (): Promise<void> => {
+      try {
+        await speakTts(currentInstruction);
+      } catch (error) {
+        console.error('[EmergencyGuideScreen] TTS 자동 재생 실패:', error);
+        Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
+      }
+    };
+
+    speakCurrentStep();
+
+    return () => {
+      stopTts().catch(error => {
+        console.warn('[EmergencyGuideScreen] TTS 정지 실패:', error);
+      });
+    };
+  }, [currentInstruction]);
 
   const moveToComplete = () => {
     navigation.replace('QRCode');
@@ -101,7 +149,7 @@ export function EmergencyGuideScreen({
 
   const handleNextStep = () => {
     if (!isLastStep) {
-      setCurrentStepIndex(index => index + 1);
+      moveToNextStep(steps.length);
       return;
     }
 
@@ -110,7 +158,7 @@ export function EmergencyGuideScreen({
 
   const handleBackStep = () => {
     if (currentStepIndex > 0) {
-      setCurrentStepIndex(index => index - 1);
+      moveToPreviousStep();
     }
   };
 
@@ -123,7 +171,6 @@ export function EmergencyGuideScreen({
 
     try {
       setGuide(await retryEmergencyGuide(guide.sessionId));
-      setCurrentStepIndex(0);
     } catch (error) {
       console.error('[EmergencyGuideScreen] 응급 가이드 재시도 실패:', error);
       Alert.alert(
