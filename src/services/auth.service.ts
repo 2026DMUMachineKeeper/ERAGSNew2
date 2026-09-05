@@ -16,6 +16,7 @@ import type {
 import {
   AuthSessionExpiredError,
   authenticatedFetch,
+  fetchWithTimeout,
   getApiBaseUrl,
 } from './authenticatedFetch.service';
 
@@ -158,7 +159,7 @@ const postAuthRequest = async <TResponse>(
   body: unknown,
 ): Promise<TResponse> => {
   const requestUrl = `${getAuthBaseUrl()}${path}`;
-  const response = await fetch(requestUrl, {
+  const response = await fetchWithTimeout(requestUrl, {
     method: 'POST',
     headers: {
       Accept: 'application/json',

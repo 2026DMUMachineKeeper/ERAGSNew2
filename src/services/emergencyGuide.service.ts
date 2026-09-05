@@ -4,7 +4,9 @@ import type {
   EmergencyGuideResponse,
 } from '@/types';
 
-import { getApiBaseUrl } from './authenticatedFetch.service';
+import { fetchWithTimeout, getApiBaseUrl } from './authenticatedFetch.service';
+
+const EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS = 60_000;
 
 interface EmergencyGuideSuccessEnvelope {
   success: true;
@@ -186,14 +188,20 @@ const readEmergencyGuideResponse = async (
 
 export const createEmergencyGuide = async (
   formData: FormData,
+  signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
   const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
   logRequest(requestUrl, readFormDataParts(formData));
-  const response = await fetch(requestUrl, {
-    method: 'POST',
-    headers: { Accept: 'application/json' },
-    body: formData,
-  });
+  const response = await fetchWithTimeout(
+    requestUrl,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      body: formData,
+      signal,
+    },
+    EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS,
+  );
 
   return readEmergencyGuideResponse(response, requestUrl);
 };
@@ -201,6 +209,7 @@ export const createEmergencyGuide = async (
 const createMediaEmergencyGuide = (
   fieldName: 'audio' | 'image',
   mediaFile: EmergencyGuideMediaFile,
+  signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
   const formData = new FormData();
   const requestIdPrefix = fieldName === 'audio' ? 'voice' : 'image';
@@ -215,21 +224,24 @@ const createMediaEmergencyGuide = (
   );
   formData.append(fieldName, reactNativeFile as unknown as Blob);
 
-  return createEmergencyGuide(formData);
+  return createEmergencyGuide(formData, signal);
 };
 
 export const createAudioEmergencyGuide = (
   audioFile: EmergencyGuideMediaFile,
+  signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> =>
-  createMediaEmergencyGuide('audio', audioFile);
+  createMediaEmergencyGuide('audio', audioFile, signal);
 
 export const createImageEmergencyGuide = (
   imageFile: EmergencyGuideMediaFile,
+  signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> =>
-  createMediaEmergencyGuide('image', imageFile);
+  createMediaEmergencyGuide('image', imageFile, signal);
 
 export const retryEmergencyGuide = async (
   sessionId: string,
+  signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
   const normalizedSessionId = sessionId.trim();
 
@@ -241,9 +253,10 @@ export const retryEmergencyGuide = async (
     normalizedSessionId,
   )}/guide`;
   logRequest(requestUrl, null);
-  const response = await fetch(requestUrl, {
+  const response = await fetchWithTimeout(requestUrl, {
     method: 'POST',
     headers: { Accept: 'application/json' },
+    signal,
   });
 
   return readEmergencyGuideResponse(response, requestUrl);
