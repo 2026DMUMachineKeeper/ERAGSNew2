@@ -1,5 +1,57 @@
 import Config from 'react-native-config';
 
+const DEFAULT_API_REQUEST_TIMEOUT_MS = 10_000;
+
+export class RequestTimeoutError extends Error {
+  constructor() {
+    super(
+      '요청 시간이 초과되었습니다. 네트워크 상태를 확인한 후 다시 시도해 주세요.',
+    );
+    this.name = 'RequestTimeoutError';
+  }
+}
+
+export const fetchWithTimeout = async (
+  input: RequestInfo,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_API_REQUEST_TIMEOUT_MS,
+): Promise<Response> => {
+  const controller = new AbortController();
+  let isCallerAborted = false;
+  let isTimedOut = false;
+  const handleCallerAbort = (): void => {
+    isCallerAborted = true;
+    controller.abort();
+  };
+  const timeoutId = setTimeout((): void => {
+    if (isCallerAborted) {
+      return;
+    }
+
+    isTimedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  if (init.signal?.aborted) {
+    handleCallerAbort();
+  } else {
+    init.signal?.addEventListener('abort', handleCallerAbort, { once: true });
+  }
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error: unknown) {
+    if (isTimedOut) {
+      throw new RequestTimeoutError();
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    init.signal?.removeEventListener('abort', handleCallerAbort);
+  }
+};
+
 export class AuthSessionExpiredError extends Error {
   constructor() {
     super('');
@@ -13,6 +65,7 @@ export interface AuthenticatedFetchParams {
   isAccessTokenExpiredError: (error: unknown) => boolean;
   path: string;
   refreshAccessToken: () => Promise<string>;
+  timeoutMs?: number;
 }
 
 export const getApiBaseUrl = (): string => {
@@ -34,18 +87,23 @@ export const authenticatedFetch = async ({
   isAccessTokenExpiredError,
   path,
   refreshAccessToken,
+  timeoutMs,
 }: AuthenticatedFetchParams): Promise<Response> => {
   const request = async (accessToken?: string): Promise<Response> => {
     const token = accessToken ?? (await getAccessToken());
 
-    return fetch(`${getApiBaseUrl()}${path}`, {
-      ...init,
-      headers: {
-        Accept: 'application/json',
-        ...(init.headers as Record<string, string> | undefined),
-        Authorization: `Bearer ${token}`,
+    return fetchWithTimeout(
+      `${getApiBaseUrl()}${path}`,
+      {
+        ...init,
+        headers: {
+          Accept: 'application/json',
+          ...(init.headers as Record<string, string> | undefined),
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+      timeoutMs,
+    );
   };
 
   const requestWithRefreshedToken = async (): Promise<Response> => {

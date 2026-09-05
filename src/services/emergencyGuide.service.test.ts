@@ -85,19 +85,21 @@ describe('emergencyGuide.service', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'test-api-base-url/api/v1/emergency-guide-sessions',
-      {
+      expect.objectContaining({
         method: 'POST',
         headers: { Accept: 'application/json' },
         body: formData,
-      },
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       'test-api-base-url/api/v1/emergency-guide-sessions/emg-session%2F001/guide',
-      {
+      expect.objectContaining({
         method: 'POST',
         headers: { Accept: 'application/json' },
-      },
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(consoleWarnMock).toHaveBeenCalledWith(
       expect.stringContaining('Q2_VISIBLE_SYMPTOMS'),
