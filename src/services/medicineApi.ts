@@ -5,6 +5,8 @@ import {
 } from './auth.service';
 import { authenticatedFetch } from './authenticatedFetch.service';
 
+const MEDICINE_IMAGE_UPLOAD_TIMEOUT_MS = 60_000;
+
 export type MedicineApiRecord = {
   id?: string | number;
   medicineId?: string | number;
@@ -39,6 +41,7 @@ const authenticatedMedicineFetch = async (
   path: string,
   init: RequestInit = {},
   hasJsonBody = false,
+  timeoutMs?: number,
 ): Promise<Response> => {
   return authenticatedFetch({
     getAccessToken: getAuthToken,
@@ -53,6 +56,7 @@ const authenticatedMedicineFetch = async (
     path,
     refreshAccessToken: async (): Promise<string> =>
       (await refreshAuthTokens()).accessToken,
+    timeoutMs,
   });
 };
 
@@ -297,6 +301,7 @@ export async function postMedicineVision(params: {
       }),
     },
     true,
+    MEDICINE_IMAGE_UPLOAD_TIMEOUT_MS,
   );
 
   if (!response.ok) {
