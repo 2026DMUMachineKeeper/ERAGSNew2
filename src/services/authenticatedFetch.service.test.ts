@@ -1,4 +1,5 @@
 import {
+  AuthSessionExpiredError,
   authenticatedFetch,
   type AuthenticatedFetchParams,
 } from './authenticatedFetch.service';
@@ -55,6 +56,17 @@ describe('authenticatedFetch', () => {
     await expect(authenticatedFetch(params)).resolves.toMatchObject({
       status: 200,
     });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(params.refreshAccessToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('토큰 갱신 후에도 401이면 세션 만료 오류를 반환한다', async (): Promise<void> => {
+    const params = createParams();
+    fetchMock.mockResolvedValue(createResponse(401));
+
+    await expect(authenticatedFetch(params)).rejects.toBeInstanceOf(
+      AuthSessionExpiredError,
+    );
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(params.refreshAccessToken).toHaveBeenCalledTimes(1);
   });

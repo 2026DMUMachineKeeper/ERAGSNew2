@@ -1,5 +1,12 @@
 import Config from 'react-native-config';
 
+export class AuthSessionExpiredError extends Error {
+  constructor() {
+    super('');
+    this.name = 'AuthSessionExpiredError';
+  }
+}
+
 export interface AuthenticatedFetchParams {
   getAccessToken: () => Promise<string>;
   init?: RequestInit;
@@ -41,6 +48,16 @@ export const authenticatedFetch = async ({
     });
   };
 
+  const requestWithRefreshedToken = async (): Promise<Response> => {
+    const retryResponse = await request(await refreshAccessToken());
+
+    if (retryResponse.status === 401) {
+      throw new AuthSessionExpiredError();
+    }
+
+    return retryResponse;
+  };
+
   let response: Response;
 
   try {
@@ -50,12 +67,12 @@ export const authenticatedFetch = async ({
       throw error;
     }
 
-    return request(await refreshAccessToken());
+    return requestWithRefreshedToken();
   }
 
   if (response.status !== 401) {
     return response;
   }
 
-  return request(await refreshAccessToken());
+  return requestWithRefreshedToken();
 };

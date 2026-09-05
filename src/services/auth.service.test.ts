@@ -2,7 +2,11 @@ import * as Keychain from 'react-native-keychain';
 
 import { useAuthStore } from '@/store/authStore';
 
-import { AuthSessionExpiredError, restoreAuthSession } from './auth.service';
+import {
+  AuthSessionExpiredError,
+  refreshAuthTokens,
+  restoreAuthSession,
+} from './auth.service';
 
 jest.mock('@/query', () => ({
   prefetchMedicines: jest.fn(),
@@ -112,5 +116,40 @@ describe('restoreAuthSession', () => {
     await expect(restoreAuthSession()).rejects.toBe(storageError);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(Keychain.resetGenericPassword).not.toHaveBeenCalled();
+  });
+
+  it('동시에 시작한 토큰 갱신 요청은 서버 요청 하나를 공유한다', async (): Promise<void> => {
+    let resolveRefresh: (response: Response) => void = (): void => {};
+    fetchMock.mockImplementationOnce(
+      (): Promise<Response> =>
+        new Promise<Response>((resolve): void => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    const firstRefresh = refreshAuthTokens();
+    const secondRefresh = refreshAuthTokens();
+
+    expect(firstRefresh).toBe(secondRefresh);
+    await new Promise<void>((resolve): void => {
+      setImmediate(resolve);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveRefresh({
+      ok: true,
+      status: 200,
+      text: async (): Promise<string> =>
+        JSON.stringify({
+          access_token: 'renewed-access-token',
+          refresh_token: 'renewed-refresh-token',
+          expires_in: 3600,
+        }),
+    } as Response);
+
+    await expect(Promise.all([firstRefresh, secondRefresh])).resolves.toEqual([
+      expect.objectContaining({ accessToken: 'renewed-access-token' }),
+      expect.objectContaining({ accessToken: 'renewed-access-token' }),
+    ]);
+    expect(Keychain.setGenericPassword).toHaveBeenCalledTimes(1);
   });
 });
