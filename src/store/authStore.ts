@@ -67,6 +67,7 @@ export const useAuthStore = create<AuthState>()(set => ({
       expiresIn: loginResponse.expires_in,
       user: loginResponse.user,
     });
+    removeMedicineQueries();
     set({ user: loginResponse.user, isAuthenticated: true });
     prefetchMedicines();
 
