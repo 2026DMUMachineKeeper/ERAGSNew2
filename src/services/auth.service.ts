@@ -774,14 +774,13 @@ export const restoreAuthSession = async (): Promise<string> => {
       throw error;
     }
 
-    try {
-      const tokens = await refreshAuthTokens();
-      return tokens.accessToken;
-    } catch (refreshError: unknown) {
-      // 복원할 수 없는 인증 정보가 남아 있으면 다음 실행에서도 홈 진입을 시도하므로 제거합니다.
-      await clearAuthSession();
-      throw refreshError;
+    if (!isAuthTokenExpiredError(error)) {
+      throw error;
     }
+
+    // 일시적인 통신 실패에서는 다음 복원을 위해 저장된 인증 정보를 유지합니다.
+    const tokens = await refreshAuthTokens();
+    return tokens.accessToken;
   }
 };
 
