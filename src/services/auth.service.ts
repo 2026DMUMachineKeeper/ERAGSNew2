@@ -14,6 +14,7 @@ import type {
 } from '@/types/auth.types';
 
 import {
+  AuthSessionExpiredError,
   authenticatedFetch,
   getApiBaseUrl,
 } from './authenticatedFetch.service';
@@ -23,12 +24,7 @@ declare const atob: (encodedData: string) => string;
 const AUTH_TOKEN_SERVICE = 'erags.auth.token';
 const AUTH_SESSION_EXPIRED_MESSAGE = '';
 
-export class AuthSessionExpiredError extends Error {
-  constructor(message = AUTH_SESSION_EXPIRED_MESSAGE) {
-    super(message);
-    this.name = 'AuthSessionExpiredError';
-  }
-}
+export { AuthSessionExpiredError };
 
 export class AuthTokenExpiredError extends Error {
   constructor(message = AUTH_SESSION_EXPIRED_MESSAGE) {
@@ -725,7 +721,7 @@ const normalizeAuthTokenResponse = (
   } as AuthTokenResponse;
 };
 
-export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
+const requestRefreshedAuthTokens = async (): Promise<StoredAuthTokens> => {
   const { email, tokens } = await readStoredAuthTokens();
 
   if (tokens.refreshToken.trim().length === 0) {
@@ -763,6 +759,20 @@ export const refreshAuthTokens = async (): Promise<StoredAuthTokens> => {
   await saveAuthTokens(email, nextTokens);
 
   return nextTokens;
+};
+
+let refreshAuthTokensPromise: Promise<StoredAuthTokens> | null = null;
+
+export const refreshAuthTokens = (): Promise<StoredAuthTokens> => {
+  if (refreshAuthTokensPromise) {
+    return refreshAuthTokensPromise;
+  }
+
+  refreshAuthTokensPromise = requestRefreshedAuthTokens().finally((): void => {
+    refreshAuthTokensPromise = null;
+  });
+
+  return refreshAuthTokensPromise;
 };
 
 export const restoreAuthSession = async (): Promise<string> => {
