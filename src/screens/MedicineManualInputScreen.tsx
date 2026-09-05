@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { invalidateMedicines } from '../query';
 import { postMedicineManual } from '../services/medicineApi';
 import { isAuthSessionExpiredError } from '../services/auth.service';
 import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
@@ -121,6 +122,7 @@ export function MedicineManualInputScreen({ navigation }: Props) {
         usage: trimmedUsage,
         quantityToAdd: quantity,
       });
+      invalidateMedicines();
 
       Alert.alert('등록 완료', '약품이 등록되었습니다.', [
         {

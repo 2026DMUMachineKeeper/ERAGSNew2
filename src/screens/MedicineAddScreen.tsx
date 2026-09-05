@@ -18,6 +18,7 @@ import {
   type ImagePickerResponse,
 } from 'react-native-image-picker';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { invalidateMedicines } from '../query';
 import { postMedicineVision } from '../services/medicineApi';
 import { isAuthSessionExpiredError } from '../services/auth.service';
 import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
@@ -141,6 +142,7 @@ export function MedicineAddScreen({ navigation }: Props) {
         return;
       }
 
+      invalidateMedicines();
       Alert.alert('등록 완료', '약품 정보가 자동으로 등록되었습니다.', [
         {
           text: '확인',

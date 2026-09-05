@@ -6,6 +6,7 @@ import {
   restoreAuthSession,
   saveAuthTokens,
 } from '@/services/auth.service';
+import { prefetchMedicines, removeMedicineQueries } from '@/query';
 import type { AuthUser, LoginResponse } from '@/types';
 
 import { useAuthStore } from './authStore';
@@ -17,6 +18,11 @@ jest.mock('@/services/auth.service', () => ({
   logout: jest.fn(),
   restoreAuthSession: jest.fn(),
   saveAuthTokens: jest.fn(),
+}));
+
+jest.mock('@/query', () => ({
+  prefetchMedicines: jest.fn(),
+  removeMedicineQueries: jest.fn(),
 }));
 
 const TEST_USER: AuthUser = {
@@ -49,6 +55,7 @@ describe('useAuthStore', () => {
     ).resolves.toEqual(TEST_USER);
 
     expect(saveAuthTokens).toHaveBeenCalledTimes(1);
+    expect(prefetchMedicines).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState()).toMatchObject({
       user: TEST_USER,
       isAuthenticated: true,
@@ -60,6 +67,7 @@ describe('useAuthStore', () => {
     jest.mocked(getStoredAuthUser).mockResolvedValue(TEST_USER);
 
     await expect(useAuthStore.getState().restoreSession()).resolves.toBe(true);
+    expect(prefetchMedicines).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState()).toMatchObject({
       user: TEST_USER,
       isAuthenticated: true,
@@ -74,6 +82,7 @@ describe('useAuthStore', () => {
       'network error',
     );
     expect(clearAuthSession).toHaveBeenCalledTimes(1);
+    expect(removeMedicineQueries).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState()).toMatchObject({
       user: null,
       isAuthenticated: false,

@@ -8,6 +8,7 @@ import {
   restoreAuthSession,
   saveAuthTokens,
 } from '@/services/auth.service';
+import { prefetchMedicines, removeMedicineQueries } from '@/query';
 import type { AuthUser } from '@/types';
 
 interface SignInParams {
@@ -34,6 +35,7 @@ export const useAuthStore = create<AuthState>()(set => ({
       await clearAuthSession();
     } finally {
       set({ user: null, isAuthenticated: false });
+      removeMedicineQueries();
     }
   },
 
@@ -43,9 +45,11 @@ export const useAuthStore = create<AuthState>()(set => ({
       const user = (await getStoredAuthUser()) ?? null;
 
       set({ user, isAuthenticated: true });
+      prefetchMedicines();
       return true;
     } catch {
       set({ user: null, isAuthenticated: false });
+      removeMedicineQueries();
       return false;
     }
   },
@@ -64,6 +68,7 @@ export const useAuthStore = create<AuthState>()(set => ({
       user: loginResponse.user,
     });
     set({ user: loginResponse.user, isAuthenticated: true });
+    prefetchMedicines();
 
     return loginResponse.user;
   },
@@ -76,6 +81,7 @@ export const useAuthStore = create<AuthState>()(set => ({
       throw error;
     } finally {
       set({ user: null, isAuthenticated: false });
+      removeMedicineQueries();
     }
   },
 }));

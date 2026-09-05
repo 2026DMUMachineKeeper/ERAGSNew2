@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { BackIcon } from '../assets';
+import { invalidateMedicines } from '../query';
 import {
   deleteMedicine,
   fetchMedicineById,
@@ -206,6 +207,7 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
         usage: trimmedUsage,
         quantity: parsedQuantity,
       });
+      invalidateMedicines();
 
       setMedicine(current =>
         current
@@ -253,6 +255,7 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
     try {
       setIsDeleting(true);
       await deleteMedicine(medicine.id);
+      invalidateMedicines();
       Alert.alert('삭제 완료', '약품이 삭제되었습니다.', [
         {
           text: '확인',
