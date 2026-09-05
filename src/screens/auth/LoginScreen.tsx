@@ -13,11 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import {
-  consumeLocationPermissionPrompt,
-  login,
-  saveAuthTokens,
-} from '@/services';
+import { consumeLocationPermissionPrompt } from '@/services';
+import { useAuthStore } from '@/store';
 import { showLocationPermissionPrompt } from '@/utils';
 import tailwindConfig from '../../../tailwind.config';
 import AuthTextInput from './components/AuthTextInput';
@@ -29,6 +26,7 @@ const { colors } = tailwindConfig;
 export const LoginScreen = ({
   navigation,
 }: LoginScreenProps): React.JSX.Element => {
+  const signIn = useAuthStore(state => state.signIn);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,19 +43,12 @@ export const LoginScreen = ({
     setIsSubmitting(true);
 
     try {
-      const loginResponse = await login({
+      const authenticatedUser = await signIn({
         email: email.trim(),
         password,
       });
-
-      await saveAuthTokens(loginResponse.user.email, {
-        accessToken: loginResponse.access_token,
-        refreshToken: loginResponse.refresh_token,
-        expiresIn: loginResponse.expires_in,
-        user: loginResponse.user,
-      });
       const shouldShowLocationPermissionPrompt =
-        await consumeLocationPermissionPrompt(loginResponse.user.email);
+        await consumeLocationPermissionPrompt(authenticatedUser.email);
 
       navigation.reset({
         index: 0,

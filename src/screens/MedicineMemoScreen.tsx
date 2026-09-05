@@ -9,10 +9,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useQuery } from '@tanstack/react-query';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import {
+  useIsFocused,
   type CompositeScreenProps,
-  useFocusEffect,
 } from '@react-navigation/native';
 import type {
   NativeStackNavigationProp,
@@ -22,8 +23,9 @@ import type {
 import { BackIcon } from '@/assets';
 import type { MainTabParamList } from '@/navigation/MainTabNavigator';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { medicineQueryOptions } from '@/query';
 import { isAuthSessionExpiredError } from '@/services/auth.service';
-import { fetchMedicines, type MedicineItem } from '@/services/medicineApi';
+import type { MedicineItem } from '@/services/medicineApi';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 
 import { MedicineListItem } from './medicineMemo/components';
@@ -32,7 +34,7 @@ import tailwindConfig from '../../tailwind.config';
 interface MedicineMemoScreenProps
   extends CompositeScreenProps<
     BottomTabScreenProps<MainTabParamList, 'MedicinesTab'>,
-    NativeStackScreenProps<RootStackParamList, 'MedicineMemo'>
+    NativeStackScreenProps<RootStackParamList, 'Home'>
   > {}
 
 const { colors } = tailwindConfig;
@@ -63,64 +65,43 @@ export const filterMedicinesByName = (
 export const MedicineMemoScreen = ({
   navigation,
 }: MedicineMemoScreenProps): React.JSX.Element => {
-  const [medicines, setMedicines] = React.useState<MedicineItem[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const isFocused = useIsFocused();
   const rootNavigation = React.useMemo(
     () => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>(),
     [navigation],
   );
+  const handleAuthSessionExpired = React.useCallback((): void => {
+    redirectToLoginForExpiredSession(rootNavigation);
+  }, [rootNavigation]);
+
+  const {
+    data: medicines = [],
+    error: medicineQueryError,
+    isPending: isLoading,
+  } = useQuery({ ...medicineQueryOptions, enabled: isFocused });
+  const loadError =
+    medicineQueryError && !isAuthSessionExpiredError(medicineQueryError)
+      ? MEDICINE_LIST_LOAD_ERROR_MESSAGE
+      : null;
   const filteredMedicines = React.useMemo(
     () => filterMedicinesByName(medicines, searchQuery),
     [medicines, searchQuery],
   );
 
-  const handleAuthSessionExpired = React.useCallback((): void => {
-    redirectToLoginForExpiredSession(rootNavigation);
-  }, [rootNavigation]);
+  React.useEffect((): void => {
+    if (!medicineQueryError) {
+      return;
+    }
 
-  useFocusEffect(
-    React.useCallback((): (() => void) => {
-      let isActive = true;
+    if (isAuthSessionExpiredError(medicineQueryError)) {
+      console.warn('[MedicineMemoScreen] 인증 세션 만료:', medicineQueryError);
+      handleAuthSessionExpired();
+      return;
+    }
 
-      const loadMedicines = async (): Promise<void> => {
-        try {
-          setIsLoading(true);
-          setLoadError(null);
-          const nextMedicines = await fetchMedicines();
-
-          if (isActive) {
-            setMedicines(nextMedicines);
-          }
-        } catch (error: unknown) {
-          if (!isActive) {
-            return;
-          }
-
-          if (isAuthSessionExpiredError(error)) {
-            console.warn('[MedicineMemoScreen] 인증 세션 만료:', error);
-            handleAuthSessionExpired();
-            return;
-          }
-
-          console.error('[MedicineMemoScreen] 약품 조회 실패:', error);
-          setLoadError(MEDICINE_LIST_LOAD_ERROR_MESSAGE);
-          setMedicines([]);
-        } finally {
-          if (isActive) {
-            setIsLoading(false);
-          }
-        }
-      };
-
-      loadMedicines();
-
-      return () => {
-        isActive = false;
-      };
-    }, [handleAuthSessionExpired]),
-  );
+    console.error('[MedicineMemoScreen] 약품 조회 실패:', medicineQueryError);
+  }, [handleAuthSessionExpired, medicineQueryError]);
 
   const handleHomePress = React.useCallback((): void => {
     navigation.navigate('HomeTab');
@@ -128,7 +109,7 @@ export const MedicineMemoScreen = ({
 
   const handleMedicinePress = React.useCallback(
     (medicine: MedicineItem): void => {
-      navigation.navigate('MedicineDetail', { medicine });
+      navigation.navigate('MedicineDetail', { medicineId: medicine.id });
     },
     [navigation],
   );
@@ -229,7 +210,7 @@ export const MedicineMemoScreen = ({
 
         <FlatList
           className="mt-2 flex-1"
-          data={isLoading || loadError ? [] : filteredMedicines}
+          data={loadError ? [] : filteredMedicines}
           keyboardShouldPersistTaps="handled"
           keyExtractor={medicine => medicine.id}
           ListEmptyComponent={renderEmptyContent}

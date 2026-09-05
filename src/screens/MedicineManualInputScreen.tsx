@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { invalidateMedicines } from '../query';
 import { postMedicineManual } from '../services/medicineApi';
 import { isAuthSessionExpiredError } from '../services/auth.service';
 import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
@@ -69,8 +70,8 @@ export function MedicineManualInputScreen({ navigation }: Props) {
 
   const closeToMedicineMemo = React.useCallback(() => {
     navigation.reset({
-      index: 1,
-      routes: [{ name: 'Home' }, { name: 'MedicineMemo' }],
+      index: 0,
+      routes: [{ name: 'Home', params: { screen: 'MedicinesTab' } }],
     });
   }, [navigation]);
 
@@ -121,14 +122,15 @@ export function MedicineManualInputScreen({ navigation }: Props) {
         usage: trimmedUsage,
         quantityToAdd: quantity,
       });
+      invalidateMedicines();
 
       Alert.alert('등록 완료', '약품이 등록되었습니다.', [
         {
           text: '확인',
           onPress: () =>
             navigation.reset({
-              index: 1,
-              routes: [{ name: 'Home' }, { name: 'MedicineMemo' }],
+              index: 0,
+              routes: [{ name: 'Home', params: { screen: 'MedicinesTab' } }],
             }),
         },
       ]);

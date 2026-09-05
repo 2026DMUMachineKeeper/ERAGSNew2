@@ -25,14 +25,12 @@ import {
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import {
-  clearAuthSession,
   getMyPage,
-  getStoredAuthUser,
   isAuthSessionExpiredError,
-  logout,
   updateMyPage,
   updateStoredAuthUser,
 } from '../services';
+import { useAuthStore } from '../store';
 import {
   INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
   normalizeOptionalKoreanPhoneNumber,
@@ -74,6 +72,9 @@ const styles = StyleSheet.create({
 export const SettingsScreen = ({
   navigation,
 }: SettingsScreenProps): React.JSX.Element => {
+  const authenticatedUser = useAuthStore(state => state.user);
+  const setAuthenticatedUser = useAuthStore(state => state.setUser);
+  const signOut = useAuthStore(state => state.signOut);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
   const [profile, setProfile] = React.useState({
     name: '',
@@ -115,10 +116,9 @@ export const SettingsScreen = ({
       setProfileLoadError(null);
 
       try {
-        const storedUser = await getStoredAuthUser();
         const storedProfile = {
-          name: storedUser?.name?.trim() ?? '',
-          guardianPhone: storedUser?.guardian_phone?.trim() ?? '',
+          name: authenticatedUser?.name?.trim() ?? '',
+          guardianPhone: authenticatedUser?.guardian_phone?.trim() ?? '',
         };
 
         if (isActive) {
@@ -126,11 +126,11 @@ export const SettingsScreen = ({
           setDraftProfile(storedProfile);
         }
 
-        if (!storedUser) {
+        if (!authenticatedUser) {
           return;
         }
 
-        const myPageProfile = await getMyPage(storedUser.id);
+        const myPageProfile = await getMyPage(authenticatedUser.id);
         const nextProfile = {
           name: myPageProfile.name.trim(),
           guardianPhone: myPageProfile.guardian_phone.trim(),
@@ -167,7 +167,7 @@ export const SettingsScreen = ({
     return () => {
       isActive = false;
     };
-  }, [moveToLogin]);
+  }, [authenticatedUser, moveToLogin]);
 
   const handleEditProfilePress = (): void => {
     setDraftProfile(profile);
@@ -203,21 +203,20 @@ export const SettingsScreen = ({
     setIsSavingProfile(true);
 
     try {
-      const storedUser = await getStoredAuthUser();
-
       if (
-        !storedUser ||
-        !Number.isInteger(storedUser.id) ||
-        storedUser.id <= 0
+        !authenticatedUser ||
+        !Number.isInteger(authenticatedUser.id) ||
+        authenticatedUser.id <= 0
       ) {
         throw new Error('로그인 사용자 정보를 확인할 수 없습니다.');
       }
 
-      const updatedProfile = await updateMyPage(storedUser.id, {
+      const updatedProfile = await updateMyPage(authenticatedUser.id, {
         name: nextName,
         guardian_phone: nextGuardianPhone,
       });
       const updatedUser = await updateStoredAuthUser(updatedProfile);
+      setAuthenticatedUser(updatedUser);
       const nextProfile = {
         name: updatedUser.name ?? '',
         guardianPhone: updatedUser.guardian_phone ?? '',
@@ -258,24 +257,19 @@ export const SettingsScreen = ({
     setIsLoggingOut(true);
 
     try {
-      await logout();
+      await signOut();
       moveToLogin();
     } catch (error) {
       console.warn('[SettingsScreen] logout failed:', error);
-
-      try {
-        await clearAuthSession();
-      } finally {
-        Alert.alert(
-          '로그아웃',
-          '로그아웃되었습니다. 다시 이용하려면 로그인해주세요.',
-        );
-        moveToLogin();
-      }
+      Alert.alert(
+        '로그아웃',
+        '로그아웃되었습니다. 다시 이용하려면 로그인해주세요.',
+      );
+      moveToLogin();
     } finally {
       setIsLoggingOut(false);
     }
-  }, [isLoggingOut, moveToLogin]);
+  }, [isLoggingOut, moveToLogin, signOut]);
 
   const namePlaceholder = isProfileLoading
     ? '불러오는 중...'

@@ -3,22 +3,52 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { useEmergencyGuideStore } from '../store';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'QRCode'>;
 
 export function QRCodeScreen({ navigation }: Props) {
-  const incidentType = '출혈 / 상처';
-  const totalTime = '07분 03초';
-  const completed = 4;
-  const total = 4;
-  const items = ['멸균붕대 x1', '의료용 테이프 x1', '소독솜 x2', '일회용 장갑 x1'];
+  const guide = useEmergencyGuideStore(state => state.guide);
+  const mainLabel = useEmergencyGuideStore(state => state.mainLabel);
+  const currentStepIndex = useEmergencyGuideStore(
+    state => state.currentStepIndex,
+  );
+  const elapsedSeconds = useEmergencyGuideStore(state => state.elapsedSeconds);
+  const resetGuide = useEmergencyGuideStore(state => state.resetGuide);
+  const incidentType = mainLabel;
+  const totalTime = `${String(Math.floor(elapsedSeconds / 60)).padStart(
+    2,
+    '0',
+  )}분 ${String(elapsedSeconds % 60).padStart(2, '0')}초`;
+  const total = guide?.treatment.steps.length ?? 0;
+  const completed = total > 0 ? Math.min(currentStepIndex + 1, total) : 0;
+  const items =
+    guide?.treatment.steps.flatMap(step =>
+      step.requiredItemName
+        ? [`${step.requiredItemName} x${step.requiredQuantity}`]
+        : [],
+    ) ?? [];
+  const qrPayload = [
+    `SESSION:${guide?.sessionId ?? 'UNKNOWN'}`,
+    `TYPE:${guide?.assessment?.categoryCode ?? incidentType}`,
+    `STEPS:${completed}/${total}`,
+    `ITEMS:${items.length}`,
+  ].join('|');
+
+  const handleHomePress = (): void => {
+    resetGuide();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
+  };
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       <View className="mt-10" />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        <View className="px-4">
+      <ScrollView>
+        <View className="px-4 pb-[140px]">
           <Text className="text-black text-body text-center">
             구조대원에게 QR 코드를 보여주세요.
           </Text>
@@ -28,14 +58,12 @@ export function QRCodeScreen({ navigation }: Props) {
               <Text className="text-white">QR CODE</Text>
             </View>
             <Text className="text-placeholder text-xs mt-3 text-center">
-              T:07:03|TYPE:출혈|STEPS:4/4|ITEMS:4
+              {qrPayload}
             </Text>
           </View>
 
           <View className="bg-white rounded-2xl p-4 mt-5">
-            <Text className="text-warning text-sm mb-3">
-              처치 요약
-            </Text>
+            <Text className="text-warning text-sm mb-3">처치 요약</Text>
 
             <View className="flex-row justify-between py-2 border-b border-memoLine">
               <Text className="text-black">사고 유형</Text>
@@ -57,12 +85,17 @@ export function QRCodeScreen({ navigation }: Props) {
             <View className="mt-3">
               <Text className="text-black mb-2">사용된 약품/물품</Text>
               <View className="flex-row flex-wrap">
-                {items.map((it, idx) => (
+                {items.length === 0 ? (
+                  <Text className="text-sm text-placeholder">
+                    사용된 약품/물품이 없습니다.
+                  </Text>
+                ) : null}
+                {items.map((item, index) => (
                   <View
-                    key={idx}
+                    key={`${item}-${index}`}
                     className="bg-memoBg px-3 py-2 rounded-full mr-2 mb-2"
                   >
-                    <Text className="text-warning text-sm">{it}</Text>
+                    <Text className="text-warning text-sm">{item}</Text>
                   </View>
                 ))}
               </View>
@@ -73,12 +106,7 @@ export function QRCodeScreen({ navigation }: Props) {
 
       <View className="bg-background px-5 pb-5">
         <Pressable
-          onPress={() =>
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Home' }],
-            })
-          }
+          onPress={handleHomePress}
           className="h-14 bg-red rounded-2xl items-center justify-center"
         >
           <Text className="text-white font-bold">홈으로</Text>

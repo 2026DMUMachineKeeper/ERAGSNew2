@@ -1,40 +1,41 @@
-// 상태머신 결과를 화면으로 전달하기 위해 화면 이름과 params 타입을 한곳에서 관리합니다.
+// 화면 이동 파라미터를 한곳에서 관리해 기능 화면 간 객체 결합을 막습니다.
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
+import { FirstAidDetail } from '@/screens/FirstAidDetail';
+import { FirstAidScreen } from '@/screens/FirstAidScreen';
+import { MedicineAddScreen } from '@/screens/MedicineAddScreen';
+import { MedicineDetailScreen } from '@/screens/MedicineDetailScreen';
+import { MedicineManualInputScreen } from '@/screens/MedicineManualInputScreen';
+import { PasswordResetScreen } from '@/screens/PasswordResetScreen';
+import { QRCodeScreen } from '@/screens/QRCodeScreen';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
-import { restoreAuthSession } from '@/services';
+import { useAuthStore } from '@/store';
 
-import { MainTabNavigator } from './MainTabNavigator';
-import type { MedicineItem } from '../services/medicineApi';
+import { MainTabNavigator, type MainTabParamList } from './MainTabNavigator';
 
 export type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
-  Home: undefined;
-  MedicineMemo: undefined;
-  MedicineDetail: { medicine: MedicineItem };
+  Home: NavigatorScreenParams<MainTabParamList> | undefined;
+  MedicineDetail: { medicineId: string };
   MedicineAdd: undefined;
   MedicineManualInput: undefined;
   PasswordReset: undefined;
-  TestFont: undefined;
   FirstAid: undefined;
   FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
-  EmergencyGuide:
-    | {
-        mainLabel?: string;
-        subtypeLabel?: string;
-        source?: 'manual' | 'machine';
-      }
-    | undefined;
+  EmergencyGuide: undefined;
   QRCode: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = (): React.JSX.Element => {
+  const restoreSession = useAuthStore(state => state.restoreSession);
   const [initialRouteName, setInitialRouteName] = React.useState<
     keyof RootStackParamList | null
   >(null);
@@ -43,16 +44,10 @@ export const RootNavigator = (): React.JSX.Element => {
     let isActive = true;
 
     const loadInitialRoute = async (): Promise<void> => {
-      try {
-        await restoreAuthSession();
+      const isSessionRestored = await restoreSession();
 
-        if (isActive) {
-          setInitialRouteName('Home');
-        }
-      } catch {
-        if (isActive) {
-          setInitialRouteName('Login');
-        }
+      if (isActive) {
+        setInitialRouteName(isSessionRestored ? 'Home' : 'Login');
       }
     };
 
@@ -61,7 +56,7 @@ export const RootNavigator = (): React.JSX.Element => {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [restoreSession]);
 
   if (initialRouteName === null) {
     return (
@@ -79,49 +74,17 @@ export const RootNavigator = (): React.JSX.Element => {
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen name="Home" component={MainTabNavigator} />
-      <Stack.Screen
-        name="MedicineMemo"
-        component={require('../screens/MedicineMemoScreen').MedicineMemoScreen}
-      />
-      <Stack.Screen
-        name="MedicineDetail"
-        component={
-          require('../screens/MedicineDetailScreen').MedicineDetailScreen
-        }
-      />
-      <Stack.Screen
-        name="MedicineAdd"
-        component={require('../screens/MedicineAddScreen').MedicineAddScreen}
-      />
+      <Stack.Screen name="MedicineDetail" component={MedicineDetailScreen} />
+      <Stack.Screen name="MedicineAdd" component={MedicineAddScreen} />
       <Stack.Screen
         name="MedicineManualInput"
-        component={
-          require('../screens/MedicineManualInputScreen')
-            .MedicineManualInputScreen
-        }
+        component={MedicineManualInputScreen}
       />
-      <Stack.Screen
-        name="PasswordReset"
-        component={require('../screens/PasswordResetScreen').PasswordResetScreen}
-      />
-      <Stack.Screen
-        name="FirstAid"
-        component={require('../screens/FirstAidScreen').FirstAidScreen}
-      />
-      <Stack.Screen
-        name="FirstAidDetail"
-        component={require('../screens/FirstAidDetail').FirstAidDetail}
-      />
-      <Stack.Screen
-        name="EmergencyGuide"
-        component={
-          require('../screens/EmergencyGuideScreen').EmergencyGuideScreen
-        }
-      />
-      <Stack.Screen
-        name="QRCode"
-        component={require('../screens/QRCodeScreen').QRCodeScreen}
-      />
+      <Stack.Screen name="PasswordReset" component={PasswordResetScreen} />
+      <Stack.Screen name="FirstAid" component={FirstAidScreen} />
+      <Stack.Screen name="FirstAidDetail" component={FirstAidDetail} />
+      <Stack.Screen name="EmergencyGuide" component={EmergencyGuideScreen} />
+      <Stack.Screen name="QRCode" component={QRCodeScreen} />
     </Stack.Navigator>
   );
 };

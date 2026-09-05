@@ -1,4 +1,3 @@
-import Config from 'react-native-config';
 import * as Keychain from 'react-native-keychain';
 
 import type {
@@ -13,6 +12,11 @@ import type {
   ResetPasswordResponse,
   RefreshTokenResponse,
 } from '@/types/auth.types';
+
+import {
+  authenticatedFetch,
+  getApiBaseUrl,
+} from './authenticatedFetch.service';
 
 declare const atob: (encodedData: string) => string;
 
@@ -97,18 +101,7 @@ type AuthTokenPayload = {
 
 type AuthTokenResponse = LoginResponse | RefreshTokenResponse;
 
-const getAuthBaseUrl = (): string => {
-  const baseUrl = (Config.API_BASE_URL ?? Config.Base_URL ?? '').replace(
-    /\/+$/,
-    '',
-  );
-
-  if (!baseUrl) {
-    throw new Error('API_BASE_URL is not configured. Please check .env.');
-  }
-
-  return baseUrl;
-};
+const getAuthBaseUrl = getApiBaseUrl;
 
 const parseResponseBody = async (
   response: Response,
@@ -426,78 +419,36 @@ export const getAuthToken = async (): Promise<string> => {
 };
 
 const authenticatedAuthGet = async (path: string): Promise<Response> => {
-  const request = async (accessToken?: string): Promise<Response> => {
-    const token = accessToken ?? (await getAuthToken());
-
-    return fetch(`${getAuthBaseUrl()}${path}`, {
+  return authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: {
       method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    });
-  };
-
-  let response: Response;
-
-  try {
-    response = await request();
-  } catch (error) {
-    if (isAuthTokenExpiredError(error)) {
-      const refreshedTokens = await refreshAuthTokens();
-      return request(refreshedTokens.accessToken);
-    }
-
-    throw error;
-  }
-
-  if (response.status !== 401) {
-    return response;
-  }
-
-  const refreshedTokens = await refreshAuthTokens();
-
-  return request(refreshedTokens.accessToken);
+    },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (await refreshAuthTokens()).accessToken,
+  });
 };
 
 const authenticatedAuthPut = async (
   path: string,
   body: unknown,
 ): Promise<Response> => {
-  const request = async (accessToken?: string): Promise<Response> => {
-    const token = accessToken ?? (await getAuthToken());
-
-    return fetch(`${getAuthBaseUrl()}${path}`, {
+  return authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: {
       method: 'PUT',
       headers: {
-        Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
-    });
-  };
-
-  let response: Response;
-
-  try {
-    response = await request();
-  } catch (error) {
-    if (isAuthTokenExpiredError(error)) {
-      const refreshedTokens = await refreshAuthTokens();
-      return request(refreshedTokens.accessToken);
-    }
-
-    throw error;
-  }
-
-  if (response.status !== 401) {
-    return response;
-  }
-
-  const refreshedTokens = await refreshAuthTokens();
-
-  return request(refreshedTokens.accessToken);
+    },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (await refreshAuthTokens()).accessToken,
+  });
 };
 
 export const getMyPage = async (userId: number): Promise<MyPageProfile> => {
