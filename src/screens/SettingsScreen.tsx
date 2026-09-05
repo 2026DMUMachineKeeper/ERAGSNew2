@@ -31,6 +31,7 @@ import {
   updateStoredAuthUser,
 } from '../services';
 import { useAuthStore } from '../store';
+import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 import {
   INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
   normalizeOptionalKoreanPhoneNumber,
@@ -150,7 +151,7 @@ export const SettingsScreen = ({
         }
 
         if (isAuthSessionExpiredError(error)) {
-          moveToLogin();
+          redirectToLoginForExpiredSession(rootNavigation);
           return;
         }
 
@@ -167,7 +168,7 @@ export const SettingsScreen = ({
     return () => {
       isActive = false;
     };
-  }, [authenticatedUser, moveToLogin]);
+  }, [authenticatedUser, rootNavigation]);
 
   const handleEditProfilePress = (): void => {
     setDraftProfile(profile);
@@ -238,7 +239,7 @@ export const SettingsScreen = ({
       ]);
     } catch (error: unknown) {
       if (isAuthSessionExpiredError(error)) {
-        moveToLogin();
+        redirectToLoginForExpiredSession(rootNavigation);
         return;
       }
 

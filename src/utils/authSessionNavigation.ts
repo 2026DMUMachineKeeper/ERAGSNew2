@@ -14,12 +14,14 @@ export const redirectToLoginForExpiredSession = (
   useAuthStore
     .getState()
     .clearSession()
-    .catch(error => {
-      console.warn('[authSessionNavigation] clear auth session failed:', error);
+    .catch((error: unknown): void => {
+      console.warn('[authSessionNavigation] 인증 정보 정리 실패:', error);
+    })
+    .then((): void => {
+      // 이전 세션 정리가 새 로그인 정보를 지우지 않도록 화면 이동 전에 완료합니다.
+      navigation?.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
     });
-
-  navigation?.reset({
-    index: 0,
-    routes: [{ name: 'Login' }],
-  });
 };
