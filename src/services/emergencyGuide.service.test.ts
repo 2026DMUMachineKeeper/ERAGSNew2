@@ -236,4 +236,10 @@ describe('emergencyGuide.service', () => {
       expect(error.details).toEqual(['detail']);
     },
   );
+
+  it('네트워크 연결 실패에 맞는 사용자 안내를 반환한다', (): void => {
+    expect(
+      getEmergencyGuideErrorMessage(new TypeError('Network request failed')),
+    ).toBe('네트워크 연결을 확인한 후 다시 시도해 주세요.');
+  });
 });

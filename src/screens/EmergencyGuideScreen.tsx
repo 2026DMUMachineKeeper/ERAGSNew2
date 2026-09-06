@@ -174,7 +174,6 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     try {
       setGuide(await retryEmergencyGuide(guide.sessionId));
     } catch (error) {
-      console.error('[EmergencyGuideScreen] 응급 가이드 재시도 실패:', error);
       const errorMessage = getEmergencyGuideErrorMessage(error);
 
       if (error instanceof EmergencyGuideRequestError && error.status === 404) {
