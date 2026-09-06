@@ -102,10 +102,12 @@ describe('emergencyGuide.service', () => {
       }),
     );
     expect(consoleWarnMock).toHaveBeenCalledWith(
-      expect.stringContaining('Q2_VISIBLE_SYMPTOMS'),
+      '[EmergencyGuide API][Request]',
+      expect.objectContaining({ fieldNames: ['request', 'questionnaire'] }),
     );
     expect(consoleWarnMock).toHaveBeenCalledWith(
-      expect.stringContaining('"status": 200'),
+      '[EmergencyGuide API][Response]',
+      expect.objectContaining({ status: 200, errorCode: null }),
     );
   });
 
@@ -181,10 +183,14 @@ describe('emergencyGuide.service', () => {
     await expect(request).rejects.toMatchObject<
       Partial<EmergencyGuideRequestError>
     >({
+      message: '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
       status: 404,
       code: 'SESSION_NOT_FOUND',
       requestUrl:
         'test-api-base-url/api/v1/emergency-guide-sessions/emg-missing/guide',
     });
+    expect(JSON.stringify(consoleWarnMock.mock.calls)).not.toContain(
+      'Emergency guide session was not found',
+    );
   });
 });

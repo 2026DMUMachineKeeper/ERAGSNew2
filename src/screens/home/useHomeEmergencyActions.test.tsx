@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert, PermissionsAndroid, Platform } from 'react-native';
 
 import { useIsFocused } from '@react-navigation/native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
@@ -53,11 +54,50 @@ const HookHarness = ({ onGuideCreated }: HookHarnessProps): null => {
 };
 
 describe('홈 응급 작업 정리', () => {
+  const originalPlatformOs = Platform.OS;
+
   beforeEach((): void => {
     jest.clearAllMocks();
     jest.mocked(useIsFocused).mockReturnValue(true);
     jest.mocked(startAudioRecording).mockResolvedValue();
     jest.mocked(stopAudioRecording).mockResolvedValue(AUDIO_FILE);
+  });
+
+  afterEach((): void => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatformOs,
+    });
+    jest.restoreAllMocks();
+  });
+
+  it('카메라 권한 요청 실패를 사용자에게 안내한다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'android',
+    });
+    jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockRejectedValue(new Error('권한 오류'));
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((): void => {});
+    jest.spyOn(console, 'error').mockImplementation((): void => {});
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => {
+      await currentActions.handlePhotoPress();
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      '권한 확인 실패',
+      '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    );
+    await act(async (): Promise<void> => renderer.unmount());
   });
 
   it('녹음 중 탭을 떠나면 녹음을 정지한다', async (): Promise<void> => {

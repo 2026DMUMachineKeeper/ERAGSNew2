@@ -194,11 +194,22 @@ export const useHomeEmergencyActions = (
       return;
     }
 
-    const hasPermission = await requestAndroidPermission(
-      PermissionsAndroid.PERMISSIONS.CAMERA,
-      '카메라 권한 필요',
-      '사진을 찍어 응급 상황을 분석하려면 카메라 권한이 필요합니다.',
-    );
+    let hasPermission: boolean;
+
+    try {
+      hasPermission = await requestAndroidPermission(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        '카메라 권한 필요',
+        '사진을 찍어 응급 상황을 분석하려면 카메라 권한이 필요합니다.',
+      );
+    } catch (error: unknown) {
+      console.error('[HomeScreen] 카메라 권한 확인 실패:', error);
+      Alert.alert(
+        '권한 확인 실패',
+        '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      );
+      return;
+    }
     if (!isMountedRef.current || !isFocusedRef.current) {
       return;
     }
