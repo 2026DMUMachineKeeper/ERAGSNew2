@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,9 +48,24 @@ type SettingsScreenProps = CompositeScreenProps<
 
 const { colors } = tailwindConfig;
 const PROFILE_LOAD_ERROR_MESSAGE =
-  '마이페이지 정보를 불러오지 못했습니다. 저장된 정보를 대신 표시합니다.';
+  '마이페이지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const PROFILE_NETWORK_ERROR_MESSAGE =
+  '네트워크 연결을 확인한 후 다시 시도해 주세요.';
 const PROFILE_SAVE_ERROR_MESSAGE =
   '개인 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+
+const getProfileLoadError = (error: unknown): string => {
+  if (error instanceof TypeError) {
+    return PROFILE_NETWORK_ERROR_MESSAGE;
+  }
+
+  return getApiErrorUserMessage(error, {
+    fallbackMessage: PROFILE_LOAD_ERROR_MESSAGE,
+    statusMessages: {
+      503: '마이페이지 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    },
+  });
+};
 
 const styles = StyleSheet.create({
   actionCard: {
@@ -96,6 +112,7 @@ export const SettingsScreen = ({
   );
   const [isEditingProfile, setIsEditingProfile] = React.useState(false);
   const [isSavingProfile, setIsSavingProfile] = React.useState(false);
+  const [profileRequestVersion, setProfileRequestVersion] = React.useState(0);
 
   const rootNavigation =
     navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
@@ -115,19 +132,10 @@ export const SettingsScreen = ({
     let isActive = true;
 
     const loadProfile = async (): Promise<void> => {
+      setIsProfileLoading(true);
       setProfileLoadError(null);
 
       try {
-        const storedProfile = {
-          name: authenticatedUser?.name?.trim() ?? '',
-          guardianPhone: authenticatedUser?.guardian_phone?.trim() ?? '',
-        };
-
-        if (isActive) {
-          setProfile(storedProfile);
-          setDraftProfile(storedProfile);
-        }
-
         if (!authenticatedUser) {
           return;
         }
@@ -145,8 +153,6 @@ export const SettingsScreen = ({
           setDraftProfile(nextProfile);
         }
       } catch (error: unknown) {
-        console.warn('[SettingsScreen] profile load failed:', error);
-
         if (!isActive) {
           return;
         }
@@ -156,14 +162,13 @@ export const SettingsScreen = ({
           return;
         }
 
-        setProfileLoadError(
-          getApiErrorUserMessage(error, {
-            fallbackMessage: PROFILE_LOAD_ERROR_MESSAGE,
-            statusMessages: {
-              503: '마이페이지 서버에 연결할 수 없습니다. 저장된 정보를 대신 표시합니다.',
-            },
-          }),
-        );
+        const emptyProfile = { name: '', guardianPhone: '' };
+        setProfile(emptyProfile);
+        setDraftProfile(emptyProfile);
+        setIsEditingProfile(false);
+        setNameError(null);
+        setGuardianPhoneError(null);
+        setProfileLoadError(getProfileLoadError(error));
       } finally {
         if (isActive) {
           setIsProfileLoading(false);
@@ -176,7 +181,11 @@ export const SettingsScreen = ({
     return () => {
       isActive = false;
     };
-  }, [authenticatedUser, rootNavigation]);
+  }, [authenticatedUser, profileRequestVersion, rootNavigation]);
+
+  const handleProfileRetry = React.useCallback((): void => {
+    setProfileRequestVersion(currentVersion => currentVersion + 1);
+  }, []);
 
   const handleEditProfilePress = (): void => {
     setDraftProfile(profile);
@@ -322,71 +331,83 @@ export const SettingsScreen = ({
                 <Text className="mt-1 text-sm font-suitMedium leading-5 text-textDim">
                   {profileLoadError}
                 </Text>
+                <TouchableOpacity
+                  accessibilityLabel="마이페이지 다시 시도"
+                  accessibilityRole="button"
+                  className="mt-3 self-start rounded-xl border border-red px-4 py-2"
+                  onPress={handleProfileRetry}
+                >
+                  <Text className="text-sm font-suitBold text-red">
+                    다시 시도
+                  </Text>
+                </TouchableOpacity>
               </View>
             ) : null}
 
-            <View
-              className="mt-6 overflow-hidden rounded-2xl bg-white px-5 py-5"
-              style={styles.profileCard}
-            >
-              <View className="min-h-[40px] flex-row items-center">
-                <View className="flex-row items-center">
-                  <View className="h-9 w-9 items-center justify-center rounded-xl bg-camera_bg">
-                    <SettingsIcon color={colors.red} name="user" size={20} />
+            {!profileLoadError ? (
+              <View
+                className="mt-6 overflow-hidden rounded-2xl bg-white px-5 py-5"
+                style={styles.profileCard}
+              >
+                <View className="min-h-[40px] flex-row items-center">
+                  <View className="flex-row items-center">
+                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-camera_bg">
+                      <SettingsIcon color={colors.red} name="user" size={20} />
+                    </View>
+                    <Text className="ml-3 text-body font-suitBold text-black">
+                      개인 정보
+                    </Text>
                   </View>
-                  <Text className="ml-3 text-body font-suitBold text-black">
-                    개인 정보
-                  </Text>
                 </View>
+
+                <ProfileField
+                  config={{
+                    iconName: 'user',
+                    label: '이름',
+                    placeholder: namePlaceholder,
+                  }}
+                  editable={isProfileEditable}
+                  errorMessage={nameError ?? undefined}
+                  onChangeText={value => {
+                    setNameError(null);
+                    setDraftProfile(currentProfile => ({
+                      ...currentProfile,
+                      name: value,
+                    }));
+                  }}
+                  value={draftProfile.name}
+                />
+                <ProfileField
+                  config={{
+                    iconName: 'phone',
+                    keyboardType: 'phone-pad',
+                    label: '보호자 전화번호',
+                    placeholder: guardianPhonePlaceholder,
+                  }}
+                  editable={isProfileEditable}
+                  errorMessage={guardianPhoneError ?? undefined}
+                  onChangeText={value => {
+                    setGuardianPhoneError(null);
+                    setDraftProfile(currentProfile => ({
+                      ...currentProfile,
+                      guardianPhone: value,
+                    }));
+                  }}
+                  value={draftProfile.guardianPhone}
+                />
+
+                <ProfileEditActions
+                  handlers={{
+                    onCancel: handleCancelProfilePress,
+                    onEdit: handleEditProfilePress,
+                    onSave: handleSaveProfilePress,
+                  }}
+                  isEditing={isEditingProfile}
+                  isLoading={isProfileLoading}
+                  isSaving={isSavingProfile}
+                />
               </View>
-
-              <ProfileField
-                config={{
-                  iconName: 'user',
-                  label: '이름',
-                  placeholder: namePlaceholder,
-                }}
-                editable={isProfileEditable}
-                errorMessage={nameError ?? undefined}
-                onChangeText={value => {
-                  setNameError(null);
-                  setDraftProfile(currentProfile => ({
-                    ...currentProfile,
-                    name: value,
-                  }));
-                }}
-                value={draftProfile.name}
-              />
-              <ProfileField
-                config={{
-                  iconName: 'phone',
-                  keyboardType: 'phone-pad',
-                  label: '보호자 전화번호',
-                  placeholder: guardianPhonePlaceholder,
-                }}
-                editable={isProfileEditable}
-                errorMessage={guardianPhoneError ?? undefined}
-                onChangeText={value => {
-                  setGuardianPhoneError(null);
-                  setDraftProfile(currentProfile => ({
-                    ...currentProfile,
-                    guardianPhone: value,
-                  }));
-                }}
-                value={draftProfile.guardianPhone}
-              />
-
-              <ProfileEditActions
-                handlers={{
-                  onCancel: handleCancelProfilePress,
-                  onEdit: handleEditProfilePress,
-                  onSave: handleSaveProfilePress,
-                }}
-                isEditing={isEditingProfile}
-                isLoading={isProfileLoading}
-                isSaving={isSavingProfile}
-              />
-            </View>
+            ) : null}
 
             <View
               className="mt-4 overflow-hidden rounded-2xl bg-white"
