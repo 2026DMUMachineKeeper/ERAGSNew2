@@ -30,6 +30,7 @@ import {
   updateMyPage,
   updateStoredAuthUser,
 } from '../services';
+import { getApiErrorUserMessage } from '../services/apiError.service';
 import { useAuthStore } from '../store';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 import {
@@ -155,7 +156,14 @@ export const SettingsScreen = ({
           return;
         }
 
-        setProfileLoadError(PROFILE_LOAD_ERROR_MESSAGE);
+        setProfileLoadError(
+          getApiErrorUserMessage(error, {
+            fallbackMessage: PROFILE_LOAD_ERROR_MESSAGE,
+            statusMessages: {
+              503: '마이페이지 서버에 연결할 수 없습니다. 저장된 정보를 대신 표시합니다.',
+            },
+          }),
+        );
       } finally {
         if (isActive) {
           setIsProfileLoading(false);
@@ -244,7 +252,15 @@ export const SettingsScreen = ({
       }
 
       console.warn('[SettingsScreen] profile update failed:', error);
-      Alert.alert('저장 실패', PROFILE_SAVE_ERROR_MESSAGE);
+      Alert.alert(
+        '저장 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: {
+            INVALID_REQUEST: '입력한 개인 정보를 다시 확인해 주세요.',
+          },
+          fallbackMessage: PROFILE_SAVE_ERROR_MESSAGE,
+        }),
+      );
     } finally {
       setIsSavingProfile(false);
     }

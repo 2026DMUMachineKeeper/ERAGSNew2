@@ -3,6 +3,8 @@ import { Alert, TextInput } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+import { ApiRequestError } from '@/services/apiError.service';
+
 import { LoginScreen } from './LoginScreen';
 
 const mockSignIn = jest.fn();
@@ -29,7 +31,16 @@ describe('LoginScreen 오류 메시지', () => {
   it('내부 오류 정보 대신 사용자용 메시지를 표시한다', async (): Promise<void> => {
     const internalMessage =
       'Server returned a non-JSON response. (502) https://internal.example 응답본문';
-    mockSignIn.mockRejectedValue(new Error(internalMessage));
+    mockSignIn.mockRejectedValue(
+      new ApiRequestError(
+        {
+          code: 'INVALID_REQUEST',
+          details: ['email'],
+          message: internalMessage,
+        },
+        400,
+      ),
+    );
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation((): void => {});
@@ -57,7 +68,7 @@ describe('LoginScreen 오류 메시지', () => {
 
     expect(alertSpy).toHaveBeenCalledWith(
       '로그인 실패',
-      '로그인에 실패했습니다. 이메일과 비밀번호를 확인한 후 다시 시도해 주세요.',
+      '이메일과 비밀번호 형식을 확인해 주세요.',
     );
     expect(JSON.stringify(alertSpy.mock.calls)).not.toContain(internalMessage);
     await act(async (): Promise<void> => renderer.unmount());

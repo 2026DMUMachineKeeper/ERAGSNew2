@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { markLocationPermissionPromptPending, register } from '@/services';
+import { getApiErrorUserMessage } from '@/services/apiError.service';
 import {
   INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
   normalizeOptionalKoreanPhoneNumber,
@@ -26,6 +27,11 @@ type SignUpScreenProps = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 const { colors } = tailwindConfig;
 const SIGN_UP_ERROR_MESSAGE =
   '회원가입을 완료하지 못했습니다. 입력 내용을 확인하고 다시 시도해 주세요.';
+const SIGN_UP_ERROR_CODE_MESSAGES: Readonly<Record<string, string>> = {
+  DUPLICATE_EMAIL: '이미 가입된 이메일입니다.',
+  EMAIL_ALREADY_EXISTS: '이미 가입된 이메일입니다.',
+  INVALID_REQUEST: '입력한 회원가입 정보를 다시 확인해 주세요.',
+};
 
 export const SignUpScreen = ({
   navigation,
@@ -119,7 +125,14 @@ export const SignUpScreen = ({
       ]);
     } catch (error: unknown) {
       console.error('[SignUpScreen] 회원가입 실패', error);
-      Alert.alert('회원가입 실패', SIGN_UP_ERROR_MESSAGE);
+      Alert.alert(
+        '회원가입 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: SIGN_UP_ERROR_CODE_MESSAGES,
+          fallbackMessage: SIGN_UP_ERROR_MESSAGE,
+          statusMessages: { 409: '이미 가입된 이메일입니다.' },
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }
