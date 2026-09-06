@@ -2,6 +2,7 @@ import {
   deleteMedicine,
   fetchMedicineById,
   fetchMedicines,
+  postMedicineVision,
 } from './medicineApi';
 
 jest.mock('./auth.service', () => ({
@@ -114,4 +115,42 @@ describe('deleteMedicine', () => {
       await expect(fetchMedicines()).resolves.toEqual([]);
     },
   );
+});
+
+describe('postMedicineVision', () => {
+  beforeEach((): void => {
+    fetchMock.mockReset();
+  });
+
+  it('성공 응답의 data에 포함된 등록 결과를 반환한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => ({
+        success: true,
+        data: {
+          isRegistered: true,
+          step: null,
+          id: 1,
+          name: '멸균 거즈',
+          quantity: 9,
+          usage: '상처 부위 압박',
+          efficacy: '출혈 억제',
+        },
+        message: 'AI 인식 및 등록 성공',
+      }),
+    } as Response);
+
+    await expect(
+      postMedicineVision({ imageBase64: 'base64-image' }),
+    ).resolves.toEqual({
+      isRegistered: true,
+      step: null,
+      id: 1,
+      name: '멸균 거즈',
+      quantity: 9,
+      usage: '상처 부위 압박',
+      efficacy: '출혈 억제',
+    });
+  });
 });
