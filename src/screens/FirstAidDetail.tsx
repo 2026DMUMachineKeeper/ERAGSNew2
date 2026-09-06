@@ -191,7 +191,6 @@ export const FirstAidDetail = ({
       });
       navigation.replace('EmergencyGuide');
     } catch (error) {
-      console.error('[FirstAidDetail] 응급 가이드 생성 실패:', error);
       Alert.alert(
         '응급 가이드 생성 실패',
         getEmergencyGuideErrorMessage(error),

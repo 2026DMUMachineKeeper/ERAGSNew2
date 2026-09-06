@@ -242,7 +242,6 @@ export const useHomeEmergencyActions = (
         return;
       }
 
-      console.error('[HomeScreen] 사진 전송 실패:', error);
       const errorMessage = getEmergencyGuideErrorMessage(error);
 
       setVisionStatus(errorMessage);
@@ -311,7 +310,6 @@ export const useHomeEmergencyActions = (
         return;
       }
 
-      console.error('[HomeScreen] 음성 파일 처리 실패:', error);
       isListeningRef.current = false;
       setIsListening(false);
       setVoiceStatus(getEmergencyGuideErrorMessage(error));

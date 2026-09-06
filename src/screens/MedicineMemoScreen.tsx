@@ -41,6 +41,25 @@ interface MedicineMemoScreenProps
 const { colors } = tailwindConfig;
 const MEDICINE_LIST_LOAD_ERROR_MESSAGE =
   '약품 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const MEDICINE_LIST_NETWORK_ERROR_MESSAGE =
+  '네트워크 연결을 확인한 후 다시 시도해 주세요.';
+
+const getMedicineListLoadError = (error: unknown): string | null => {
+  if (!error || isAuthSessionExpiredError(error)) {
+    return null;
+  }
+
+  if (error instanceof TypeError) {
+    return MEDICINE_LIST_NETWORK_ERROR_MESSAGE;
+  }
+
+  return getApiErrorUserMessage(error, {
+    fallbackMessage: MEDICINE_LIST_LOAD_ERROR_MESSAGE,
+    statusMessages: {
+      503: '약품 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    },
+  });
+};
 
 export const filterMedicinesByName = (
   medicines: MedicineItem[],
@@ -79,35 +98,28 @@ export const MedicineMemoScreen = ({
   const {
     data: medicines = [],
     error: medicineQueryError,
+    isFetching,
     isPending: isLoading,
+    refetch,
   } = useQuery({ ...medicineQueryOptions, enabled: isFocused });
-  const loadError =
-    medicineQueryError && !isAuthSessionExpiredError(medicineQueryError)
-      ? getApiErrorUserMessage(medicineQueryError, {
-          fallbackMessage: MEDICINE_LIST_LOAD_ERROR_MESSAGE,
-          statusMessages: {
-            503: '약품 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
-          },
-        })
-      : null;
+  const loadError = getMedicineListLoadError(medicineQueryError);
   const filteredMedicines = React.useMemo(
     () => filterMedicinesByName(medicines, searchQuery),
     [medicines, searchQuery],
   );
 
   React.useEffect((): void => {
-    if (!medicineQueryError) {
+    if (!medicineQueryError || !isAuthSessionExpiredError(medicineQueryError)) {
       return;
     }
 
-    if (isAuthSessionExpiredError(medicineQueryError)) {
-      console.warn('[MedicineMemoScreen] 인증 세션 만료:', medicineQueryError);
-      handleAuthSessionExpired();
-      return;
-    }
-
-    console.error('[MedicineMemoScreen] 약품 조회 실패:', medicineQueryError);
+    console.warn('[MedicineMemoScreen] 인증 세션 만료:', medicineQueryError);
+    handleAuthSessionExpired();
   }, [handleAuthSessionExpired, medicineQueryError]);
+
+  const handleRetry = React.useCallback(async (): Promise<void> => {
+    await refetch();
+  }, [refetch]);
 
   const handleHomePress = React.useCallback((): void => {
     navigation.navigate('HomeTab');
@@ -145,9 +157,20 @@ export const MedicineMemoScreen = ({
     if (loadError) {
       return (
         <View className="mt-12 items-center">
-          <Text className="text-sm font-suitBold text-memoRed">
+          <Text className="text-center text-sm font-suitBold text-memoRed">
             {loadError}
           </Text>
+          <TouchableOpacity
+            accessibilityLabel="약품 목록 다시 시도"
+            accessibilityRole="button"
+            className="mt-4 rounded-xl border border-memoRed px-5 py-3"
+            disabled={isFetching}
+            onPress={handleRetry}
+          >
+            <Text className="text-sm font-suitBold text-memoRed">
+              {isFetching ? '불러오는 중...' : '다시 시도'}
+            </Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -164,7 +187,7 @@ export const MedicineMemoScreen = ({
         </Text>
       </View>
     );
-  }, [isLoading, loadError, searchQuery]);
+  }, [handleRetry, isFetching, isLoading, loadError, searchQuery]);
 
   return (
     <SafeAreaView className="flex-1 bg-memoBg" edges={['top', 'bottom']}>
@@ -203,16 +226,18 @@ export const MedicineMemoScreen = ({
           />
         </View>
 
-        <View className="mt-4 flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <Text className="text-sm font-suitBold text-memoText">
-              {searchQuery.trim().length > 0 ? '검색 결과 ' : '전체 '}
-            </Text>
-            <Text className="text-sm font-suitBold text-memoRed">
-              {filteredMedicines.length}개
-            </Text>
+        {!loadError && (
+          <View className="mt-4 flex-row items-center justify-between">
+            <View className="flex-row items-center">
+              <Text className="text-sm font-suitBold text-memoText">
+                {searchQuery.trim().length > 0 ? '검색 결과 ' : '전체 '}
+              </Text>
+              <Text className="text-sm font-suitBold text-memoRed">
+                {filteredMedicines.length}개
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         <FlatList
           className="mt-2 flex-1"

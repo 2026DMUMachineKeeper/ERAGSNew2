@@ -4,7 +4,11 @@ import type {
   EmergencyGuideResponse,
 } from '@/types';
 
-import { fetchWithTimeout, getApiBaseUrl } from './authenticatedFetch.service';
+import {
+  fetchWithTimeout,
+  getApiBaseUrl,
+  RequestTimeoutError,
+} from './authenticatedFetch.service';
 import { ApiRequestError } from './apiError.service';
 
 const EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS = 60_000;
@@ -94,6 +98,14 @@ const EMERGENCY_GUIDE_STATUS_MESSAGES: Readonly<Record<number, string>> = {
 };
 
 export const getEmergencyGuideErrorMessage = (error: unknown): string => {
+  if (error instanceof RequestTimeoutError) {
+    return '요청 시간이 초과되었습니다. 네트워크 연결을 확인한 후 다시 시도해 주세요.';
+  }
+
+  if (error instanceof TypeError) {
+    return '네트워크 연결을 확인한 후 다시 시도해 주세요.';
+  }
+
   const code =
     error instanceof ApiRequestError
       ? error.code

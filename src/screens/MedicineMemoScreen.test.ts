@@ -1,4 +1,5 @@
 import React from 'react';
+import { Text } from 'react-native';
 
 import { useIsFocused } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,6 +13,25 @@ import {
   filterMedicinesByName,
   MedicineMemoScreen,
 } from './MedicineMemoScreen';
+
+const getRenderedText = (renderer: ReactTestRenderer): string =>
+  renderer.root
+    .findAllByType(Text)
+    .flatMap(textNode => textNode.props.children)
+    .filter(
+      (text): text is string | number =>
+        typeof text === 'string' || typeof text === 'number',
+    )
+    .join(' ');
+
+const waitForQueryUpdate = async (): Promise<void> => {
+  await act(
+    async (): Promise<void> =>
+      new Promise(resolve => {
+        setTimeout(resolve, 0);
+      }),
+  );
+};
 
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: jest.fn(),
@@ -69,7 +89,9 @@ describe('filterMedicinesByName', () => {
 describe('약품 탭 복귀 시 조회', () => {
   it.each(['최신 캐시', '오래된 캐시', '조회 실패'] as const)(
     '%s 상태에서 필요한 경우에만 재조회한다',
-    async (cacheState: '최신 캐시' | '오래된 캐시' | '조회 실패'): Promise<void> => {
+    async (
+      cacheState: '최신 캐시' | '오래된 캐시' | '조회 실패',
+    ): Promise<void> => {
       const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: Infinity } },
       });
@@ -131,4 +153,107 @@ describe('약품 탭 복귀 시 조회', () => {
     },
     15_000,
   );
+});
+
+describe('약품 목록 조회 실패 화면', () => {
+  const createScreenProps = (): React.ComponentProps<
+    typeof MedicineMemoScreen
+  > =>
+    ({
+      navigation: { getParent: jest.fn() },
+    } as unknown as React.ComponentProps<typeof MedicineMemoScreen>);
+
+  it('저장된 목록이 없으면 네트워크 안내와 재시도 버튼을 표시한다', async (): Promise<void> => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    jest.mocked(useIsFocused).mockReturnValue(true);
+    jest
+      .mocked(fetchMedicines)
+      .mockReset()
+      .mockRejectedValueOnce(new TypeError('Network request failed'))
+      .mockResolvedValueOnce(MEDICINES);
+    let renderer: ReactTestRenderer | undefined;
+
+    try {
+      await act(async (): Promise<void> => {
+        renderer = create(
+          React.createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            React.createElement(MedicineMemoScreen, createScreenProps()),
+          ),
+        );
+      });
+      if (!renderer) {
+        throw new Error('약품 메모 화면을 렌더링하지 못했습니다.');
+      }
+      await waitForQueryUpdate();
+
+      const failedScreen = getRenderedText(renderer);
+      expect(failedScreen).toContain(
+        '네트워크 연결을 확인한 후 다시 시도해 주세요.',
+      );
+      expect(failedScreen).not.toContain('0개');
+
+      const retryButton = renderer?.root.findByProps({
+        accessibilityLabel: '약품 목록 다시 시도',
+      });
+      await act(async (): Promise<void> => {
+        await retryButton?.props.onPress();
+      });
+      await waitForQueryUpdate();
+
+      expect(fetchMedicines).toHaveBeenCalledTimes(2);
+      expect(getRenderedText(renderer)).toContain('3 개');
+    } finally {
+      await act(async (): Promise<void> => {
+        renderer?.unmount();
+      });
+      queryClient.clear();
+    }
+  });
+
+  it('저장된 목록이 있어도 오류 안내만 표시한다', async (): Promise<void> => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    queryClient.setQueryData(MEDICINES_QUERY_KEY, MEDICINES, {
+      updatedAt: Date.now() - 31_000,
+    });
+    jest.mocked(useIsFocused).mockReturnValue(true);
+    jest
+      .mocked(fetchMedicines)
+      .mockReset()
+      .mockRejectedValueOnce(new TypeError('Network request failed'));
+    let renderer: ReactTestRenderer | undefined;
+
+    try {
+      await act(async (): Promise<void> => {
+        renderer = create(
+          React.createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            React.createElement(MedicineMemoScreen, createScreenProps()),
+          ),
+        );
+      });
+      if (!renderer) {
+        throw new Error('약품 메모 화면을 렌더링하지 못했습니다.');
+      }
+      await waitForQueryUpdate();
+
+      const failedRefreshScreen = getRenderedText(renderer);
+      expect(failedRefreshScreen).toContain(
+        '네트워크 연결을 확인한 후 다시 시도해 주세요.',
+      );
+      expect(failedRefreshScreen).not.toContain('타이레놀');
+      expect(failedRefreshScreen).not.toContain('3 개');
+    } finally {
+      await act(async (): Promise<void> => {
+        renderer?.unmount();
+      });
+      queryClient.clear();
+    }
+  });
 });
