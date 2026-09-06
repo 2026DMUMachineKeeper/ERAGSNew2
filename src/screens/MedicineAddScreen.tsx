@@ -30,6 +30,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MedicineAdd'>;
 const { colors } = tailwindConfig;
 const CAMERA_START_ERROR_MESSAGE =
   '카메라를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const CAMERA_PERMISSION_ERROR_MESSAGE =
+  '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const MEDICINE_REGISTER_ERROR_MESSAGE =
   '약품을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const MEDICINE_IMAGE_TOO_LARGE_MESSAGE =
@@ -111,6 +113,18 @@ export function MedicineAddScreen({ navigation }: Props) {
     });
   }, [navigation]);
 
+  const handleOpenSettings = async (): Promise<void> => {
+    try {
+      await Linking.openSettings();
+    } catch (error: unknown) {
+      console.error('[MedicineAddScreen] 설정 열기 실패:', error);
+      Alert.alert(
+        '설정 열기 실패',
+        '기기 설정을 열지 못했습니다. 설정 앱에서 카메라 권한을 확인해 주세요.',
+      );
+    }
+  };
+
   const uploadCapturedPhoto = async (imageBase64: string) => {
     setIsUploading(true);
 
@@ -178,12 +192,20 @@ export function MedicineAddScreen({ navigation }: Props) {
       return;
     }
 
-    const hasPermission = await requestCameraPermission();
+    let hasPermission: boolean;
+
+    try {
+      hasPermission = await requestCameraPermission();
+    } catch (error: unknown) {
+      console.error('[MedicineAddScreen] 카메라 권한 확인 실패:', error);
+      Alert.alert('권한 확인 실패', CAMERA_PERMISSION_ERROR_MESSAGE);
+      return;
+    }
 
     if (!hasPermission) {
       Alert.alert('권한 필요', '카메라 권한을 허용해야 촬영할 수 있습니다.', [
         { text: '취소', style: 'cancel' },
-        { text: '설정 열기', onPress: () => Linking.openSettings() },
+        { text: '설정 열기', onPress: handleOpenSettings },
       ]);
       return;
     }
@@ -251,6 +273,8 @@ export function MedicineAddScreen({ navigation }: Props) {
         </View>
 
         <TouchableOpacity
+          accessibilityLabel="약품 사진 촬영"
+          accessibilityRole="button"
           activeOpacity={0.9}
           className="relative mt-8 items-center justify-center overflow-hidden rounded-xl border border-dashed border-memoRed bg-camera_bg px-5 py-[80px]"
           disabled={isUploading}

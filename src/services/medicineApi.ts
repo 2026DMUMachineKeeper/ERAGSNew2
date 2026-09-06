@@ -6,6 +6,8 @@ import {
 import { authenticatedFetch } from './authenticatedFetch.service';
 
 const MEDICINE_IMAGE_UPLOAD_TIMEOUT_MS = 60_000;
+const INVALID_MEDICINE_RESPONSE_MESSAGE =
+  '약품 목록 응답 형식이 올바르지 않습니다.';
 
 export type MedicineApiRecord = {
   id?: string | number;
@@ -134,48 +136,53 @@ const isRecord = (payload: unknown): payload is Record<string, unknown> => {
   return payload !== null && typeof payload === 'object';
 };
 
+const readRecordArray = (payload: unknown): MedicineApiRecord[] | null => {
+  if (!Array.isArray(payload)) {
+    return null;
+  }
+
+  if (!payload.every(isRecord)) {
+    throw new Error(INVALID_MEDICINE_RESPONSE_MESSAGE);
+  }
+
+  return payload;
+};
+
 const readMedicineRecords = (payload: unknown): MedicineApiRecord[] => {
-  if (Array.isArray(payload)) {
-    return payload.filter(isRecord);
+  const rootRecords = readRecordArray(payload);
+  if (rootRecords) {
+    return rootRecords;
   }
 
   if (!isRecord(payload)) {
-    return [];
+    throw new Error(INVALID_MEDICINE_RESPONSE_MESSAGE);
+  }
+
+  const dataRecords = readRecordArray(payload.data);
+  if (dataRecords) {
+    return dataRecords;
   }
 
   const data = payload.data;
-
-  if (Array.isArray(data)) {
-    return data.filter(isRecord);
-  }
-
-  if (isRecord(data)) {
-    const nestedRecords = [
-      data.medicines,
-      data.items,
-      data.list,
-      data.content,
-      data.results,
-    ].find(Array.isArray);
-
-    if (Array.isArray(nestedRecords)) {
-      return nestedRecords.filter(isRecord);
-    }
-  }
-
-  const rootRecords = [
+  const candidates = [
+    ...(isRecord(data)
+      ? [data.medicines, data.items, data.list, data.content, data.results]
+      : []),
     payload.medicines,
     payload.items,
     payload.list,
     payload.content,
     payload.results,
-  ].find(Array.isArray);
+  ];
 
-  if (Array.isArray(rootRecords)) {
-    return rootRecords.filter(isRecord);
+  for (const candidate of candidates) {
+    const records = readRecordArray(candidate);
+    if (records) {
+      return records;
+    }
   }
 
-  return [];
+  throw new Error(INVALID_MEDICINE_RESPONSE_MESSAGE);
 };
 
 export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({

@@ -15,8 +15,12 @@ const getInstructionFromTitle = (title: string) =>
   title.replace(/^\d+\s*단계:\s*/, '').trim();
 
 export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
+  const [failedImageResource, setFailedImageResource] = React.useState<
+    string | null
+  >(null);
   const [showStopModal, setShowStopModal] = React.useState(false);
   const imageResource = step?.imageResource?.trim() ?? '';
+  const hasImageLoadError = failedImageResource === imageResource;
   const title = typeof step?.title === 'string' ? step.title : '';
   const stepNo =
     typeof step?.stepNo === 'number'
@@ -104,7 +108,7 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
 
       <View className="mt-6 items-center">
         <View className="h-[200px] w-[260px] items-center justify-center overflow-hidden rounded-lg bg-offWhite">
-          {imageResource ? (
+          {imageResource && !hasImageLoadError ? (
             <Image
               key={imageResource}
               accessibilityLabel={`${stepNo}단계 응급처치 이미지`}
@@ -123,6 +127,7 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
                 });
               }}
               onError={(event): void => {
+                setFailedImageResource(imageResource);
                 console.error('[EmergencyGuide Image][Response]', {
                   requestUrl: imageResource,
                   status: 'FAILED',
@@ -131,7 +136,11 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
               }}
             />
           ) : (
-            <Text className="text-gray">제공된 이미지가 없습니다.</Text>
+            <Text className="px-5 text-center text-sm font-suitMedium leading-5 text-gray">
+              {hasImageLoadError
+                ? '이미지를 불러오지 못했습니다. 텍스트 안내에 따라 진행해 주세요.'
+                : '제공된 이미지가 없습니다.'}
+            </Text>
           )}
         </View>
       </View>
