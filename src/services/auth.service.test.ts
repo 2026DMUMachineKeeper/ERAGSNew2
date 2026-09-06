@@ -4,9 +4,11 @@ import { useAuthStore } from '@/store/authStore';
 
 import {
   AuthSessionExpiredError,
+  login,
   refreshAuthTokens,
   restoreAuthSession,
 } from './auth.service';
+import { ApiRequestError } from './apiError.service';
 
 jest.mock('@/query', () => ({
   prefetchMedicines: jest.fn(),
@@ -151,5 +153,34 @@ describe('restoreAuthSession', () => {
       expect.objectContaining({ accessToken: 'renewed-access-token' }),
     ]);
     expect(Keychain.setGenericPassword).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('인증 API 오류', () => {
+  it('표준 오류의 상태, 코드, 메시지와 상세를 보존한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async (): Promise<string> =>
+        JSON.stringify({
+          success: false,
+          error: {
+            code: 'INVALID_REQUEST',
+            message: 'invalid email',
+            details: ['email'],
+          },
+        }),
+    } as Response);
+
+    const error = await login({ email: 'invalid', password: 'password' }).catch(
+      (requestError: unknown): unknown => requestError,
+    );
+
+    expect(error).toMatchObject<Partial<ApiRequestError>>({
+      status: 400,
+      code: 'INVALID_REQUEST',
+      message: 'invalid email',
+      details: ['email'],
+    });
   });
 });

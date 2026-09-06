@@ -19,6 +19,7 @@ import {
   fetchWithTimeout,
   getApiBaseUrl,
 } from './authenticatedFetch.service';
+import { ApiRequestError, createApiRequestError } from './apiError.service';
 
 declare const atob: (encodedData: string) => string;
 
@@ -31,16 +32,6 @@ export class AuthTokenExpiredError extends Error {
   constructor(message = AUTH_SESSION_EXPIRED_MESSAGE) {
     super(message);
     this.name = 'AuthTokenExpiredError';
-  }
-}
-
-class AuthRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'AuthRequestError';
-    this.status = status;
   }
 }
 
@@ -68,11 +59,6 @@ export type StoredAuthTokens = {
   expiresIn?: number;
   user?: AuthUser;
 };
-
-interface ErrorResponseBody {
-  success?: boolean;
-  message?: string;
-}
 
 interface ParsedResponseBody {
   payload: unknown;
@@ -128,30 +114,12 @@ const parseResponseBody = async (
   }
 };
 
-const isErrorResponseBody = (
-  payload: unknown,
-): payload is ErrorResponseBody => {
-  return payload !== null && typeof payload === 'object';
-};
-
 const isRecord = (payload: unknown): payload is Record<string, unknown> => {
   return payload !== null && typeof payload === 'object';
 };
 
 const getObjectKeys = (payload: unknown): string[] => {
   return isRecord(payload) ? Object.keys(payload) : [];
-};
-
-const getErrorMessage = (payload: unknown, fallbackMessage: string): string => {
-  if (
-    isErrorResponseBody(payload) &&
-    typeof payload.message === 'string' &&
-    payload.message.trim().length > 0
-  ) {
-    return payload.message;
-  }
-
-  return fallbackMessage;
 };
 
 const postAuthRequest = async <TResponse>(
@@ -170,20 +138,19 @@ const postAuthRequest = async <TResponse>(
   const parsedResponseBody = await parseResponseBody(response);
 
   if (!parsedResponseBody.isJson) {
-    const responsePreview = parsedResponseBody.rawText.trim().slice(0, 80);
-
-    throw new Error(
-      `Server returned a non-JSON response. (${response.status}) ${requestUrl} ${responsePreview}`,
+    throw createApiRequestError(
+      null,
+      response.status,
+      '인증 서버 응답 형식이 올바르지 않습니다.',
+      'INVALID_RESPONSE',
     );
   }
 
   if (!response.ok) {
-    throw new AuthRequestError(
-      getErrorMessage(
-        parsedResponseBody.payload,
-        `Request failed. (${response.status})`,
-      ),
+    throw createApiRequestError(
+      parsedResponseBody.payload,
       response.status,
+      '인증 요청에 실패했습니다.',
     );
   }
 
@@ -465,18 +432,19 @@ export const getMyPage = async (userId: number): Promise<MyPageProfile> => {
   const parsedResponseBody = await parseResponseBody(response);
 
   if (!parsedResponseBody.isJson) {
-    throw new Error(
-      `마이페이지 응답을 확인할 수 없습니다. (${response.status})`,
+    throw createApiRequestError(
+      null,
+      response.status,
+      '마이페이지 응답 형식이 올바르지 않습니다.',
+      'INVALID_RESPONSE',
     );
   }
 
   if (!response.ok) {
-    throw new AuthRequestError(
-      getErrorMessage(
-        parsedResponseBody.payload,
-        `마이페이지 조회에 실패했습니다. (${response.status})`,
-      ),
+    throw createApiRequestError(
+      parsedResponseBody.payload,
       response.status,
+      '마이페이지 조회에 실패했습니다.',
     );
   }
 
@@ -527,18 +495,19 @@ export const updateMyPage = async (
   const parsedResponseBody = await parseResponseBody(response);
 
   if (!parsedResponseBody.isJson) {
-    throw new Error(
-      `마이페이지 수정 응답을 확인할 수 없습니다. (${response.status})`,
+    throw createApiRequestError(
+      null,
+      response.status,
+      '마이페이지 수정 응답 형식이 올바르지 않습니다.',
+      'INVALID_RESPONSE',
     );
   }
 
   if (!response.ok) {
-    throw new AuthRequestError(
-      getErrorMessage(
-        parsedResponseBody.payload,
-        `마이페이지 수정에 실패했습니다. (${response.status})`,
-      ),
+    throw createApiRequestError(
+      parsedResponseBody.payload,
       response.status,
+      '마이페이지 수정에 실패했습니다.',
     );
   }
 
@@ -740,7 +709,7 @@ const requestRefreshedAuthTokens = async (): Promise<StoredAuthTokens> => {
     );
   } catch (error) {
     if (
-      error instanceof AuthRequestError &&
+      error instanceof ApiRequestError &&
       (error.status === 401 || error.status === 403)
     ) {
       await clearAuthSession();

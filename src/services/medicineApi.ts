@@ -4,6 +4,7 @@ import {
   refreshAuthTokens,
 } from './auth.service';
 import { authenticatedFetch } from './authenticatedFetch.service';
+import { readApiRequestError } from './apiError.service';
 
 const MEDICINE_IMAGE_UPLOAD_TIMEOUT_MS = 60_000;
 const INVALID_MEDICINE_RESPONSE_MESSAGE =
@@ -210,7 +211,7 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`약품 조회 실패: ${response.status}`);
+    throw await readApiRequestError(response, '약품 조회에 실패했습니다.');
   }
 
   const payload = (await response.json()) as unknown;
@@ -236,7 +237,10 @@ export async function fetchAvailableMedicines(): Promise<MedicineItem[]> {
   );
 
   if (!response.ok) {
-    throw new Error(`Available medicines request failed: ${response.status}`);
+    throw await readApiRequestError(
+      response,
+      '사용 가능한 약품 조회에 실패했습니다.',
+    );
   }
 
   const payload = (await response.json()) as unknown;
@@ -286,7 +290,7 @@ const readMedicineMutationResult = async (
   failureMessage: string,
 ): Promise<MedicineMutationResult> => {
   if (!response.ok) {
-    throw new Error(`${failureMessage}: ${response.status}`);
+    throw await readApiRequestError(response, failureMessage);
   }
 
   if (response.status === 204) {
@@ -318,13 +322,7 @@ export async function postMedicineVision(params: {
   );
 
   if (!response.ok) {
-    if (response.status === 413) {
-      throw new Error(
-        '의약품 비전 업로드 실패: 이미지 용량이 너무 큽니다. 더 작게 촬영해서 다시 시도해 주세요.',
-      );
-    }
-
-    throw new Error(`의약품 비전 업로드 실패: ${response.status}`);
+    throw await readApiRequestError(response, '약품 사진 등록에 실패했습니다.');
   }
 
   const payload = (await response.json()) as unknown;

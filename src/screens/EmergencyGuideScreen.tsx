@@ -18,6 +18,8 @@ import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import {
+  EmergencyGuideRequestError,
+  getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
   retryEmergencyGuide,
   speakTts,
@@ -163,7 +165,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleRetryPress = async (): Promise<void> => {
-    if (!guide) {
+    if (!guide?.sessionId) {
       return;
     }
 
@@ -173,12 +175,16 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
       setGuide(await retryEmergencyGuide(guide.sessionId));
     } catch (error) {
       console.error('[EmergencyGuideScreen] 응급 가이드 재시도 실패:', error);
-      Alert.alert(
-        '응급 가이드 재시도 실패',
-        error instanceof Error
-          ? error.message
-          : '응급 가이드를 다시 불러오지 못했습니다.',
-      );
+      const errorMessage = getEmergencyGuideErrorMessage(error);
+
+      if (error instanceof EmergencyGuideRequestError && error.status === 404) {
+        Alert.alert('응급 가이드 재시도 실패', errorMessage, [
+          { text: '새 요청', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+
+      Alert.alert('응급 가이드 재시도 실패', errorMessage);
     } finally {
       setIsRetrying(false);
     }
@@ -201,22 +207,25 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
             {guide.assessment?.summary ?? '응급처치 안내를 준비하고 있습니다.'}
           </Text>
           <Text className="mt-3 text-center text-body font-suitRegular text-textDim">
-            {guide.error?.message ??
-              '서버에서 처치 단계가 생성되지 않았습니다. 잠시 후 다시 시도해 주세요.'}
+            {guide.error
+              ? getEmergencyGuideErrorMessage(guide.error)
+              : '서버에서 처치 단계가 생성되지 않았습니다. 잠시 후 다시 시도해 주세요.'}
           </Text>
-          <Text className="mt-4 text-center text-coment font-suitRegular text-textDim">
-            세션: {guide.sessionId}
-          </Text>
+          {guide.sessionId ? (
+            <Text className="mt-4 text-center text-coment font-suitRegular text-textDim">
+              세션: {guide.sessionId}
+            </Text>
+          ) : null}
           <TouchableOpacity
             className="mt-8 h-12 items-center justify-center rounded-lg bg-red px-8"
             disabled={isRetrying}
-            onPress={handleRetryPress}
+            onPress={guide.sessionId ? handleRetryPress : navigation.goBack}
           >
             {isRetrying ? (
               <ActivityIndicator color="white" />
             ) : (
               <Text className="text-body font-suitBold text-white">
-                다시 시도
+                {guide.sessionId ? '다시 시도' : '새 요청'}
               </Text>
             )}
           </TouchableOpacity>

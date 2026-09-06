@@ -3,6 +3,7 @@ import {
   createEmergencyGuide,
   createImageEmergencyGuide,
   EmergencyGuideRequestError,
+  getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
   retryEmergencyGuide,
 } from './emergencyGuide.service';
@@ -14,7 +15,9 @@ const createMockResponse = (status: number, payload: unknown): Response =>
     json: jest.fn(async (): Promise<unknown> => payload),
   } as unknown as Response);
 
-const createGuidePayload = (sessionId: string): Record<string, unknown> => ({
+const createGuidePayload = (
+  sessionId: string | null,
+): Record<string, unknown> => ({
   sessionId,
   requestId: 'manual-001',
   generatedAt: '2026-08-23T00:00:00.000Z',
@@ -79,6 +82,9 @@ describe('emergencyGuide.service', () => {
     );
 
     const createdGuide = await createEmergencyGuide(formData);
+    if (!createdGuide.sessionId) {
+      throw new Error('재시도할 sessionId가 없습니다.');
+    }
     const retriedGuide = await retryEmergencyGuide(createdGuide.sessionId);
 
     expect(retriedGuide.status).toBe('COMPLETE');
@@ -166,6 +172,19 @@ describe('emergencyGuide.service', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('생성 응답의 null sessionId를 허용한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: createGuidePayload(null),
+      }),
+    );
+
+    const guide = await createEmergencyGuide(new FormData());
+
+    expect(guide.sessionId).toBeNull();
+  });
+
   it('404 SESSION_NOT_FOUND 진단 정보를 보존한다', async (): Promise<void> => {
     fetchMock.mockResolvedValue(
       createMockResponse(404, {
@@ -178,19 +197,43 @@ describe('emergencyGuide.service', () => {
       }),
     );
 
-    const request = retryEmergencyGuide('emg-missing');
+    const error = await retryEmergencyGuide('emg-missing').catch(
+      (requestError: unknown): unknown => requestError,
+    );
 
-    await expect(request).rejects.toMatchObject<
-      Partial<EmergencyGuideRequestError>
-    >({
-      message: '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+    expect(error).toMatchObject<Partial<EmergencyGuideRequestError>>({
+      message: 'Emergency guide session was not found',
       status: 404,
       code: 'SESSION_NOT_FOUND',
+      details: [],
       requestUrl:
         'test-api-base-url/api/v1/emergency-guide-sessions/emg-missing/guide',
     });
+    expect(getEmergencyGuideErrorMessage(error)).toBe(
+      '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+    );
     expect(JSON.stringify(consoleWarnMock.mock.calls)).not.toContain(
       'Emergency guide session was not found',
     );
   });
+
+  it.each([
+    [413, 'AUDIO_TOO_LARGE', '음성 파일 용량이 너무 큽니다.'],
+    [415, 'UNSUPPORTED_IMAGE_TYPE', '지원하지 않는 이미지 형식입니다.'],
+    [503, 'SM_UNAVAILABLE', '응급 가이드 서버에 일시적인 문제가 있습니다.'],
+  ] as const)(
+    '%i %s 오류에 맞는 사용자 안내를 반환한다',
+    (status, code, expectedMessage): void => {
+      const error = new EmergencyGuideRequestError(
+        'server message',
+        status,
+        code,
+        'test-url',
+        ['detail'],
+      );
+
+      expect(getEmergencyGuideErrorMessage(error)).toContain(expectedMessage);
+      expect(error.details).toEqual(['detail']);
+    },
+  );
 });

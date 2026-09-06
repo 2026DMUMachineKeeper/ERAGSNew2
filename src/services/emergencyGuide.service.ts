@@ -5,6 +5,7 @@ import type {
 } from '@/types';
 
 import { fetchWithTimeout, getApiBaseUrl } from './authenticatedFetch.service';
+import { ApiRequestError } from './apiError.service';
 
 const EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -20,14 +21,15 @@ interface ReactNativeFile {
   type: string;
 }
 
-export class EmergencyGuideRequestError extends Error {
+export class EmergencyGuideRequestError extends ApiRequestError {
   constructor(
     message: string,
-    public readonly status: number,
-    public readonly code: string,
+    status: number,
+    code: string,
     public readonly requestUrl: string,
+    details: readonly unknown[] = [],
   ) {
-    super(message);
+    super({ code, details, message }, status);
     this.name = 'EmergencyGuideRequestError';
   }
 }
@@ -64,6 +66,48 @@ export const getEmergencyGuideImageUrl = (
 
 const isRecord = (payload: unknown): payload is Record<string, unknown> =>
   payload !== null && typeof payload === 'object';
+
+const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  AUDIO_TOO_LARGE:
+    '음성 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+  IMAGE_TOO_LARGE:
+    '이미지 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+  GUIDE_PENDING: '응급 평가가 완료되었습니다. 처치 안내를 다시 요청해 주세요.',
+  UNSUPPORTED_AUDIO_TYPE:
+    '지원하지 않는 음성 형식입니다. 다른 음성 파일로 다시 요청해 주세요.',
+  UNSUPPORTED_IMAGE_TYPE:
+    '지원하지 않는 이미지 형식입니다. 다른 이미지 파일로 다시 요청해 주세요.',
+  SESSION_NOT_FOUND:
+    '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+  SM_BAD_GATEWAY:
+    '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+  SM_UNAVAILABLE:
+    '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+};
+
+const EMERGENCY_GUIDE_STATUS_MESSAGES: Readonly<Record<number, string>> = {
+  404: '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+  413: '파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+  415: '지원하지 않는 파일 형식입니다. 다른 파일로 다시 요청해 주세요.',
+  502: '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+  503: '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+};
+
+export const getEmergencyGuideErrorMessage = (error: unknown): string => {
+  const code =
+    error instanceof ApiRequestError
+      ? error.code
+      : isRecord(error) && typeof error.code === 'string'
+      ? error.code
+      : null;
+  const status = error instanceof ApiRequestError ? error.status : null;
+
+  return (
+    (code ? EMERGENCY_GUIDE_ERROR_MESSAGES[code] : undefined) ??
+    (status ? EMERGENCY_GUIDE_STATUS_MESSAGES[status] : undefined) ??
+    '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+  );
+};
 
 const readFormDataFieldNames = (formData: FormData): string[] => {
   const reactNativeFormData = formData as unknown as {
@@ -150,10 +194,11 @@ const readEmergencyGuideResponse = async (
 
   if (!response.ok || failure) {
     throw new EmergencyGuideRequestError(
-      '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+      failure?.message ?? '응급 가이드 요청에 실패했습니다.',
       response.status,
       failure?.code ?? 'REQUEST_FAILED',
       requestUrl,
+      failure?.details ?? [],
     );
   }
 
@@ -161,8 +206,9 @@ const readEmergencyGuideResponse = async (
     !isRecord(payload) ||
     payload.success !== true ||
     !isRecord(payload.data) ||
-    typeof payload.data.sessionId !== 'string' ||
-    payload.data.sessionId.trim().length === 0
+    (payload.data.sessionId !== null &&
+      (typeof payload.data.sessionId !== 'string' ||
+        payload.data.sessionId.trim().length === 0))
   ) {
     throw new EmergencyGuideRequestError(
       '응급 가이드 sessionId가 없습니다.',
