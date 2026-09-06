@@ -243,9 +243,15 @@ export async function fetchAvailableMedicines(): Promise<MedicineItem[]> {
   return readMedicineRecords(payload).map(normalizeMedicine);
 }
 
-export type MedicineVisionUploadResult = {
-  [key: string]: unknown;
-};
+export interface MedicineVisionUploadResult {
+  efficacy: string;
+  id?: number;
+  isRegistered: boolean;
+  name: string;
+  quantity?: number;
+  step: number | null;
+  usage: string;
+}
 
 export type MedicineManualCreateParams = {
   name: string;
@@ -321,8 +327,31 @@ export async function postMedicineVision(params: {
     throw new Error(`의약품 비전 업로드 실패: ${response.status}`);
   }
 
-  const payload = await response.json();
-  return payload as MedicineVisionUploadResult;
+  const payload = (await response.json()) as unknown;
+  const result = isRecord(payload) ? payload.data : null;
+
+  if (
+    !isRecord(result) ||
+    typeof result.isRegistered !== 'boolean' ||
+    typeof result.name !== 'string' ||
+    typeof result.usage !== 'string' ||
+    typeof result.efficacy !== 'string' ||
+    (result.step !== null && typeof result.step !== 'number') ||
+    (result.id !== undefined && typeof result.id !== 'number') ||
+    (result.quantity !== undefined && typeof result.quantity !== 'number')
+  ) {
+    throw new Error('약품 사진 등록 응답 형식이 올바르지 않습니다.');
+  }
+
+  return {
+    efficacy: result.efficacy,
+    ...(result.id === undefined ? {} : { id: result.id }),
+    isRegistered: result.isRegistered,
+    name: result.name,
+    ...(result.quantity === undefined ? {} : { quantity: result.quantity }),
+    step: result.step,
+    usage: result.usage,
+  };
 }
 
 export async function postMedicineManual(

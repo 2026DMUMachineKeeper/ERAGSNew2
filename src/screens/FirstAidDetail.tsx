@@ -19,7 +19,7 @@ import {
 } from '@/constants';
 import type { EmergencyCategoryId } from '@/constants';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
+import { createEmergencyGuide } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type { EmergencyGuideQuestionnaireAnswer } from '@/types';
 
@@ -181,14 +181,8 @@ export const FirstAidDetail = ({
         JSON.stringify(toEmergencyGuideQuestionnaire(questionAnswers)),
       );
 
-      const createdGuide = await createEmergencyGuide(formData);
-      const guide =
-        createdGuide.treatment.steps.length === 0
-          ? await retryEmergencyGuide(createdGuide.sessionId)
-          : createdGuide;
-
       startGuide({
-        guide,
+        guide: await createEmergencyGuide(formData),
         mainLabel: category.label,
         source: 'manual',
       });
@@ -269,6 +263,10 @@ export const FirstAidDetail = ({
 
       <View className="bg-background px-5 pb-5 pt-3">
         <TouchableOpacity
+          accessibilityLabel={
+            isLastQuestion ? '응급처치 가이드 시작' : '다음 질문'
+          }
+          accessibilityRole="button"
           className={`h-14 items-center justify-center rounded-lg ${
             selectedAnswerIds.length > 0 && !isSubmitting
               ? 'bg-red'
