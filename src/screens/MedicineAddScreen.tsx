@@ -20,6 +20,7 @@ import {
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { invalidateMedicines } from '../query';
 import { postMedicineVision } from '../services/medicineApi';
+import { getApiErrorUserMessage } from '../services/apiError.service';
 import { isAuthSessionExpiredError } from '../services/auth.service';
 import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 import tailwindConfig from '../../tailwind.config';
@@ -36,6 +37,8 @@ const MEDICINE_REGISTER_ERROR_MESSAGE =
   '약품을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const MEDICINE_IMAGE_TOO_LARGE_MESSAGE =
   '사진 용량이 너무 큽니다. 다시 촬영해 주세요.';
+const MEDICINE_IMAGE_UNSUPPORTED_MESSAGE =
+  '지원하지 않는 이미지 형식입니다. 다른 사진으로 다시 시도해 주세요.';
 
 const stripDataUriPrefix = (value: string) => {
   const marker = 'base64,';
@@ -175,11 +178,18 @@ export function MedicineAddScreen({ navigation }: Props) {
       }
 
       console.error('[MedicineAddScreen] uploadCapturedPhoto failed', error);
-      const message =
-        error instanceof Error &&
-        error.message.includes('이미지 용량이 너무 큽니다')
-          ? MEDICINE_IMAGE_TOO_LARGE_MESSAGE
-          : MEDICINE_REGISTER_ERROR_MESSAGE;
+      const message = getApiErrorUserMessage(error, {
+        codeMessages: {
+          IMAGE_TOO_LARGE: MEDICINE_IMAGE_TOO_LARGE_MESSAGE,
+          INVALID_REQUEST: '촬영한 사진을 확인하고 다시 시도해 주세요.',
+          UNSUPPORTED_IMAGE_TYPE: MEDICINE_IMAGE_UNSUPPORTED_MESSAGE,
+        },
+        fallbackMessage: MEDICINE_REGISTER_ERROR_MESSAGE,
+        statusMessages: {
+          413: MEDICINE_IMAGE_TOO_LARGE_MESSAGE,
+          415: MEDICINE_IMAGE_UNSUPPORTED_MESSAGE,
+        },
+      });
 
       Alert.alert('등록 실패', message);
     } finally {

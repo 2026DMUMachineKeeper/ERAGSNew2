@@ -25,6 +25,7 @@ import type { MainTabParamList } from '@/navigation/MainTabNavigator';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { medicineQueryOptions } from '@/query';
 import { isAuthSessionExpiredError } from '@/services/auth.service';
+import { getApiErrorUserMessage } from '@/services/apiError.service';
 import type { MedicineItem } from '@/services/medicineApi';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 
@@ -82,7 +83,12 @@ export const MedicineMemoScreen = ({
   } = useQuery({ ...medicineQueryOptions, enabled: isFocused });
   const loadError =
     medicineQueryError && !isAuthSessionExpiredError(medicineQueryError)
-      ? MEDICINE_LIST_LOAD_ERROR_MESSAGE
+      ? getApiErrorUserMessage(medicineQueryError, {
+          fallbackMessage: MEDICINE_LIST_LOAD_ERROR_MESSAGE,
+          statusMessages: {
+            503: '약품 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+          },
+        })
       : null;
   const filteredMedicines = React.useMemo(
     () => filterMedicinesByName(medicines, searchQuery),

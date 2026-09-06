@@ -15,6 +15,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { invalidateMedicines } from '../query';
 import { postMedicineManual } from '../services/medicineApi';
+import { getApiErrorUserMessage } from '../services/apiError.service';
 import { isAuthSessionExpiredError } from '../services/auth.service';
 import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 import tailwindConfig from '../../tailwind.config';
@@ -145,7 +146,15 @@ export function MedicineManualInputScreen({ navigation }: Props) {
       }
 
       console.error('[MedicineManualInputScreen] saveMedicine failed', error);
-      Alert.alert('등록 실패', MEDICINE_REGISTER_ERROR_MESSAGE);
+      Alert.alert(
+        '등록 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: {
+            INVALID_REQUEST: '입력한 약품 정보를 다시 확인해 주세요.',
+          },
+          fallbackMessage: MEDICINE_REGISTER_ERROR_MESSAGE,
+        }),
+      );
     } finally {
       setIsSaving(false);
     }

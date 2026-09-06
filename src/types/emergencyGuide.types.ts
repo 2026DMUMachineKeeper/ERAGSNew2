@@ -61,7 +61,7 @@ export interface EmergencyGuideEvidence {
 }
 
 export interface EmergencyGuideResponse {
-  sessionId: string;
+  sessionId: string | null;
   requestId: string | null;
   generatedAt: string;
   status: 'COMPLETE' | 'ASSESSMENT_ONLY' | 'GUIDE_PENDING';

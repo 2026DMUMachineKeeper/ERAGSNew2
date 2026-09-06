@@ -23,6 +23,7 @@ import {
   type MedicineItem,
 } from '../services/medicineApi';
 import { isAuthSessionExpiredError } from '../services/auth.service';
+import { getApiErrorUserMessage } from '../services/apiError.service';
 import { redirectToLoginForExpiredSession } from '../utils/authSessionNavigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MedicineDetail'>;
@@ -118,7 +119,15 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
         }
 
         console.error('[MedicineDetailScreen] load failed', error);
-        setLoadError(MEDICINE_LOAD_ERROR_MESSAGE);
+        setLoadError(
+          getApiErrorUserMessage(error, {
+            codeMessages: {
+              MEDICINE_NOT_FOUND: '약품 정보를 찾을 수 없습니다.',
+            },
+            fallbackMessage: MEDICINE_LOAD_ERROR_MESSAGE,
+            statusMessages: { 404: '약품 정보를 찾을 수 없습니다.' },
+          }),
+        );
       } finally {
         if (isActive) {
           setIsLoading(false);
@@ -230,7 +239,17 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       }
 
       console.error('[MedicineDetailScreen] update failed', error);
-      Alert.alert('수정 실패', MEDICINE_UPDATE_ERROR_MESSAGE);
+      Alert.alert(
+        '수정 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: {
+            INVALID_REQUEST: '입력한 약품 정보를 다시 확인해 주세요.',
+            MEDICINE_NOT_FOUND: '수정할 약품을 찾을 수 없습니다.',
+          },
+          fallbackMessage: MEDICINE_UPDATE_ERROR_MESSAGE,
+          statusMessages: { 404: '수정할 약품을 찾을 수 없습니다.' },
+        }),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -274,7 +293,16 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
       }
 
       console.error('[MedicineDetailScreen] delete failed', error);
-      Alert.alert('삭제 실패', MEDICINE_DELETE_ERROR_MESSAGE);
+      Alert.alert(
+        '삭제 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: {
+            MEDICINE_NOT_FOUND: '삭제할 약품을 찾을 수 없습니다.',
+          },
+          fallbackMessage: MEDICINE_DELETE_ERROR_MESSAGE,
+          statusMessages: { 404: '삭제할 약품을 찾을 수 없습니다.' },
+        }),
+      );
     } finally {
       setIsDeleting(false);
     }
