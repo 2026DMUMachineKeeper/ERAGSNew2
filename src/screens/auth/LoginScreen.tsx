@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { consumeLocationPermissionPrompt } from '@/services';
+import { getApiErrorUserMessage } from '@/services/apiError.service';
 import { useAuthStore } from '@/store';
 import { showLocationPermissionPrompt } from '@/utils';
 import tailwindConfig from '../../../tailwind.config';
@@ -24,6 +25,17 @@ type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 const { colors } = tailwindConfig;
 const LOGIN_ERROR_MESSAGE =
   '로그인에 실패했습니다. 이메일과 비밀번호를 확인한 후 다시 시도해 주세요.';
+const LOGIN_ERROR_CODE_MESSAGES: Readonly<Record<string, string>> = {
+  AUTHENTICATION_REQUIRED: LOGIN_ERROR_MESSAGE,
+  INVALID_CREDENTIALS: LOGIN_ERROR_MESSAGE,
+  INVALID_REQUEST: '이메일과 비밀번호 형식을 확인해 주세요.',
+};
+const LOGIN_ERROR_STATUS_MESSAGES: Readonly<Record<number, string>> = {
+  429: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+  500: '로그인 서버에 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+  502: '로그인 서버에 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+  503: '로그인 서버에 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+};
 
 export const LoginScreen = ({
   navigation,
@@ -62,7 +74,14 @@ export const LoginScreen = ({
       }
     } catch (error: unknown) {
       console.error('[LoginScreen] 로그인 실패', error);
-      Alert.alert('로그인 실패', LOGIN_ERROR_MESSAGE);
+      Alert.alert(
+        '로그인 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: LOGIN_ERROR_CODE_MESSAGES,
+          fallbackMessage: LOGIN_ERROR_MESSAGE,
+          statusMessages: LOGIN_ERROR_STATUS_MESSAGES,
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }

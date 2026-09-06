@@ -15,6 +15,7 @@ import {
   createAudioEmergencyGuide,
   createImageEmergencyGuide,
   getAddressFromCoordinates,
+  getEmergencyGuideErrorMessage,
   hasLocationPermission,
   startAudioRecording,
   stopAudioRecording,
@@ -242,10 +243,7 @@ export const useHomeEmergencyActions = (
       }
 
       console.error('[HomeScreen] 사진 전송 실패:', error);
-      const errorMessage =
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : '사진을 서버로 전송하지 못했습니다. 네트워크와 서버 상태를 확인해 주세요.';
+      const errorMessage = getEmergencyGuideErrorMessage(error);
 
       setVisionStatus(errorMessage);
       Alert.alert('사진 전송 실패', errorMessage);
@@ -316,7 +314,7 @@ export const useHomeEmergencyActions = (
       console.error('[HomeScreen] 음성 파일 처리 실패:', error);
       isListeningRef.current = false;
       setIsListening(false);
-      setVoiceStatus('음성 파일을 전송하지 못했습니다. 다시 시도해 주세요.');
+      setVoiceStatus(getEmergencyGuideErrorMessage(error));
     } finally {
       if (requestController) {
         activeRequestControllersRef.current.delete(requestController);

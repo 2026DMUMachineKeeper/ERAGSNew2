@@ -4,6 +4,7 @@ import {
   fetchMedicines,
   postMedicineVision,
 } from './medicineApi';
+import { ApiRequestError } from './apiError.service';
 
 jest.mock('./auth.service', () => ({
   getAuthToken: jest.fn(async (): Promise<string> => 'test-token'),
@@ -57,13 +58,32 @@ describe('deleteMedicine', () => {
   });
 
   it('실패 응답은 본문 파싱보다 상태 코드를 우선한다', async (): Promise<void> => {
-    const text = jest.fn();
+    const text = jest.fn(
+      async (): Promise<string> =>
+        JSON.stringify({
+          success: false,
+          error: {
+            code: 'MEDICINE_NOT_FOUND',
+            message: 'medicine missing',
+            details: ['medicine-1'],
+          },
+        }),
+    );
     fetchMock.mockResolvedValue(
       createMockResponse({ ok: false, status: 500, text }),
     );
 
-    await expect(deleteMedicine('1')).rejects.toThrow('약품 삭제 실패: 500');
-    expect(text).not.toHaveBeenCalled();
+    const error = await deleteMedicine('1').catch(
+      (requestError: unknown): unknown => requestError,
+    );
+
+    expect(error).toMatchObject<Partial<ApiRequestError>>({
+      status: 500,
+      code: 'MEDICINE_NOT_FOUND',
+      message: 'medicine missing',
+      details: ['medicine-1'],
+    });
+    expect(text).toHaveBeenCalledTimes(1);
   });
 
   it('약품 상세는 목록 응답에서 ID가 같은 항목을 반환한다', async (): Promise<void> => {

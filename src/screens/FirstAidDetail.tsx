@@ -19,7 +19,10 @@ import {
 } from '@/constants';
 import type { EmergencyCategoryId } from '@/constants';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { createEmergencyGuide } from '@/services';
+import {
+  createEmergencyGuide,
+  getEmergencyGuideErrorMessage,
+} from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type { EmergencyGuideQuestionnaireAnswer } from '@/types';
 
@@ -191,9 +194,7 @@ export const FirstAidDetail = ({
       console.error('[FirstAidDetail] 응급 가이드 생성 실패:', error);
       Alert.alert(
         '응급 가이드 생성 실패',
-        error instanceof Error
-          ? error.message
-          : '응급 가이드를 불러오지 못했습니다.',
+        getEmergencyGuideErrorMessage(error),
       );
     } finally {
       setIsSubmitting(false);

@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BackIcon } from '../assets';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { resetPassword } from '@/services';
+import { getApiErrorUserMessage } from '@/services/apiError.service';
 import tailwindConfig from '../../tailwind.config';
 import AuthTextInput from './auth/components/AuthTextInput';
 
@@ -73,7 +74,19 @@ export const PasswordResetScreen = ({
       );
     } catch (error: unknown) {
       console.error('[PasswordResetScreen] 비밀번호 재설정 실패:', error);
-      Alert.alert('비밀번호 재설정 실패', PASSWORD_RESET_ERROR_MESSAGE);
+      Alert.alert(
+        '비밀번호 재설정 실패',
+        getApiErrorUserMessage(error, {
+          codeMessages: {
+            INVALID_REQUEST: '이름, 이메일과 새 비밀번호를 확인해 주세요.',
+            USER_NOT_FOUND: '이름과 이메일이 일치하는 계정을 찾지 못했습니다.',
+          },
+          fallbackMessage: PASSWORD_RESET_ERROR_MESSAGE,
+          statusMessages: {
+            404: '이름과 이메일이 일치하는 계정을 찾지 못했습니다.',
+          },
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }
