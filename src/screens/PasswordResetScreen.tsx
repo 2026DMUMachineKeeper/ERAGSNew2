@@ -23,6 +23,8 @@ type PasswordResetScreenProps = NativeStackScreenProps<
 >;
 
 const { colors } = tailwindConfig;
+const PASSWORD_RESET_ERROR_MESSAGE =
+  '비밀번호를 재설정하지 못했습니다. 입력 정보를 확인한 후 다시 시도해 주세요.';
 
 export const PasswordResetScreen = ({
   navigation,
@@ -43,7 +45,10 @@ export const PasswordResetScreen = ({
 
   const handleResetPasswordPress = async (): Promise<void> => {
     if (hasEmptyRequiredField) {
-      Alert.alert('입력 필요', '이름, 이메일, 새 비밀번호를 모두 입력해주세요.');
+      Alert.alert(
+        '입력 필요',
+        '이름, 이메일, 새 비밀번호를 모두 입력해주세요.',
+      );
       return;
     }
 
@@ -67,12 +72,8 @@ export const PasswordResetScreen = ({
         ],
       );
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : '비밀번호 재설정에 실패했습니다.';
-
-      Alert.alert('비밀번호 재설정 실패', errorMessage);
+      console.error('[PasswordResetScreen] 비밀번호 재설정 실패:', error);
+      Alert.alert('비밀번호 재설정 실패', PASSWORD_RESET_ERROR_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }

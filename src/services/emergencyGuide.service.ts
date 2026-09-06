@@ -65,21 +65,19 @@ export const getEmergencyGuideImageUrl = (
 const isRecord = (payload: unknown): payload is Record<string, unknown> =>
   payload !== null && typeof payload === 'object';
 
-const stringifyForLog = (payload: unknown): string => {
-  try {
-    return JSON.stringify(payload, null, 2);
-  } catch {
-    return String(payload);
-  }
-};
-
-const readFormDataParts = (formData: FormData): unknown => {
+const readFormDataFieldNames = (formData: FormData): string[] => {
   const reactNativeFormData = formData as unknown as {
     getParts?: () => readonly unknown[];
   };
 
   if (typeof reactNativeFormData.getParts === 'function') {
-    return reactNativeFormData.getParts();
+    return reactNativeFormData
+      .getParts()
+      .flatMap(part =>
+        isRecord(part) && typeof part.fieldName === 'string'
+          ? [part.fieldName]
+          : [],
+      );
   }
 
   const standardFormData = formData as unknown as {
@@ -87,19 +85,16 @@ const readFormDataParts = (formData: FormData): unknown => {
   };
 
   return typeof standardFormData.entries === 'function'
-    ? Array.from(standardFormData.entries())
+    ? Array.from(standardFormData.entries(), ([fieldName]) => fieldName)
     : [];
 };
 
-const logRequest = (requestUrl: string, body: unknown): void => {
-  console.warn(
-    `[EmergencyGuide API][Request]\n${stringifyForLog({
-      requestUrl,
-      method: 'POST',
-      headers: { Accept: 'application/json' },
-      body,
-    })}`,
-  );
+const logRequest = (requestUrl: string, fieldNames: string[]): void => {
+  console.warn('[EmergencyGuide API][Request]', {
+    requestUrl,
+    method: 'POST',
+    fieldNames,
+  });
 };
 
 const readFailure = (payload: unknown): ApiError | null => {
@@ -131,14 +126,12 @@ const readEmergencyGuideResponse = async (
   try {
     payload = (await response.json()) as unknown;
   } catch {
-    console.error(
-      `[EmergencyGuide API][Response]\n${stringifyForLog({
-        requestUrl,
-        status: response.status,
-        ok: response.ok,
-        body: 'JSON 파싱 실패',
-      })}`,
-    );
+    console.error('[EmergencyGuide API][Response]', {
+      requestUrl,
+      status: response.status,
+      ok: response.ok,
+      errorCode: 'INVALID_RESPONSE',
+    });
     throw new EmergencyGuideRequestError(
       '응급 가이드 응답 형식이 올바르지 않습니다.',
       response.status,
@@ -147,21 +140,17 @@ const readEmergencyGuideResponse = async (
     );
   }
 
-  console.warn(
-    `[EmergencyGuide API][Response]\n${stringifyForLog({
-      requestUrl,
-      status: response.status,
-      ok: response.ok,
-      body: payload,
-    })}`,
-  );
-
   const failure = readFailure(payload);
+  console.warn('[EmergencyGuide API][Response]', {
+    requestUrl,
+    status: response.status,
+    ok: response.ok,
+    errorCode: failure?.code ?? null,
+  });
 
   if (!response.ok || failure) {
     throw new EmergencyGuideRequestError(
-      failure?.message ??
-        `응급 가이드 요청에 실패했습니다. (${response.status})`,
+      '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
       response.status,
       failure?.code ?? 'REQUEST_FAILED',
       requestUrl,
@@ -191,7 +180,7 @@ export const createEmergencyGuide = async (
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
   const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
-  logRequest(requestUrl, readFormDataParts(formData));
+  logRequest(requestUrl, readFormDataFieldNames(formData));
   const response = await fetchWithTimeout(
     requestUrl,
     {
@@ -252,7 +241,7 @@ export const retryEmergencyGuide = async (
   const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions/${encodeURIComponent(
     normalizedSessionId,
   )}/guide`;
-  logRequest(requestUrl, null);
+  logRequest(requestUrl, []);
   const response = await fetchWithTimeout(requestUrl, {
     method: 'POST',
     headers: { Accept: 'application/json' },
