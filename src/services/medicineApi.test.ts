@@ -1,4 +1,8 @@
-import { deleteMedicine, fetchMedicineById } from './medicineApi';
+import {
+  deleteMedicine,
+  fetchMedicineById,
+  fetchMedicines,
+} from './medicineApi';
 
 jest.mock('./auth.service', () => ({
   getAuthToken: jest.fn(async (): Promise<string> => 'test-token'),
@@ -82,4 +86,32 @@ describe('deleteMedicine', () => {
       qty: 2,
     });
   });
+
+  it.each([null, {}, { data: {} }, { data: [null] }])(
+    '잘못된 목록 응답은 빈 목록으로 처리하지 않는다',
+    async (payload): Promise<void> => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async (): Promise<unknown> => payload,
+      } as Response);
+
+      await expect(fetchMedicines()).rejects.toThrow(
+        '약품 목록 응답 형식이 올바르지 않습니다.',
+      );
+    },
+  );
+
+  it.each([[], { data: [] }, { medicines: [] }])(
+    '정상적인 빈 목록 응답은 빈 배열을 반환한다',
+    async (payload): Promise<void> => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async (): Promise<unknown> => payload,
+      } as Response);
+
+      await expect(fetchMedicines()).resolves.toEqual([]);
+    },
+  );
 });

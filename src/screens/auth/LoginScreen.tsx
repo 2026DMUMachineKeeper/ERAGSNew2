@@ -22,6 +22,8 @@ import AuthTextInput from './components/AuthTextInput';
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const { colors } = tailwindConfig;
+const LOGIN_ERROR_MESSAGE =
+  '로그인에 실패했습니다. 이메일과 비밀번호를 확인한 후 다시 시도해 주세요.';
 
 export const LoginScreen = ({
   navigation,
@@ -59,11 +61,8 @@ export const LoginScreen = ({
         showLocationPermissionPrompt();
       }
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : '로그인에 실패했습니다.';
-
       console.error('[LoginScreen] 로그인 실패', error);
-      Alert.alert('로그인 실패', errorMessage);
+      Alert.alert('로그인 실패', LOGIN_ERROR_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }
@@ -129,6 +128,8 @@ export const LoginScreen = ({
                 </View>
 
                 <Pressable
+                  accessibilityLabel="로그인"
+                  accessibilityRole="button"
                   className={`mt-7 h-16 items-center justify-center rounded-xl ${
                     isLoginDisabled ? 'bg-disabled' : 'bg-red'
                   }`}
