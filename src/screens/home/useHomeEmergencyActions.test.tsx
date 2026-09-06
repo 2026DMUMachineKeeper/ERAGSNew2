@@ -6,6 +6,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import {
   createAudioEmergencyGuide,
+  retryEmergencyGuide,
   startAudioRecording,
   stopAudioRecording,
 } from '@/services';
@@ -40,6 +41,38 @@ const AUDIO_FILE = {
 const GUIDE = {
   treatment: { steps: [{}] },
 } as EmergencyGuideResponse;
+const PENDING_GUIDE: EmergencyGuideResponse = {
+  sessionId: 'session-pending',
+  requestId: 'request-pending',
+  generatedAt: '2026-09-06T00:00:00.000Z',
+  status: 'GUIDE_PENDING',
+  patientContext: null,
+  evidence: null,
+  assessment: {
+    assessmentId: 'assessment-1',
+    categoryCode: 'BLEEDING',
+    subtypeCode: 'BLEEDING_MODERATE',
+    severityCode: 'MEDIUM',
+    confidence: 0.8,
+    redFlags: [],
+    call119Required: false,
+    summary: '중간 정도의 출혈',
+    reasons: ['지속 출혈'],
+    missingInputs: [],
+    decisionSource: 'ML_EVIDENCE',
+    modelVersion: 'test-model',
+  },
+  treatment: {
+    routeCode: null,
+    modelVersion: null,
+    steps: [],
+  },
+  error: {
+    code: 'GUIDE_PENDING',
+    message: '처치 안내를 준비하고 있습니다.',
+    details: [],
+  },
+};
 
 type EmergencyActions = ReturnType<typeof useHomeEmergencyActions>;
 let currentActions!: EmergencyActions;
@@ -119,6 +152,24 @@ describe('홈 응급 작업 정리', () => {
 
     expect(stopAudioRecording).toHaveBeenCalledTimes(1);
     expect(currentActions.isListening).toBe(false);
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('가이드 단계가 없어도 최초 음성 평가를 결과 화면에 전달한다', async (): Promise<void> => {
+    jest.mocked(createAudioEmergencyGuide).mockResolvedValue(PENDING_GUIDE);
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => {
+      await currentActions.handleVoicePress();
+      await currentActions.handleVoicePress();
+    });
+
+    expect(onGuideCreated).toHaveBeenCalledWith('voice', PENDING_GUIDE);
+    expect(retryEmergencyGuide).not.toHaveBeenCalled();
     await act(async (): Promise<void> => renderer.unmount());
   });
 

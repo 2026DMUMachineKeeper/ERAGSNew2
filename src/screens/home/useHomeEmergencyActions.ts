@@ -16,7 +16,6 @@ import {
   createImageEmergencyGuide,
   getAddressFromCoordinates,
   hasLocationPermission,
-  retryEmergencyGuide,
   startAudioRecording,
   stopAudioRecording,
 } from '@/services';
@@ -73,17 +72,6 @@ const getCurrentPosition = (): Promise<GeolocationResponse> =>
       maximumAge: 10000,
     });
   });
-
-const ensureGuideHasSteps = async (
-  guide: EmergencyGuideResponse,
-  signal?: AbortSignal,
-): Promise<EmergencyGuideResponse> => {
-  if (guide.treatment.steps.length > 0) {
-    return guide;
-  }
-
-  return retryEmergencyGuide(guide.sessionId, signal);
-};
 
 const getPhotoAsset = async (): Promise<Asset | null> => {
   const response = await launchCamera(CAMERA_OPTIONS);
@@ -245,13 +233,8 @@ export const useHomeEmergencyActions = (
         },
         requestController.signal,
       );
-      const guide = await ensureGuideHasSteps(
-        createdGuide,
-        requestController.signal,
-      );
-
       if (isMountedRef.current && isFocusedRef.current) {
-        onGuideCreated('image', guide);
+        onGuideCreated('image', createdGuide);
       }
     } catch (error) {
       if (requestController?.signal.aborted || !isFocusedRef.current) {
@@ -298,12 +281,8 @@ export const useHomeEmergencyActions = (
           audioFile,
           requestController.signal,
         );
-        const guide = await ensureGuideHasSteps(
-          createdGuide,
-          requestController.signal,
-        );
         if (isMountedRef.current && isFocusedRef.current) {
-          onGuideCreated('voice', guide);
+          onGuideCreated('voice', createdGuide);
         }
         return;
       }
