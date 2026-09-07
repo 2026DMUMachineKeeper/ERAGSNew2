@@ -173,4 +173,53 @@ describe('postMedicineVision', () => {
       efficacy: '출혈 억제',
     });
   });
+
+  it('최상위 등록 여부와 data의 약품 정보를 반환한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => ({
+        success: true,
+        isRegistered: true,
+        data: {
+          id: 15,
+          name: '타이레놀정 500 밀리그램',
+          quantity: 4,
+          usage: '필요시 복용',
+          efficacy: '두통, 발열',
+        },
+      }),
+    } as Response);
+
+    await expect(
+      postMedicineVision({ imageBase64: 'base64-image' }),
+    ).resolves.toEqual({
+      isRegistered: true,
+      step: null,
+      id: 15,
+      name: '타이레놀정 500 밀리그램',
+      quantity: 4,
+      usage: '필요시 복용',
+      efficacy: '두통, 발열',
+    });
+  });
+
+  it('등록되지 않은 응답은 직접 입력 결과로 반환한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => ({
+        success: true,
+        isRegistered: false,
+        data: {},
+      }),
+    } as Response);
+
+    await expect(
+      postMedicineVision({ imageBase64: 'base64-image' }),
+    ).resolves.toEqual({
+      isRegistered: false,
+      step: null,
+    });
+  });
 });
