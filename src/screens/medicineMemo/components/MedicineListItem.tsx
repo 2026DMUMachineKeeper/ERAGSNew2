@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 
-import type { MedicineItem } from '@/services/medicineApi';
+import type { MedicineItem } from '@/types';
 
 interface MedicineListItemProps {
   medicine: MedicineItem;

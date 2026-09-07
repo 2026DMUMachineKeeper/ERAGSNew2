@@ -1,4 +1,4 @@
-import { getMedicineEditValidationErrors } from './MedicineDetailScreen';
+import { getMedicineEditValidationErrors } from '@/utils/medicine/medicineEditValidation';
 
 jest.mock('../assets', () => ({
   BackIcon: (): null => null,
@@ -37,13 +37,11 @@ describe('getMedicineEditValidationErrors', () => {
         usage: ' ',
       }).usage,
     ).toBe('사용 방법을 입력해 주세요.');
-    expect(getMedicineEditValidationErrors(VALID_MEDICINE_EDIT_VALUES)).toEqual(
-      {
-        name: null,
-        quantity: null,
-        efficacy: null,
-        usage: null,
-      },
-    );
+    expect(getMedicineEditValidationErrors(VALID_MEDICINE_EDIT_VALUES)).toEqual({
+      name: null,
+      quantity: null,
+      efficacy: null,
+      usage: null,
+    });
   });
 });

@@ -1,3 +1,5 @@
+import type { MedicineItem } from '@/types';
+
 import {
   getAuthToken,
   isAuthTokenExpiredError,
@@ -29,16 +31,7 @@ export type MedicineApiRecord = {
   [key: string]: unknown;
 };
 
-export type MedicineItem = {
-  id: string;
-  name: string;
-  info: string;
-  qty: number;
-  threshold: number;
-  barcode: string | null;
-  usage: string;
-  efficacy: string;
-};
+
 
 const authenticatedMedicineFetch = async (
   path: string,
@@ -452,3 +445,5 @@ export async function deleteMedicine(
 
   return readMedicineMutationResult(response, '약품 삭제 실패');
 }
+
+export type { MedicineItem } from '@/types';

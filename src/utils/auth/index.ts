@@ -1,0 +1,1 @@
+export { validateSignUp } from './signUpValidation';
