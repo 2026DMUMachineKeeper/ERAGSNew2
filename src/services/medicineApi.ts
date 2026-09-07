@@ -247,15 +247,24 @@ export async function fetchAvailableMedicines(): Promise<MedicineItem[]> {
   return readMedicineRecords(payload).map(normalizeMedicine);
 }
 
-export interface MedicineVisionUploadResult {
+interface RegisteredMedicineVisionResult {
   efficacy: string;
   id?: number;
-  isRegistered: boolean;
+  isRegistered: true;
   name: string;
   quantity?: number;
   step: number | null;
   usage: string;
 }
+
+interface UnregisteredMedicineVisionResult {
+  isRegistered: false;
+  step: number | null;
+}
+
+export type MedicineVisionUploadResult =
+  | RegisteredMedicineVisionResult
+  | UnregisteredMedicineVisionResult;
 
 export type MedicineManualCreateParams = {
   name: string;
@@ -326,15 +335,34 @@ export async function postMedicineVision(params: {
   }
 
   const payload = (await response.json()) as unknown;
-  const result = isRecord(payload) ? payload.data : null;
+  const payloadRecord = isRecord(payload) ? payload : null;
+  const result =
+    payloadRecord && isRecord(payloadRecord.data) ? payloadRecord.data : null;
+  const isRegistered =
+    typeof result?.isRegistered === 'boolean'
+      ? result.isRegistered
+      : payloadRecord?.isRegistered;
+  const step = result?.step ?? payloadRecord?.step ?? null;
 
   if (
     !isRecord(result) ||
-    typeof result.isRegistered !== 'boolean' ||
+    typeof isRegistered !== 'boolean' ||
+    (step !== null && typeof step !== 'number')
+  ) {
+    throw new Error('약품 사진 등록 응답 형식이 올바르지 않습니다.');
+  }
+
+  if (!isRegistered) {
+    return {
+      isRegistered: false,
+      step,
+    };
+  }
+
+  if (
     typeof result.name !== 'string' ||
     typeof result.usage !== 'string' ||
     typeof result.efficacy !== 'string' ||
-    (result.step !== null && typeof result.step !== 'number') ||
     (result.id !== undefined && typeof result.id !== 'number') ||
     (result.quantity !== undefined && typeof result.quantity !== 'number')
   ) {
@@ -344,10 +372,10 @@ export async function postMedicineVision(params: {
   return {
     efficacy: result.efficacy,
     ...(result.id === undefined ? {} : { id: result.id }),
-    isRegistered: result.isRegistered,
+    isRegistered: true,
     name: result.name,
     ...(result.quantity === undefined ? {} : { quantity: result.quantity }),
-    step: result.step,
+    step,
     usage: result.usage,
   };
 }
