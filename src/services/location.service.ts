@@ -1,6 +1,5 @@
-import Geolocation from '@react-native-community/geolocation';
 import * as Keychain from 'react-native-keychain';
-import { check, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import { check, PERMISSIONS, request, RESULTS } from 'react-native-permissions';
 import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 
 const LOCATION_PERMISSION_PROMPT_SERVICE = 'erags.location.permission.prompt';
@@ -10,6 +9,11 @@ interface AddressModule {
 }
 
 const addressModule = NativeModules.AddressModule as AddressModule | undefined;
+
+export type LocationPermissionRequestStatus =
+  | 'granted'
+  | 'denied'
+  | 'blocked';
 
 export const hasLocationPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'android') {
@@ -26,19 +30,24 @@ export const hasLocationPermission = async (): Promise<boolean> => {
   return false;
 };
 
-export const requestLocationPermission = async (): Promise<boolean> => {
+export const requestLocationPermission = async (): Promise<LocationPermissionRequestStatus> => {
+  if (Platform.OS === 'ios') {
+    const status = await request(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE);
+
+    if (status === RESULTS.GRANTED) {
+      return 'granted';
+    }
+
+    return status === RESULTS.BLOCKED ? 'blocked' : 'denied';
+  }
+
   if (Platform.OS !== 'android') {
-    return new Promise(resolve => {
-      Geolocation.requestAuthorization(
-        () => resolve(true),
-        () => resolve(false),
-      );
-    });
+    return 'denied';
   }
 
   const isGranted = await hasLocationPermission();
   if (isGranted) {
-    return true;
+    return 'granted';
   }
 
   const granted = await PermissionsAndroid.request(
@@ -52,7 +61,13 @@ export const requestLocationPermission = async (): Promise<boolean> => {
     },
   );
 
-  return granted === PermissionsAndroid.RESULTS.GRANTED;
+  if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+    return 'granted';
+  }
+
+  return granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+    ? 'blocked'
+    : 'denied';
 };
 
 export const markLocationPermissionPromptPending = async (

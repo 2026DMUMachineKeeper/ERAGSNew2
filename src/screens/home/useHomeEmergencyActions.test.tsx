@@ -1,16 +1,20 @@
 import React from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 
+import Geolocation from '@react-native-community/geolocation';
 import { useIsFocused } from '@react-navigation/native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import {
   createAudioEmergencyGuide,
+  getAddressFromCoordinates,
+  hasLocationPermission,
   retryEmergencyGuide,
   startAudioRecording,
   stopAudioRecording,
 } from '@/services';
 import type { EmergencyGuideResponse } from '@/types';
+import { showLocationPermissionPrompt } from '@/utils';
 
 import { useHomeEmergencyActions } from './useHomeEmergencyActions';
 
@@ -31,6 +35,10 @@ jest.mock('@/services', () => ({
   retryEmergencyGuide: jest.fn(),
   startAudioRecording: jest.fn(),
   stopAudioRecording: jest.fn(),
+}));
+
+jest.mock('@/utils', () => ({
+  showLocationPermissionPrompt: jest.fn(),
 }));
 
 const AUDIO_FILE = {
@@ -92,6 +100,8 @@ describe('홈 응급 작업 정리', () => {
   beforeEach((): void => {
     jest.clearAllMocks();
     jest.mocked(useIsFocused).mockReturnValue(true);
+    jest.mocked(hasLocationPermission).mockResolvedValue(true);
+    jest.mocked(getAddressFromCoordinates).mockResolvedValue(null);
     jest.mocked(startAudioRecording).mockResolvedValue();
     jest.mocked(stopAudioRecording).mockResolvedValue(AUDIO_FILE);
   });
@@ -129,6 +139,67 @@ describe('홈 응급 작업 정리', () => {
     expect(alertSpy).toHaveBeenCalledWith(
       '권한 확인 실패',
       '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    );
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('긴급 신고에서 위치 권한이 없으면 권한 안내를 표시한다', async (): Promise<void> => {
+    jest.mocked(hasLocationPermission).mockResolvedValue(false);
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => {
+      await currentActions.handleEmergencyReportPress();
+    });
+
+    expect(showLocationPermissionPrompt).toHaveBeenCalledTimes(1);
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('빠른 위치 조회가 시간 초과되면 정밀 위치로 재시도한다', async (): Promise<void> => {
+    const timeoutError = {
+      code: 3,
+      message: 'Location request timed out',
+      PERMISSION_DENIED: 1,
+      POSITION_UNAVAILABLE: 2,
+      TIMEOUT: 3,
+    };
+    const position = {
+      coords: {
+        latitude: 37.5665,
+        longitude: 126.978,
+        altitude: null,
+        accuracy: 20,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: Date.now(),
+    };
+    jest
+      .mocked(Geolocation.getCurrentPosition)
+      .mockImplementationOnce((_success, error): void => error?.(timeoutError))
+      .mockImplementationOnce((success): void => success(position));
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((): void => {});
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => {
+      await currentActions.handleEmergencyReportPress();
+    });
+
+    expect(Geolocation.getCurrentPosition).toHaveBeenCalledTimes(2);
+    expect(alertSpy).toHaveBeenCalledWith(
+      '긴급 신고 문자',
+      '현재 위치\n위도: 37.5665\n경도: 126.978',
     );
     await act(async (): Promise<void> => renderer.unmount());
   });
