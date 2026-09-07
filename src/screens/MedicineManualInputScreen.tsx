@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -55,10 +54,13 @@ export const getMedicineManualInputErrors = ({
 });
 
 export function MedicineManualInputScreen({ navigation }: Props) {
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const usageSectionOffsetRef = React.useRef(0);
   const [name, setName] = React.useState('');
   const [efficacy, setEfficacy] = React.useState('');
   const [usage, setUsage] = React.useState('');
   const [quantity, setQuantity] = React.useState(1);
+  const [isUsageInputFocused, setIsUsageInputFocused] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [inputErrors, setInputErrors] =
     React.useState<MedicineManualInputErrors>(
@@ -68,6 +70,23 @@ export function MedicineManualInputScreen({ navigation }: Props) {
   const handleAuthSessionExpired = React.useCallback((): void => {
     redirectToLoginForExpiredSession(navigation);
   }, [navigation]);
+
+  const scrollToUsageInput = React.useCallback((): void => {
+    scrollViewRef.current?.scrollTo({
+      animated: true,
+      y: Math.max(usageSectionOffsetRef.current - 16, 0),
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!isUsageInputFocused) {
+      return undefined;
+    }
+
+    const animationFrame = requestAnimationFrame(scrollToUsageInput);
+
+    return (): void => cancelAnimationFrame(animationFrame);
+  }, [isUsageInputFocused, scrollToUsageInput]);
 
   const closeToMedicineMemo = React.useCallback(() => {
     navigation.reset({
@@ -174,7 +193,7 @@ export function MedicineManualInputScreen({ navigation }: Props) {
     <SafeAreaView className="flex-1 bg-memoCard" edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
       >
         <View className="px-5 pt-3">
           <View className="h-10 flex-row items-center justify-between">
@@ -202,11 +221,21 @@ export function MedicineManualInputScreen({ navigation }: Props) {
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           className="flex-1"
           keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => {
+            if (isUsageInputFocused) {
+              scrollToUsageInput();
+            }
+          }}
           showsVerticalScrollIndicator={false}
         >
-          <View className="px-5 pb-8 pt-5">
+          <View
+            className={`px-5 pt-5 ${
+              isUsageInputFocused ? 'pb-72' : 'pb-8'
+            }`}
+          >
             <Text className="text-base font-suitBold text-memoText">
               기본 정보
             </Text>
@@ -293,7 +322,12 @@ export function MedicineManualInputScreen({ navigation }: Props) {
               ) : null}
             </View>
 
-            <View className="mt-5">
+            <View
+              className="mt-5"
+              onLayout={event => {
+                usageSectionOffsetRef.current = event.nativeEvent.layout.y;
+              }}
+            >
               <Text className="mb-2 text-sm font-suitBold text-memoText">
                 사용 방법 <Text className="text-memoRed">*</Text>
               </Text>
@@ -301,12 +335,17 @@ export function MedicineManualInputScreen({ navigation }: Props) {
                 <TextInput
                   multiline
                   className="min-h-[68px] text-sm text-memoText"
+                  onBlur={() => setIsUsageInputFocused(false)}
                   placeholder="예: 식후 30분"
                   placeholderTextColor={colors.memoSubText}
                   textAlignVertical="top"
                   maxLength={300}
                   value={usage}
                   onChangeText={handleUsageChange}
+                  onFocus={() => {
+                    setIsUsageInputFocused(true);
+                    scrollToUsageInput();
+                  }}
                 />
                 <Text className="self-end text-xs text-memoSubText">
                   {usage.length}/300

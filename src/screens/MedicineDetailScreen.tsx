@@ -309,17 +309,17 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
   };
 
   const nameInputClassName = editErrors.name
-    ? 'mt-4 h-12 rounded-xl border border-red px-4 text-sm text-memoText'
-    : 'mt-4 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
+    ? 'mt-2 h-12 rounded-xl border border-red px-4 text-sm text-memoText'
+    : 'mt-2 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
   const quantityInputClassName = editErrors.quantity
-    ? 'mt-3 h-12 rounded-xl border border-red px-4 text-sm text-memoText'
-    : 'mt-3 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
+    ? 'mt-2 h-12 rounded-xl border border-red px-4 text-sm text-memoText'
+    : 'mt-2 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText';
   const efficacyInputClassName = editErrors.efficacy
-    ? 'mt-3 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
-    : 'mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
+    ? 'mt-2 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
+    : 'mt-2 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
   const usageInputClassName = editErrors.usage
-    ? 'mt-3 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
-    : 'mt-3 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
+    ? 'mt-2 min-h-[76px] rounded-xl border border-red px-4 py-3 text-sm text-memoText'
+    : 'mt-2 min-h-[76px] rounded-xl border border-memoLine px-4 py-3 text-sm text-memoText';
 
   if (isLoading) {
     return (
@@ -395,19 +395,6 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
               </Text>
             </View>
 
-            <View className="mt-3 rounded-2xl bg-white p-4 shadow-md">
-              <Text className="text-sm font-suitBold text-memoText">
-                추가 정보
-              </Text>
-              <View className="mt-3 flex-row">
-                <Text className="w-20 text-sm font-suitBold text-memoText">
-                  메모
-                </Text>
-                <Text className="flex-1 text-sm text-memoSubText">
-                  {medicine.info}
-                </Text>
-              </View>
-            </View>
           </View>
         </ScrollView>
       </View>
@@ -456,69 +443,92 @@ export function MedicineDetailScreen({ navigation, route }: Props) {
                   약품 수정
                 </Text>
 
-                <TextInput
-                  className={nameInputClassName}
-                  value={name}
-                  onChangeText={handleNameChange}
-                  placeholder="약 이름"
-                />
-                {editErrors.name ? (
-                  <Text
-                    accessibilityLiveRegion="polite"
-                    className="mt-2 text-sm font-suitMedium text-red"
-                  >
-                    {editErrors.name}
+                <View className="mt-4">
+                  <Text className="text-sm font-suitBold text-memoText">
+                    약 이름 <Text className="text-memoRed">*</Text>
                   </Text>
-                ) : null}
-                <TextInput
-                  className={quantityInputClassName}
-                  value={quantity}
-                  onChangeText={handleQuantityChange}
-                  keyboardType="number-pad"
-                  placeholder="수량"
-                />
-                {editErrors.quantity ? (
-                  <Text
-                    accessibilityLiveRegion="polite"
-                    className="mt-2 text-sm font-suitMedium text-red"
-                  >
-                    {editErrors.quantity}
-                  </Text>
-                ) : null}
-                <TextInput
-                  className={efficacyInputClassName}
-                  value={efficacy}
-                  onChangeText={handleEfficacyChange}
-                  multiline
-                  textAlignVertical="top"
-                  placeholder="효능"
-                />
-                {editErrors.efficacy ? (
-                  <Text
-                    accessibilityLiveRegion="polite"
-                    className="mt-2 text-sm font-suitMedium text-red"
-                  >
-                    {editErrors.efficacy}
-                  </Text>
-                ) : null}
-                <TextInput
-                  className={usageInputClassName}
-                  value={usage}
-                  onChangeText={handleUsageChange}
-                  multiline
-                  textAlignVertical="top"
-                  placeholder="사용 방법"
-                />
-                {editErrors.usage ? (
-                  <Text
-                    accessibilityLiveRegion="polite"
-                    className="mt-2 text-sm font-suitMedium text-red"
-                  >
-                    {editErrors.usage}
-                  </Text>
-                ) : null}
+                  <TextInput
+                    className={nameInputClassName}
+                    value={name}
+                    onChangeText={handleNameChange}
+                    placeholder="약 이름"
+                  />
+                  {editErrors.name ? (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      className="mt-2 text-sm font-suitMedium text-red"
+                    >
+                      {editErrors.name}
+                    </Text>
+                  ) : null}
+                </View>
 
-                <View className="mt-5 flex-row gap-3">
+                <View className="mt-4">
+                  <Text className="text-sm font-suitBold text-memoText">
+                    수량 <Text className="text-memoRed">*</Text>
+                  </Text>
+                  <TextInput
+                    className={quantityInputClassName}
+                    value={quantity}
+                    onChangeText={handleQuantityChange}
+                    keyboardType="number-pad"
+                    placeholder="수량"
+                  />
+                  {editErrors.quantity ? (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      className="mt-2 text-sm font-suitMedium text-red"
+                    >
+                      {editErrors.quantity}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View className="mt-4">
+                  <Text className="text-sm font-suitBold text-memoText">
+                    효능 <Text className="text-memoRed">*</Text>
+                  </Text>
+                  <TextInput
+                    className={efficacyInputClassName}
+                    value={efficacy}
+                    onChangeText={handleEfficacyChange}
+                    multiline
+                    textAlignVertical="top"
+                    placeholder="효능"
+                  />
+                  {editErrors.efficacy ? (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      className="mt-2 text-sm font-suitMedium text-red"
+                    >
+                      {editErrors.efficacy}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View className="mt-4">
+                  <Text className="text-sm font-suitBold text-memoText">
+                    사용 방법 <Text className="text-memoRed">*</Text>
+                  </Text>
+                  <TextInput
+                    className={usageInputClassName}
+                    value={usage}
+                    onChangeText={handleUsageChange}
+                    multiline
+                    textAlignVertical="top"
+                    placeholder="사용 방법"
+                  />
+                  {editErrors.usage ? (
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      className="mt-2 text-sm font-suitMedium text-red"
+                    >
+                      {editErrors.usage}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View className="flex-row gap-3 pt-5">
                   <TouchableOpacity
                     className="h-12 flex-1 items-center justify-center rounded-xl border border-memoLine"
                     disabled={isSaving}
