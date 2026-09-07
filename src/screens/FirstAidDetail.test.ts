@@ -3,14 +3,12 @@ import { TouchableOpacity } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+import type { EmergencyGuideResponse } from '@/types';
 import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyGuideResponse } from '@/types';
+import { toEmergencyGuideQuestionnaire } from '@/utils/emergencyQuestionnaire';
 
-import {
-  FirstAidDetail,
-  toEmergencyGuideQuestionnaire,
-} from './FirstAidDetail';
+import { FirstAidDetail } from './FirstAidDetail';
 
 jest.mock('@/assets', () => ({
   BackIcon: (): null => null,
@@ -124,9 +122,7 @@ describe('FirstAidDetail 응급 평가 보존', () => {
     const pressOption = async (): Promise<void> => {
       const option = renderer.root
         .findAllByType(TouchableOpacity)
-        .find(button =>
-          ['checkbox', 'radio'].includes(button.props.accessibilityRole),
-        );
+        .find(button => ['checkbox', 'radio'].includes(button.props.accessibilityRole));
 
       if (!option) {
         throw new Error('문진 답변을 찾을 수 없습니다.');

@@ -6,9 +6,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -17,55 +17,17 @@ import type {
   NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 
-import {
-  ProfileEditActions,
-  ProfileField,
-  SettingsActionRow,
-  SettingsIcon,
-} from '@/screens/settings/components';
-import type { MainTabParamList } from '../navigation/MainTabNavigator';
-import type { RootStackParamList } from '../navigation/RootNavigator';
-import {
-  getMyPage,
-  isAuthSessionExpiredError,
-  updateMyPage,
-  updateStoredAuthUser,
-} from '../services';
-import { getApiErrorUserMessage } from '../services/apiError.service';
-import { useAuthStore } from '../store';
-import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
-import {
-  INVALID_KOREAN_PHONE_NUMBER_MESSAGE,
-  normalizeOptionalKoreanPhoneNumber,
-  showLocationPermissionPrompt,
-} from '../utils';
-import tailwindConfig from '../../tailwind.config';
+import type { MainTabParamList } from '@/navigation/MainTabNavigator';
+import type { RootStackParamList } from '@/navigation/RootNavigator';
+import { useSettingsProfile } from '@/hooks/useSettingsProfile';
+import { useAuthStore } from '@/store';
+
+import { SettingsActionRow, SettingsProfileCard, ProfileLoadError } from './settings/components';
 
 type SettingsScreenProps = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'SettingsTab'>,
   NativeStackScreenProps<RootStackParamList>
 >;
-
-const { colors } = tailwindConfig;
-const PROFILE_LOAD_ERROR_MESSAGE =
-  '마이페이지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const PROFILE_NETWORK_ERROR_MESSAGE =
-  '네트워크 연결을 확인한 후 다시 시도해 주세요.';
-const PROFILE_SAVE_ERROR_MESSAGE =
-  '개인 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
-
-const getProfileLoadError = (error: unknown): string => {
-  if (error instanceof TypeError) {
-    return PROFILE_NETWORK_ERROR_MESSAGE;
-  }
-
-  return getApiErrorUserMessage(error, {
-    fallbackMessage: PROFILE_LOAD_ERROR_MESSAGE,
-    statusMessages: {
-      503: '마이페이지 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
-    },
-  });
-};
 
 const styles = StyleSheet.create({
   actionCard: {
@@ -87,36 +49,11 @@ const styles = StyleSheet.create({
   },
 });
 
-export const SettingsScreen = ({
-  navigation,
-}: SettingsScreenProps): React.JSX.Element => {
-  const authenticatedUser = useAuthStore(state => state.user);
-  const setAuthenticatedUser = useAuthStore(state => state.setUser);
+export const SettingsScreen = ({ navigation }: SettingsScreenProps): React.JSX.Element => {
   const signOut = useAuthStore(state => state.signOut);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
-  const [profile, setProfile] = React.useState({
-    name: '',
-    guardianPhone: '',
-  });
-  const [draftProfile, setDraftProfile] = React.useState({
-    name: '',
-    guardianPhone: '',
-  });
-  const [nameError, setNameError] = React.useState<string | null>(null);
-  const [guardianPhoneError, setGuardianPhoneError] = React.useState<
-    string | null
-  >(null);
-  const [isProfileLoading, setIsProfileLoading] = React.useState(true);
-  const [profileLoadError, setProfileLoadError] = React.useState<string | null>(
-    null,
-  );
-  const [isEditingProfile, setIsEditingProfile] = React.useState(false);
-  const [isSavingProfile, setIsSavingProfile] = React.useState(false);
-  const [profileRequestVersion, setProfileRequestVersion] = React.useState(0);
-
-  const rootNavigation =
-    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
-
+  const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
+  const { form, loadError, onRetry } = useSettingsProfile(rootNavigation);
   const moveToLogin = React.useCallback((): void => {
     rootNavigation?.reset({
       index: 0,
@@ -126,153 +63,6 @@ export const SettingsScreen = ({
 
   const handlePasswordResetPress = (): void => {
     rootNavigation?.navigate('PasswordReset');
-  };
-
-  React.useEffect(() => {
-    let isActive = true;
-
-    const loadProfile = async (): Promise<void> => {
-      setIsProfileLoading(true);
-      setProfileLoadError(null);
-
-      try {
-        if (!authenticatedUser) {
-          return;
-        }
-
-        const myPageProfile = await getMyPage(authenticatedUser.id);
-        const nextProfile = {
-          name: myPageProfile.name.trim(),
-          guardianPhone: myPageProfile.guardian_phone.trim(),
-        };
-
-        await updateStoredAuthUser(myPageProfile);
-
-        if (isActive) {
-          setProfile(nextProfile);
-          setDraftProfile(nextProfile);
-        }
-      } catch (error: unknown) {
-        if (!isActive) {
-          return;
-        }
-
-        if (isAuthSessionExpiredError(error)) {
-          redirectToLoginForExpiredSession(rootNavigation);
-          return;
-        }
-
-        const emptyProfile = { name: '', guardianPhone: '' };
-        setProfile(emptyProfile);
-        setDraftProfile(emptyProfile);
-        setIsEditingProfile(false);
-        setNameError(null);
-        setGuardianPhoneError(null);
-        setProfileLoadError(getProfileLoadError(error));
-      } finally {
-        if (isActive) {
-          setIsProfileLoading(false);
-        }
-      }
-    };
-
-    loadProfile();
-
-    return () => {
-      isActive = false;
-    };
-  }, [authenticatedUser, profileRequestVersion, rootNavigation]);
-
-  const handleProfileRetry = React.useCallback((): void => {
-    setProfileRequestVersion(currentVersion => currentVersion + 1);
-  }, []);
-
-  const handleEditProfilePress = (): void => {
-    setDraftProfile(profile);
-    setNameError(null);
-    setGuardianPhoneError(null);
-    setIsEditingProfile(true);
-  };
-
-  const handleCancelProfilePress = (): void => {
-    setDraftProfile(profile);
-    setNameError(null);
-    setGuardianPhoneError(null);
-    setIsEditingProfile(false);
-  };
-
-  const handleSaveProfilePress = async (): Promise<void> => {
-    const nextName = draftProfile.name.trim();
-    const nextGuardianPhone = normalizeOptionalKoreanPhoneNumber(
-      draftProfile.guardianPhone,
-    );
-    const nextNameError =
-      nextName.length === 0 ? '이름을 입력해 주세요.' : null;
-    const nextGuardianPhoneError =
-      nextGuardianPhone === null ? INVALID_KOREAN_PHONE_NUMBER_MESSAGE : null;
-
-    setNameError(nextNameError);
-    setGuardianPhoneError(nextGuardianPhoneError);
-
-    if (nextNameError || nextGuardianPhone === null) {
-      return;
-    }
-
-    setIsSavingProfile(true);
-
-    try {
-      if (
-        !authenticatedUser ||
-        !Number.isInteger(authenticatedUser.id) ||
-        authenticatedUser.id <= 0
-      ) {
-        throw new Error('로그인 사용자 정보를 확인할 수 없습니다.');
-      }
-
-      const updatedProfile = await updateMyPage(authenticatedUser.id, {
-        name: nextName,
-        guardian_phone: nextGuardianPhone,
-      });
-      const updatedUser = await updateStoredAuthUser(updatedProfile);
-      setAuthenticatedUser(updatedUser);
-      const nextProfile = {
-        name: updatedUser.name ?? '',
-        guardianPhone: updatedUser.guardian_phone ?? '',
-      };
-      const isGuardianPhoneFirstRegistered =
-        profile.guardianPhone.length === 0 &&
-        nextProfile.guardianPhone.length > 0;
-
-      setProfile(nextProfile);
-      setDraftProfile(nextProfile);
-      setIsEditingProfile(false);
-      Alert.alert('저장 완료', '개인 정보가 수정되었습니다.', [
-        {
-          text: '확인',
-          onPress: isGuardianPhoneFirstRegistered
-            ? showLocationPermissionPrompt
-            : undefined,
-        },
-      ]);
-    } catch (error: unknown) {
-      if (isAuthSessionExpiredError(error)) {
-        redirectToLoginForExpiredSession(rootNavigation);
-        return;
-      }
-
-      console.warn('[SettingsScreen] profile update failed:', error);
-      Alert.alert(
-        '저장 실패',
-        getApiErrorUserMessage(error, {
-          codeMessages: {
-            INVALID_REQUEST: '입력한 개인 정보를 다시 확인해 주세요.',
-          },
-          fallbackMessage: PROFILE_SAVE_ERROR_MESSAGE,
-        }),
-      );
-    } finally {
-      setIsSavingProfile(false);
-    }
   };
 
   const handleLogout = React.useCallback(async (): Promise<void> => {
@@ -287,132 +77,31 @@ export const SettingsScreen = ({
       moveToLogin();
     } catch (error) {
       console.warn('[SettingsScreen] logout failed:', error);
-      Alert.alert(
-        '로그아웃',
-        '로그아웃되었습니다. 다시 이용하려면 로그인해주세요.',
-      );
+      Alert.alert('로그아웃', '로그아웃되었습니다. 다시 이용하려면 로그인해주세요.');
       moveToLogin();
     } finally {
       setIsLoggingOut(false);
     }
   }, [isLoggingOut, moveToLogin, signOut]);
 
-  const namePlaceholder = isProfileLoading
-    ? '불러오는 중...'
-    : '이름이 등록되지 않았습니다';
-  const guardianPhonePlaceholder = isProfileLoading
-    ? '불러오는 중...'
-    : '등록된 번호가 없습니다';
-  const isProfileEditable =
-    isEditingProfile && !isProfileLoading && !isSavingProfile;
-
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-      >
+        className="flex-1">
         <ScrollView
           className="flex-1"
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+          showsVerticalScrollIndicator={false}>
           <View className="px-5 pt-10">
-            <Text className="text-title font-suitBold text-black">
-              마이페이지
-            </Text>
+            <Text className="text-title font-suitBold text-black">마이페이지</Text>
 
-            {profileLoadError ? (
-              <View className="mt-4 rounded-xl border border-red bg-camera_bg px-4 py-3">
-                <Text className="text-coment font-suitBold text-red">
-                  정보를 불러오지 못했습니다
-                </Text>
-                <Text className="mt-1 text-sm font-suitMedium leading-5 text-textDim">
-                  {profileLoadError}
-                </Text>
-                <TouchableOpacity
-                  accessibilityLabel="마이페이지 다시 시도"
-                  accessibilityRole="button"
-                  className="mt-3 self-start rounded-xl border border-red px-4 py-2"
-                  onPress={handleProfileRetry}
-                >
-                  <Text className="text-sm font-suitBold text-red">
-                    다시 시도
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
+            {loadError ? <ProfileLoadError message={loadError} onRetry={onRetry} /> : null}
 
-            {!profileLoadError ? (
-              <View
-                className="mt-6 overflow-hidden rounded-2xl bg-white px-5 py-5"
-                style={styles.profileCard}
-              >
-                <View className="min-h-[40px] flex-row items-center">
-                  <View className="flex-row items-center">
-                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-camera_bg">
-                      <SettingsIcon color={colors.red} name="user" size={20} />
-                    </View>
-                    <Text className="ml-3 text-body font-suitBold text-black">
-                      개인 정보
-                    </Text>
-                  </View>
-                </View>
+            {!loadError ? <SettingsProfileCard form={form} style={styles.profileCard} /> : null}
 
-                <ProfileField
-                  config={{
-                    iconName: 'user',
-                    label: '이름',
-                    placeholder: namePlaceholder,
-                  }}
-                  editable={isProfileEditable}
-                  errorMessage={nameError ?? undefined}
-                  onChangeText={value => {
-                    setNameError(null);
-                    setDraftProfile(currentProfile => ({
-                      ...currentProfile,
-                      name: value,
-                    }));
-                  }}
-                  value={draftProfile.name}
-                />
-                <ProfileField
-                  config={{
-                    iconName: 'phone',
-                    keyboardType: 'phone-pad',
-                    label: '보호자 전화번호',
-                    placeholder: guardianPhonePlaceholder,
-                  }}
-                  editable={isProfileEditable}
-                  errorMessage={guardianPhoneError ?? undefined}
-                  onChangeText={value => {
-                    setGuardianPhoneError(null);
-                    setDraftProfile(currentProfile => ({
-                      ...currentProfile,
-                      guardianPhone: value,
-                    }));
-                  }}
-                  value={draftProfile.guardianPhone}
-                />
-
-                <ProfileEditActions
-                  handlers={{
-                    onCancel: handleCancelProfilePress,
-                    onEdit: handleEditProfilePress,
-                    onSave: handleSaveProfilePress,
-                  }}
-                  isEditing={isEditingProfile}
-                  isLoading={isProfileLoading}
-                  isSaving={isSavingProfile}
-                />
-              </View>
-            ) : null}
-
-            <View
-              className="mt-4 overflow-hidden rounded-2xl bg-white"
-              style={styles.actionCard}
-            >
+            <View className="mt-4 overflow-hidden rounded-2xl bg-white" style={styles.actionCard}>
               <SettingsActionRow
                 iconName="lock"
                 label="비밀번호 재설정"
@@ -421,10 +110,7 @@ export const SettingsScreen = ({
               />
             </View>
 
-            <View
-              className="mt-4 overflow-hidden rounded-2xl bg-white"
-              style={styles.actionCard}
-            >
+            <View className="mt-4 overflow-hidden rounded-2xl bg-white" style={styles.actionCard}>
               <SettingsActionRow
                 iconName="logout"
                 isLoading={isLoggingOut}

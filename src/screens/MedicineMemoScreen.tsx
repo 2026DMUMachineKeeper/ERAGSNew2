@@ -1,36 +1,31 @@
 import React from 'react';
-import {
-  FlatList,
-  Text,
-  TextInput,
-  type ListRenderItem,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, Text, type ListRenderItem, TouchableOpacity, View } from 'react-native';
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import {
-  useIsFocused,
-  type CompositeScreenProps,
-} from '@react-navigation/native';
+import { useIsFocused, type CompositeScreenProps } from '@react-navigation/native';
 import type {
   NativeStackNavigationProp,
   NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 
-import { BackIcon } from '@/assets';
+import type { MedicineItem } from '@/types';
 import type { MainTabParamList } from '@/navigation/MainTabNavigator';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { medicineQueryOptions } from '@/query';
 import { isAuthSessionExpiredError } from '@/services/auth.service';
 import { getApiErrorUserMessage } from '@/services/apiError.service';
-import type { MedicineItem } from '@/services/medicineApi';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
+import { filterMedicinesByName } from '@/utils/medicine/filterMedicinesByName';
 
-import { MedicineListItem } from './medicineMemo/components';
-import tailwindConfig from '../../tailwind.config';
+import {
+  MedicineListItem,
+  MedicineListEmptyState,
+  MedicineSearchInput,
+} from './medicineMemo/components';
+
+import { BackIcon } from '@/assets';
 
 interface MedicineMemoScreenProps
   extends CompositeScreenProps<
@@ -38,11 +33,9 @@ interface MedicineMemoScreenProps
     NativeStackScreenProps<RootStackParamList, 'Home'>
   > {}
 
-const { colors } = tailwindConfig;
 const MEDICINE_LIST_LOAD_ERROR_MESSAGE =
   '약품 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const MEDICINE_LIST_NETWORK_ERROR_MESSAGE =
-  '네트워크 연결을 확인한 후 다시 시도해 주세요.';
+const MEDICINE_LIST_NETWORK_ERROR_MESSAGE = '네트워크 연결을 확인한 후 다시 시도해 주세요.';
 
 const getMedicineListLoadError = (error: unknown): string | null => {
   if (!error || isAuthSessionExpiredError(error)) {
@@ -61,30 +54,7 @@ const getMedicineListLoadError = (error: unknown): string | null => {
   });
 };
 
-export const filterMedicinesByName = (
-  medicines: MedicineItem[],
-  searchQuery: string,
-): MedicineItem[] => {
-  const normalizedSearchQuery = searchQuery
-    .trim()
-    .normalize('NFC')
-    .toLocaleLowerCase('ko-KR');
-
-  if (normalizedSearchQuery.length === 0) {
-    return medicines;
-  }
-
-  return medicines.filter(medicine =>
-    medicine.name
-      .normalize('NFC')
-      .toLocaleLowerCase('ko-KR')
-      .includes(normalizedSearchQuery),
-  );
-};
-
-export const MedicineMemoScreen = ({
-  navigation,
-}: MedicineMemoScreenProps): React.JSX.Element => {
+export const MedicineMemoScreen = ({ navigation }: MedicineMemoScreenProps): React.JSX.Element => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const isFocused = useIsFocused();
   const rootNavigation = React.useMemo(
@@ -149,52 +119,6 @@ export const MedicineMemoScreen = ({
     [handleMedicinePress],
   );
 
-  const renderEmptyContent = React.useCallback((): React.JSX.Element => {
-    if (isLoading) {
-      return (
-        <View className="mt-12 items-center">
-          <Text className="text-sm font-suitBold text-memoSubText">
-            약품 목록을 불러오는 중...
-          </Text>
-        </View>
-      );
-    }
-
-    if (loadError) {
-      return (
-        <View className="mt-12 items-center">
-          <Text className="text-center text-sm font-suitBold text-memoRed">
-            {loadError}
-          </Text>
-          <TouchableOpacity
-            accessibilityLabel="약품 목록 다시 시도"
-            accessibilityRole="button"
-            className="mt-4 rounded-xl border border-memoRed px-5 py-3"
-            disabled={isFetching}
-            onPress={handleRetry}
-          >
-            <Text className="text-sm font-suitBold text-memoRed">
-              {isFetching ? '불러오는 중...' : '다시 시도'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    const emptyMessage =
-      searchQuery.trim().length > 0
-        ? '검색 결과가 없습니다.'
-        : '등록된 약품이 없습니다.';
-
-    return (
-      <View className="mt-12 items-center">
-        <Text className="text-sm font-suitBold text-memoSubText">
-          {emptyMessage}
-        </Text>
-      </View>
-    );
-  }, [handleRetry, isFetching, isLoading, loadError, searchQuery]);
-
   return (
     <SafeAreaView className="flex-1 bg-memoBg" edges={['top', 'bottom']}>
       <View className="flex-1 px-4 pt-3">
@@ -203,34 +127,19 @@ export const MedicineMemoScreen = ({
             accessibilityLabel="홈으로 이동"
             accessibilityRole="button"
             className="h-9 w-9 items-center justify-center"
-            onPress={handleHomePress}
-          >
+            onPress={handleHomePress}>
             <BackIcon width={24} height={24} />
           </TouchableOpacity>
         </View>
 
         <View className="mt-4">
-          <Text className="text-[30px] font-suitBold text-memoText">
-            약품 메모
-          </Text>
+          <Text className="text-[30px] font-suitBold text-memoText">약품 메모</Text>
           <Text className="mt-1 text-sm font-suitRegular text-memoSubText">
             내가 등록한 약품을 관리하세요
           </Text>
         </View>
 
-        <View className="mt-5 h-12 flex-row items-center rounded-2xl bg-memoCard px-4">
-          <Text className="mr-2 text-base text-memoSubText">⌕</Text>
-          <TextInput
-            accessibilityLabel="약품 이름 검색"
-            autoCorrect={false}
-            className="flex-1 text-sm font-suitRegular text-memoText"
-            onChangeText={setSearchQuery}
-            placeholder="약품 이름으로 검색"
-            placeholderTextColor={colors.memoSubText}
-            returnKeyType="search"
-            value={searchQuery}
-          />
-        </View>
+        <MedicineSearchInput searchQuery={searchQuery} onChangeText={setSearchQuery} />
 
         {!loadError && (
           <View className="mt-4 flex-row items-center justify-between">
@@ -250,7 +159,12 @@ export const MedicineMemoScreen = ({
           data={loadError ? [] : filteredMedicines}
           keyboardShouldPersistTaps="handled"
           keyExtractor={medicine => medicine.id}
-          ListEmptyComponent={renderEmptyContent}
+          ListEmptyComponent={
+            <MedicineListEmptyState
+              state={{ isLoading, isFetching, loadError, searchQuery }}
+              onRetry={handleRetry}
+            />
+          }
           ListFooterComponent={<View className="h-3" />}
           renderItem={renderMedicineItem}
           showsVerticalScrollIndicator={false}
@@ -263,11 +177,8 @@ export const MedicineMemoScreen = ({
           accessibilityRole="button"
           activeOpacity={0.9}
           className="h-14 flex-row items-center justify-center rounded-2xl bg-memoRed"
-          onPress={handleMedicineAddPress}
-        >
-          <Text className="text-base font-suitBold text-white">
-            ＋ 약품 추가
-          </Text>
+          onPress={handleMedicineAddPress}>
+          <Text className="text-base font-suitBold text-white">＋ 약품 추가</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
