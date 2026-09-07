@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, TextInput } from 'react-native';
 
 import { useIsFocused } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -87,6 +87,49 @@ describe('filterMedicinesByName', () => {
 });
 
 describe('약품 탭 복귀 시 조회', () => {
+  it('약품 탭을 벗어나면 검색어를 초기화한다', async (): Promise<void> => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const screenProps = {
+      navigation: { getParent: jest.fn() },
+    } as unknown as React.ComponentProps<typeof MedicineMemoScreen>;
+    const renderScreen = (): React.ReactElement =>
+      React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(MedicineMemoScreen, screenProps),
+      );
+    let renderer: ReactTestRenderer | undefined;
+
+    jest.mocked(fetchMedicines).mockReset().mockResolvedValue(MEDICINES);
+    jest.mocked(useIsFocused).mockReturnValue(true);
+
+    try {
+      await act(async (): Promise<void> => {
+        renderer = create(renderScreen());
+      });
+
+      const searchInput = renderer?.root.findByType(TextInput);
+      await act(async (): Promise<void> => {
+        searchInput?.props.onChangeText('타이레놀');
+      });
+      expect(renderer?.root.findByType(TextInput).props.value).toBe('타이레놀');
+
+      jest.mocked(useIsFocused).mockReturnValue(false);
+      await act(async (): Promise<void> => {
+        renderer?.update(renderScreen());
+      });
+
+      expect(renderer?.root.findByType(TextInput).props.value).toBe('');
+    } finally {
+      await act(async (): Promise<void> => {
+        renderer?.unmount();
+      });
+      queryClient.clear();
+    }
+  });
+
   it.each(['최신 캐시', '오래된 캐시', '조회 실패'] as const)(
     '%s 상태에서 필요한 경우에만 재조회한다',
     async (

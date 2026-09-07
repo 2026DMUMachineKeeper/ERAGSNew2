@@ -117,6 +117,12 @@ export const MedicineMemoScreen = ({
     handleAuthSessionExpired();
   }, [handleAuthSessionExpired, medicineQueryError]);
 
+  React.useEffect((): void => {
+    if (!isFocused) {
+      setSearchQuery('');
+    }
+  }, [isFocused]);
+
   const handleRetry = React.useCallback(async (): Promise<void> => {
     await refetch();
   }, [refetch]);
