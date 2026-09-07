@@ -2,6 +2,8 @@ import React from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 
 import Geolocation, {
+  type GeolocationError,
+  type GeolocationOptions,
   type GeolocationResponse,
 } from '@react-native-community/geolocation';
 import { useIsFocused } from '@react-navigation/native';
@@ -21,6 +23,7 @@ import {
   stopAudioRecording,
 } from '@/services';
 import type { EmergencyGuideResponse } from '@/types';
+import { showLocationPermissionPrompt } from '@/utils';
 
 const CAMERA_OPTIONS: CameraOptions = {
   mediaType: 'photo',
@@ -65,14 +68,40 @@ const requestAndroidPermission = async (
   return result === PermissionsAndroid.RESULTS.GRANTED;
 };
 
-const getCurrentPosition = (): Promise<GeolocationResponse> =>
+const requestCurrentPosition = (
+  options: GeolocationOptions,
+): Promise<GeolocationResponse> =>
   new Promise((resolve, reject) => {
-    Geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 10000,
-    });
+    Geolocation.getCurrentPosition(resolve, reject, options);
   });
+
+const isLocationPermissionDeniedError = (
+  error: unknown,
+): error is GeolocationError =>
+  error !== null &&
+  typeof error === 'object' &&
+  'code' in error &&
+  error.code === 1;
+
+const getCurrentPosition = async (): Promise<GeolocationResponse> => {
+  try {
+    return await requestCurrentPosition({
+      enableHighAccuracy: false,
+      timeout: 8000,
+      maximumAge: 300000,
+    });
+  } catch (error: unknown) {
+    if (isLocationPermissionDeniedError(error)) {
+      throw error;
+    }
+
+    return requestCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 60000,
+    });
+  }
+};
 
 const getPhotoAsset = async (): Promise<Asset | null> => {
   const response = await launchCamera(CAMERA_OPTIONS);
@@ -151,10 +180,7 @@ export const useHomeEmergencyActions = (
     React.useCallback(async (): Promise<void> => {
       try {
         if (!(await hasLocationPermission())) {
-          Alert.alert(
-            '위치 정보 없음',
-            '위치 권한이 없어 현재 위치를 표시할 수 없습니다.',
-          );
+          showLocationPermissionPrompt();
           return;
         }
 
