@@ -3,14 +3,12 @@ import { TouchableOpacity } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+import type { EmergencyGuideResponse } from '@/types';
 import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyGuideResponse } from '@/types';
+import { toEmergencyGuideQuestionnaire } from '@/utils/emergencyQuestionnaire';
 
-import {
-  FirstAidDetail,
-  toEmergencyGuideQuestionnaire,
-} from './FirstAidDetail';
+import { FirstAidDetail } from './FirstAidDetail';
 
 jest.mock('@/assets', () => ({
   BackIcon: (): null => null,
@@ -124,9 +122,7 @@ describe('FirstAidDetail 응급 평가 보존', () => {
     const pressOption = async (): Promise<void> => {
       const option = renderer.root
         .findAllByType(TouchableOpacity)
-        .find(button =>
-          ['checkbox', 'radio'].includes(button.props.accessibilityRole),
-        );
+        .find(button => ['checkbox', 'radio'].includes(button.props.accessibilityRole));
 
       if (!option) {
         throw new Error('문진 답변을 찾을 수 없습니다.');
@@ -155,6 +151,23 @@ describe('FirstAidDetail 응급 평가 보존', () => {
     await pressAction('다음 질문');
     await pressOption();
     await pressAction('응급처치 가이드 시작');
+
+    const submittedFormData = jest.mocked(createEmergencyGuide).mock.calls[0][0];
+    const fields = submittedFormData as unknown as {
+      entries: () => Iterable<readonly [string, unknown]>;
+    };
+    const questionnaire = Array.from(fields.entries()).find(
+      ([fieldName]) => fieldName === 'questionnaire',
+    )?.[1];
+    expect(typeof questionnaire).toBe('string');
+    const payload: unknown = JSON.parse(questionnaire as string);
+    expect(payload).toEqual([
+        { questionId: 'Q1_IMMEDIATE_DANGER', answerIds: ['UNCONSCIOUS'] },
+        { questionId: 'Q2_VISIBLE_SYMPTOMS', answerIds: ['BLEEDING'] },
+        { questionId: 'B1_BLEEDING_PATTERN', answerIds: ['BLEEDING_OOZING'] },
+        { questionId: 'B2_BLEEDING_RISKS', answerIds: ['WOUND_DEEP'] },
+        { questionId: 'C1_AGE_GROUP', answerIds: ['CHILD'] },
+    ]);
 
     expect(useEmergencyGuideStore.getState().guide).toBe(PENDING_GUIDE);
     expect(retryEmergencyGuide).not.toHaveBeenCalled();

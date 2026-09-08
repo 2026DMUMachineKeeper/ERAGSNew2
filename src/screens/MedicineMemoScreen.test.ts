@@ -5,23 +5,18 @@ import { useIsFocused } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+import type { MedicineItem } from '@/types';
 import { MEDICINES_QUERY_KEY } from '@/query';
 import { fetchMedicines } from '@/services/medicineApi';
-import type { MedicineItem } from '@/services/medicineApi';
+import { filterMedicinesByName } from '@/utils/medicine/filterMedicinesByName';
 
-import {
-  filterMedicinesByName,
-  MedicineMemoScreen,
-} from './MedicineMemoScreen';
+import { MedicineMemoScreen } from './MedicineMemoScreen';
 
 const getRenderedText = (renderer: ReactTestRenderer): string =>
   renderer.root
     .findAllByType(Text)
     .flatMap(textNode => textNode.props.children)
-    .filter(
-      (text): text is string | number =>
-        typeof text === 'string' || typeof text === 'number',
-    )
+    .filter((text): text is string | number => typeof text === 'string' || typeof text === 'number')
     .join(' ');
 
 const waitForQueryUpdate = async (): Promise<void> => {
@@ -132,9 +127,7 @@ describe('약품 탭 복귀 시 조회', () => {
 
   it.each(['최신 캐시', '오래된 캐시', '조회 실패'] as const)(
     '%s 상태에서 필요한 경우에만 재조회한다',
-    async (
-      cacheState: '최신 캐시' | '오래된 캐시' | '조회 실패',
-    ): Promise<void> => {
+    async (cacheState: '최신 캐시' | '오래된 캐시' | '조회 실패'): Promise<void> => {
       const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: Infinity } },
       });
@@ -153,9 +146,7 @@ describe('약품 탭 복귀 시 조회', () => {
       jest.mocked(useIsFocused).mockReturnValue(false);
 
       if (cacheState === '조회 실패') {
-        jest
-          .mocked(fetchMedicines)
-          .mockRejectedValueOnce(new Error('연결 실패'));
+        jest.mocked(fetchMedicines).mockRejectedValueOnce(new Error('연결 실패'));
         await queryClient.prefetchQuery({
           queryKey: MEDICINES_QUERY_KEY,
           queryFn: fetchMedicines,
@@ -167,9 +158,7 @@ describe('약품 탭 복귀 시 조회', () => {
         });
       }
 
-      const errorSpy = jest
-        .spyOn(console, 'error')
-        .mockImplementation((): void => {});
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation((): void => {});
       try {
         await act(async (): Promise<void> => {
           renderer = create(renderScreen());
@@ -180,12 +169,8 @@ describe('약품 탭 복귀 시 조회', () => {
         await act(async (): Promise<void> => {
           renderer?.update(renderScreen());
         });
-        expect(fetchMedicines).toHaveBeenCalledTimes(
-          cacheState === '최신 캐시' ? 0 : 1,
-        );
-        expect(queryClient.getQueryState(MEDICINES_QUERY_KEY)?.status).toBe(
-          'success',
-        );
+        expect(fetchMedicines).toHaveBeenCalledTimes(cacheState === '최신 캐시' ? 0 : 1);
+        expect(queryClient.getQueryState(MEDICINES_QUERY_KEY)?.status).toBe('success');
       } finally {
         await act(async (): Promise<void> => {
           renderer?.unmount();
@@ -199,9 +184,7 @@ describe('약품 탭 복귀 시 조회', () => {
 });
 
 describe('약품 목록 조회 실패 화면', () => {
-  const createScreenProps = (): React.ComponentProps<
-    typeof MedicineMemoScreen
-  > =>
+  const createScreenProps = (): React.ComponentProps<typeof MedicineMemoScreen> =>
     ({
       navigation: { getParent: jest.fn() },
     } as unknown as React.ComponentProps<typeof MedicineMemoScreen>);
@@ -234,9 +217,7 @@ describe('약품 목록 조회 실패 화면', () => {
       await waitForQueryUpdate();
 
       const failedScreen = getRenderedText(renderer);
-      expect(failedScreen).toContain(
-        '네트워크 연결을 확인한 후 다시 시도해 주세요.',
-      );
+      expect(failedScreen).toContain('네트워크 연결을 확인한 후 다시 시도해 주세요.');
       expect(failedScreen).not.toContain('0개');
 
       const retryButton = renderer?.root.findByProps({
@@ -287,9 +268,7 @@ describe('약품 목록 조회 실패 화면', () => {
       await waitForQueryUpdate();
 
       const failedRefreshScreen = getRenderedText(renderer);
-      expect(failedRefreshScreen).toContain(
-        '네트워크 연결을 확인한 후 다시 시도해 주세요.',
-      );
+      expect(failedRefreshScreen).toContain('네트워크 연결을 확인한 후 다시 시도해 주세요.');
       expect(failedRefreshScreen).not.toContain('타이레놀');
       expect(failedRefreshScreen).not.toContain('3 개');
     } finally {
