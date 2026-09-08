@@ -109,7 +109,7 @@ describe('emergencyGuide.service', () => {
     );
     expect(consoleWarnMock).toHaveBeenCalledWith(
       '[EmergencyGuide API][Request]',
-      expect.objectContaining({ fieldNames: ['request', 'questionnaire'] }),
+      expect.objectContaining({ method: 'POST' }),
     );
     expect(consoleWarnMock).toHaveBeenCalledWith(
       '[EmergencyGuide API][Response]',
@@ -171,6 +171,38 @@ describe('emergencyGuide.service', () => {
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it.each(['<html>Forbidden</html>', ''])(
+    'JSON이 아닌 403 응답은 상태만 기록하고 본문은 노출하지 않는다: %s',
+    async (body): Promise<void> => {
+      const consoleErrorMock = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      try {
+        fetchMock.mockResolvedValue({
+          ok: false,
+          status: 403,
+          json: async (): Promise<unknown> => JSON.parse(body) as unknown,
+        });
+        await expect(
+          createEmergencyGuide(new FormData()),
+        ).rejects.toMatchObject({
+          status: 403,
+          code: 'INVALID_RESPONSE',
+        });
+        expect(consoleErrorMock).toHaveBeenCalledWith(
+          '[EmergencyGuide API][Response]',
+          expect.objectContaining({
+            status: 403,
+            errorCode: 'INVALID_RESPONSE',
+          }),
+        );
+        expect(consoleErrorMock).toHaveBeenCalledTimes(1);
+      } finally {
+        consoleErrorMock.mockRestore();
+      }
+    },
+  );
 
   it('생성 응답의 null sessionId를 허용한다', async (): Promise<void> => {
     fetchMock.mockResolvedValue(
