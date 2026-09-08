@@ -121,36 +121,8 @@ export const getEmergencyGuideErrorMessage = (error: unknown): string => {
   );
 };
 
-const readFormDataFieldNames = (formData: FormData): string[] => {
-  const reactNativeFormData = formData as unknown as {
-    getParts?: () => readonly unknown[];
-  };
-
-  if (typeof reactNativeFormData.getParts === 'function') {
-    return reactNativeFormData
-      .getParts()
-      .flatMap(part =>
-        isRecord(part) && typeof part.fieldName === 'string'
-          ? [part.fieldName]
-          : [],
-      );
-  }
-
-  const standardFormData = formData as unknown as {
-    entries?: () => Iterable<readonly [string, unknown]>;
-  };
-
-  return typeof standardFormData.entries === 'function'
-    ? Array.from(standardFormData.entries(), ([fieldName]) => fieldName)
-    : [];
-};
-
-const logRequest = (requestUrl: string, fieldNames: string[]): void => {
-  console.warn('[EmergencyGuide API][Request]', {
-    requestUrl,
-    method: 'POST',
-    fieldNames,
-  });
+const logRequest = (requestUrl: string): void => {
+  console.warn('[EmergencyGuide API][Request]', { requestUrl, method: 'POST' });
 };
 
 const readFailure = (payload: unknown): ApiError | null => {
@@ -238,7 +210,7 @@ export const createEmergencyGuide = async (
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
   const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
-  logRequest(requestUrl, readFormDataFieldNames(formData));
+  logRequest(requestUrl);
   const response = await fetchWithTimeout(
     requestUrl,
     {
@@ -299,7 +271,7 @@ export const retryEmergencyGuide = async (
   const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions/${encodeURIComponent(
     normalizedSessionId,
   )}/guide`;
-  logRequest(requestUrl, []);
+  logRequest(requestUrl);
   const response = await fetchWithTimeout(requestUrl, {
     method: 'POST',
     headers: { Accept: 'application/json' },
