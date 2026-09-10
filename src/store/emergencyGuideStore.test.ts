@@ -42,4 +42,19 @@ describe('useEmergencyGuideStore', () => {
       source: 'manual',
     });
   });
+
+  it('실제 서버 단계 ID만 중복 없이 완료 처리한다', (): void => {
+    const store = useEmergencyGuideStore.getState();
+
+    store.markStepCompleted(null);
+    store.markStepCompleted(7);
+    store.markStepCompleted(7);
+    store.markStepCompleted(8);
+    store.setHandoverStatus('IN_PROGRESS');
+
+    expect(useEmergencyGuideStore.getState()).toMatchObject({
+      completedStepIds: [7, 8],
+      handoverStatus: 'IN_PROGRESS',
+    });
+  });
 });
