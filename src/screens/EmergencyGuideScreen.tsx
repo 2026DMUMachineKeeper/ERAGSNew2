@@ -50,6 +50,7 @@ const toGuideRuntimeStep = (
   step: (typeof emergencyGuideSteps)[number],
   index: number,
 ): EmergencyGuideRuntimeStep => ({
+  stepId: null,
   stepNo: index + 1,
   title: step.title,
   instruction: step.title.replace(/^\d+단계:\s*/, ''),
@@ -64,6 +65,7 @@ const toGuideRuntimeStep = (
 const toServerGuideRuntimeStep = (
   step: EmergencyGuideTreatmentStep,
 ): EmergencyGuideRuntimeStep => ({
+  stepId: step.stepId,
   stepNo: step.stepNo,
   title: `${step.stepNo}단계: ${step.instruction}`,
   instruction: step.instruction,
@@ -88,11 +90,17 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const incrementElapsedSeconds = useEmergencyGuideStore(
     state => state.incrementElapsedSeconds,
   );
+  const markStepCompleted = useEmergencyGuideStore(
+    state => state.markStepCompleted,
+  );
   const moveToNextStep = useEmergencyGuideStore(state => state.moveToNextStep);
   const moveToPreviousStep = useEmergencyGuideStore(
     state => state.moveToPreviousStep,
   );
   const setGuide = useEmergencyGuideStore(state => state.setGuide);
+  const setHandoverStatus = useEmergencyGuideStore(
+    state => state.setHandoverStatus,
+  );
   const guide = storedGuide;
   const mainLabel = storedMainLabel;
   const subtypeLabel = storedSubtypeLabel;
@@ -145,17 +153,21 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     };
   }, [currentInstruction]);
 
-  const moveToComplete = () => {
+  const moveToComplete = (): void => {
+    setHandoverStatus('IN_PROGRESS');
     navigation.replace('QRCode');
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = (): void => {
+    markStepCompleted(currentStep?.stepId ?? null);
+
     if (!isLastStep) {
       moveToNextStep(steps.length);
       return;
     }
 
-    moveToComplete();
+    setHandoverStatus('COMPLETED');
+    navigation.replace('QRCode');
   };
 
   const handleBackStep = () => {

@@ -1,6 +1,9 @@
 import type {
   ApiError,
+  CreateEmergencyGuideHandoverRequest,
+  CreateEmergencyGuideHandoverResponse,
   EmergencyGuideMediaFile,
+  EmergencyGuideHandoverSnapshot,
   EmergencyGuideResponse,
 } from '@/types';
 
@@ -279,4 +282,158 @@ export const retryEmergencyGuide = async (
   });
 
   return readEmergencyGuideResponse(response, requestUrl);
+};
+
+export const parseEmergencyGuideHandoverSnapshot = (
+  value: unknown,
+  requestUrl = '',
+): EmergencyGuideHandoverSnapshot => {
+  if (
+    !isRecord(value) ||
+    ['handoverId', 'sessionId', 'token', 'evidence', 'routeCode', 'plan'].some(
+      key => key in value,
+    ) ||
+    value.version !== 2 ||
+    !isDateTime(value.generatedAt) ||
+    !isDateTime(value.expiresAt) ||
+    !['COMPLETED', 'IN_PROGRESS'].includes(String(value.status)) ||
+    !isHandoverAssessment(value.assessment) ||
+    !Array.isArray(value.completedTreatments) ||
+    !value.completedTreatments.every(isCompletedTreatment) ||
+    !Array.isArray(value.usedSupplies) ||
+    !value.usedSupplies.every(isUsedSupply)
+  ) {
+    throw new EmergencyGuideRequestError(
+      '구급대원 인계 응답이 DTO 계약과 일치하지 않습니다.',
+      200,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  return value as unknown as EmergencyGuideHandoverSnapshot;
+};
+
+const isDateTime = (value: unknown): value is string =>
+  typeof value === 'string' && Number.isFinite(Date.parse(value));
+
+const isHandoverAssessment = (value: unknown): boolean =>
+  isRecord(value) &&
+  typeof value.categoryCode === 'string' &&
+  typeof value.subtypeCode === 'string' &&
+  ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'UNKNOWN'].includes(
+    String(value.severityCode),
+  ) &&
+  ['CONSCIOUS', 'UNCONSCIOUS', 'UNKNOWN'].includes(
+    String(value.consciousness),
+  ) &&
+  ['CHILD', 'ADULT', 'ELDERLY', 'UNKNOWN'].includes(String(value.ageGroup)) &&
+  Array.isArray(value.redFlags) &&
+  value.redFlags.every(redFlag => typeof redFlag === 'string') &&
+  typeof value.call119Required === 'boolean' &&
+  typeof value.summary === 'string';
+
+const isCompletedTreatment = (value: unknown): boolean =>
+  isRecord(value) &&
+  Number.isInteger(value.stepId) &&
+  (value.stepId as number) > 0 &&
+  Number.isInteger(value.stepNo) &&
+  (value.stepNo as number) > 0 &&
+  typeof value.instruction === 'string' &&
+  value.instruction.trim().length > 0;
+
+const isUsedSupply = (value: unknown): boolean =>
+  isRecord(value) &&
+  typeof value.name === 'string' &&
+  value.name.trim().length > 0 &&
+  Number.isInteger(value.quantity) &&
+  (value.quantity as number) > 0;
+
+const readEmergencyGuideHandoverResponse = async (
+  response: Response,
+  requestUrl: string,
+): Promise<CreateEmergencyGuideHandoverResponse> => {
+  let payload: unknown;
+
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    throw new EmergencyGuideRequestError(
+      '구급대원 인계 응답 형식이 올바르지 않습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  const failure = readFailure(payload);
+  console.warn('[EmergencyGuide API][Response]', {
+    requestUrl,
+    status: response.status,
+    ok: response.ok,
+    errorCode: failure?.code ?? null,
+  });
+
+  if (!response.ok || failure) {
+    throw new EmergencyGuideRequestError(
+      failure?.message ?? '구급대원 인계 QR 발급에 실패했습니다.',
+      response.status,
+      failure?.code ?? 'REQUEST_FAILED',
+      requestUrl,
+      failure?.details ?? [],
+    );
+  }
+
+  if (
+    !isRecord(payload) ||
+    payload.success !== true ||
+    !isRecord(payload.data) ||
+    typeof payload.data.publicHandoverUrl !== 'string' ||
+    !/^https?:\/\/[^#]+\/handover\.html#token=[A-Za-z0-9_-]{43}$/.test(
+      payload.data.publicHandoverUrl,
+    )
+  ) {
+    throw new EmergencyGuideRequestError(
+      '구급대원 인계 응답이 DTO 계약과 일치하지 않습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  return {
+    publicHandoverUrl: payload.data.publicHandoverUrl,
+    snapshot: parseEmergencyGuideHandoverSnapshot(
+      payload.data.snapshot,
+      requestUrl,
+    ),
+  };
+};
+
+export const createEmergencyGuideHandover = async (
+  sessionId: string,
+  input: CreateEmergencyGuideHandoverRequest,
+  signal?: AbortSignal,
+): Promise<CreateEmergencyGuideHandoverResponse> => {
+  const normalizedSessionId = sessionId.trim();
+
+  if (!normalizedSessionId) {
+    throw new Error('응급 가이드 sessionId가 없습니다.');
+  }
+
+  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions/${encodeURIComponent(
+    normalizedSessionId,
+  )}/handover`;
+  logRequest(requestUrl);
+  const response = await fetchWithTimeout(requestUrl, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+    signal,
+  });
+
+  return readEmergencyGuideHandoverResponse(response, requestUrl);
 };

@@ -107,7 +107,7 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
       </View>
 
       <View className="mt-6 items-center">
-        <View className="h-[200px] w-[260px] items-center justify-center overflow-hidden rounded-lg bg-offWhite">
+        <View className="h-[200px] w-[260px] items-center justify-center overflow-hidden rounded-lg bg-background">
           {imageResource && !hasImageLoadError ? (
             <Image
               key={imageResource}

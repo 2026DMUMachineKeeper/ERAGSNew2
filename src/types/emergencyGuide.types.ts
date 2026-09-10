@@ -71,3 +71,47 @@ export interface EmergencyGuideResponse {
   treatment: EmergencyGuideTreatment;
   error: ApiError | null;
 }
+
+export type EmergencyGuideHandoverStatus = 'COMPLETED' | 'IN_PROGRESS';
+
+export interface CreateEmergencyGuideHandoverRequest {
+  status: EmergencyGuideHandoverStatus;
+  completedStepIds: number[];
+}
+
+export interface EmergencyGuideHandoverAssessment {
+  categoryCode: string;
+  subtypeCode: string;
+  severityCode: EmergencyGuideAssessment['severityCode'];
+  consciousness: EmergencyGuidePatientContext['consciousness'];
+  ageGroup: EmergencyGuidePatientContext['ageGroup'];
+  redFlags: string[];
+  call119Required: boolean;
+  summary: string;
+}
+
+export interface EmergencyGuideHandoverCompletedTreatment {
+  stepId: number;
+  stepNo: number;
+  instruction: string;
+}
+
+export interface EmergencyGuideHandoverUsedSupply {
+  name: string;
+  quantity: number;
+}
+
+export interface EmergencyGuideHandoverSnapshot {
+  version: 2;
+  generatedAt: string;
+  expiresAt: string;
+  status: EmergencyGuideHandoverStatus;
+  assessment: EmergencyGuideHandoverAssessment;
+  completedTreatments: EmergencyGuideHandoverCompletedTreatment[];
+  usedSupplies: EmergencyGuideHandoverUsedSupply[];
+}
+
+export interface CreateEmergencyGuideHandoverResponse {
+  publicHandoverUrl: string;
+  snapshot: EmergencyGuideHandoverSnapshot;
+}
