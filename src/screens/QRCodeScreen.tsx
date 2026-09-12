@@ -8,11 +8,15 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import QRCode from 'qrcode';
+import type { QRCodeSegment } from 'qrcode';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { createEmergencyGuideHandover } from '@/services';
+import {
+  createEmergencyGuideHandover,
+  getEmergencyGuideErrorMessage,
+} from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type {
   CreateEmergencyGuideHandoverResponse,
@@ -22,6 +26,49 @@ import type {
 } from '@/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'QRCode'>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object';
+
+const getQrErrorDetails = (error: unknown): Record<string, unknown> => {
+  const details: Record<string, unknown> = { errorType: typeof error };
+
+  if (error instanceof Error) {
+    details.errorName = error.name;
+    details.errorMessage = error.message;
+  }
+
+  if (isRecord(error)) {
+    details.status =
+      typeof error.status === 'number' ? error.status : undefined;
+    details.errorCode = typeof error.code === 'string' ? error.code : undefined;
+    details.requestUrl =
+      typeof error.requestUrl === 'string' ? error.requestUrl : undefined;
+  }
+
+  return details;
+};
+
+// Hermes 일부 버전에는 TextEncoder가 없어 qrcode 문자열 입력 경로가 실패하므로 바이트 세그먼트로 전달한다.
+const encodeQrText = (value: string): Uint8Array => {
+  const encodedValue = encodeURIComponent(value);
+  const bytes: number[] = [];
+
+  for (let index = 0; index < encodedValue.length; index += 1) {
+    if (encodedValue[index] === '%') {
+      bytes.push(Number.parseInt(encodedValue.slice(index + 1, index + 3), 16));
+      index += 2;
+    } else {
+      bytes.push(encodedValue.charCodeAt(index));
+    }
+  }
+
+  return Uint8Array.from(bytes);
+};
+
+const createQrCodeData = (value: string): QRCodeSegment[] => [
+  { mode: 'byte', data: encodeQrText(value) },
+];
 
 const createLocalUsedSupplies = (
   completedSteps: EmergencyGuideTreatmentStep[],
@@ -49,9 +96,7 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
   const completedStepIds = useEmergencyGuideStore(
     state => state.completedStepIds,
   );
-  const handoverStatus = useEmergencyGuideStore(
-    state => state.handoverStatus,
-  );
+  const handoverStatus = useEmergencyGuideStore(state => state.handoverStatus);
   const resetGuide = useEmergencyGuideStore(state => state.resetGuide);
   const [handover, setHandover] =
     React.useState<CreateEmergencyGuideHandoverResponse | null>(null);
@@ -74,8 +119,21 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
     let isActive = true;
 
     const issueQr = async (): Promise<void> => {
+      console.warn('[EmergencyGuide QR][Issue]', {
+        phase: 'start',
+        sessionId: guide?.sessionId ?? null,
+        handoverStatus: handoverStatus ?? 'IN_PROGRESS',
+        completedStepIds,
+      });
+
       if (!guide?.sessionId) {
-        setHandoverError('QR을 발급하지 못했습니다.');
+        console.error('[EmergencyGuide QR][Issue Error]', {
+          phase: 'session_check',
+          errorCode: 'SESSION_ID_MISSING',
+        });
+        setHandoverError(
+          '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+        );
         setIsIssuingQr(false);
         return;
       }
@@ -91,10 +149,23 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
         }
 
         setHandover(response);
+        console.warn('[EmergencyGuide QR][Handover Ready]', {
+          publicHandoverUrlLength: response.publicHandoverUrl.length,
+          snapshotVersion: response.snapshot.version,
+          snapshotStatus: response.snapshot.status,
+          completedTreatmentsCount:
+            response.snapshot.completedTreatments.length,
+          usedSuppliesCount: response.snapshot.usedSupplies.length,
+        });
 
         try {
+          console.warn('[EmergencyGuide QR][Generate]', {
+            phase: 'start',
+            inputLength: response.publicHandoverUrl.length,
+            inputEncoding: 'utf8-byte-segment',
+          });
           const generatedQrSvg = await QRCode.toString(
-            response.publicHandoverUrl,
+            createQrCodeData(response.publicHandoverUrl),
             {
               type: 'svg',
               errorCorrectionLevel: 'M',
@@ -103,15 +174,31 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
 
           if (isActive) {
             setQrSvg(generatedQrSvg);
+            console.warn('[EmergencyGuide QR][Generate]', {
+              phase: 'success',
+              svgLength: generatedQrSvg.length,
+              hasSvgRoot: generatedQrSvg.trimStart().startsWith('<svg'),
+              hasSvgPath: generatedQrSvg.includes('<path'),
+            });
           }
-        } catch {
+        } catch (error: unknown) {
+          console.error('[EmergencyGuide QR][Generate Error]', {
+            ...getQrErrorDetails(error),
+          });
           if (isActive) {
-            setHandoverError('QR을 발급하지 못했습니다.');
+            setHandoverError(
+              'QR 코드 생성에 실패했습니다. 인계 요약을 직접 보여주세요.',
+            );
           }
         }
-      } catch {
+      } catch (error: unknown) {
+        const errorMessage = getEmergencyGuideErrorMessage(error);
+        console.error('[EmergencyGuide QR][Handover Error]', {
+          ...getQrErrorDetails(error),
+          userMessage: errorMessage,
+        });
         if (isActive) {
-          setHandoverError('QR을 발급하지 못했습니다.');
+          setHandoverError(errorMessage);
         }
       } finally {
         if (isActive) {
@@ -164,7 +251,9 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
           </Text>
 
           <View className="mt-3 rounded-2xl bg-white p-4">
-            <Text className="text-sm font-suitBold text-warning">판단 결과</Text>
+            <Text className="text-sm font-suitBold text-warning">
+              판단 결과
+            </Text>
             <Text className="mt-2 text-lg font-suitBold text-black">
               {assessment?.categoryCode ?? mainLabel} /{' '}
               {assessment?.severityCode ?? 'UNKNOWN'}
@@ -193,10 +282,7 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
             </Text>
             {completedTreatments.length > 0 ? (
               completedTreatments.map((item, index) => (
-                <Text
-                  key={item.stepId}
-                  className="mt-3 leading-6 text-black"
-                >
+                <Text key={item.stepId} className="mt-3 leading-6 text-black">
                   {index + 1}. {item.instruction}
                 </Text>
               ))
@@ -243,6 +329,12 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
                 <View className="aspect-square w-full items-center justify-center rounded-xl bg-white">
                   <SvgXml
                     height="92%"
+                    onError={(error): void => {
+                      console.error('[EmergencyGuide QR][Render Error]', {
+                        ...getQrErrorDetails(error),
+                        svgLength: qrSvg.length,
+                      });
+                    }}
                     testID="emergency-handover-qr"
                     width="92%"
                     xml={qrSvg}

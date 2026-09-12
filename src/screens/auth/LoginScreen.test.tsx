@@ -73,4 +73,29 @@ describe('LoginScreen 오류 메시지', () => {
     expect(JSON.stringify(alertSpy.mock.calls)).not.toContain(internalMessage);
     await act(async (): Promise<void> => renderer.unmount());
   });
+
+  it('로그인 화면에서 비밀번호 재설정 화면으로 이동한다', async (): Promise<void> => {
+    const navigate = jest.fn();
+    let renderer!: ReactTestRenderer;
+    await act(async (): Promise<void> => {
+      renderer = create(
+        <LoginScreen
+          navigation={{ navigate } as never}
+          route={{} as never}
+        />,
+      );
+    });
+
+    const resetButton = renderer.root
+      .findAll(node => node.props.accessibilityLabel === '비밀번호 재설정')
+      .find(node => typeof node.props.onPress === 'function');
+    if (!resetButton) {
+      throw new Error('비밀번호 재설정 버튼을 찾을 수 없습니다.');
+    }
+
+    act((): void => resetButton.props.onPress());
+
+    expect(navigate).toHaveBeenCalledWith('PasswordReset');
+    await act(async (): Promise<void> => renderer.unmount());
+  });
 });

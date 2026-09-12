@@ -1,7 +1,10 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 
-import { createEmergencyGuideHandover } from '@/services';
+import {
+  createEmergencyGuideHandover,
+  getEmergencyGuideErrorMessage,
+} from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type { EmergencyGuideResponse } from '@/types';
 
@@ -13,9 +16,13 @@ jest.mock('qrcode', () => ({
 }));
 jest.mock('@/services', () => ({
   createEmergencyGuideHandover: jest.fn(),
+  getEmergencyGuideErrorMessage: jest.fn(
+    () => '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+  ),
 }));
 
 const createHandoverMock = jest.mocked(createEmergencyGuideHandover);
+const getErrorMessageMock = jest.mocked(getEmergencyGuideErrorMessage);
 
 const GUIDE: EmergencyGuideResponse = {
   sessionId: 'session-1',
@@ -96,7 +103,8 @@ describe('QRCodeScreen', () => {
     expect(rendered).toContain('출혈 상황입니다.');
     expect(rendered).toContain('상처를 압박하세요.');
     expect(rendered).toContain('서버 약품명');
-    expect(rendered).toContain('QR을 발급하지 못했습니다.');
+    expect(rendered).toContain('응급 가이드 요청에 실패했습니다.');
+    expect(getErrorMessageMock).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it('성공 시 서버 snapshot과 토큰 QR을 표시하고 URL 문자열은 노출하지 않는다', async (): Promise<void> => {
