@@ -21,4 +21,10 @@ describe('tts.service', () => {
     expect(Tts.setDefaultLanguage).toHaveBeenCalledTimes(1);
     expect(Tts.speak).toHaveBeenCalledWith('응급처치 안내');
   });
+
+  it('119는 숫자 대신 일일구로 읽도록 변환한다', async (): Promise<void> => {
+    await speakTts('119에 신고해 주세요.');
+
+    expect(Tts.speak).toHaveBeenLastCalledWith('일일구에 신고해 주세요.');
+  });
 });

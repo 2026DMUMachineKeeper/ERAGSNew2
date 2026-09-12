@@ -104,10 +104,11 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
           language: 'ko-KR',
         }),
       );
-      formData.append(
-        'questionnaire',
-        JSON.stringify(toEmergencyGuideQuestionnaire(questionAnswers)),
+      const questionnaire = JSON.stringify(
+        toEmergencyGuideQuestionnaire(questionAnswers),
       );
+      console.warn('[EmergencyGuide API][Questionnaire]', questionnaire);
+      formData.append('questionnaire', questionnaire);
 
       startGuide({
         guide: await createEmergencyGuide(formData),

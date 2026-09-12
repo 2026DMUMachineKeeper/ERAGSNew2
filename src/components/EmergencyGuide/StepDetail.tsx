@@ -8,17 +8,22 @@ type StepDetailStep = Partial<EmergencyGuideRuntimeStep> & {
 
 type Props = {
   step?: StepDetailStep | null;
-  onStopPress?: () => void;
+  isStepCompleted?: boolean;
+  onStopPress?: (hasCompletedCurrentStep: boolean) => void;
 };
 
 const getInstructionFromTitle = (title: string) =>
   title.replace(/^\d+\s*단계:\s*/, '').trim();
 
-export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
+export const StepDetail = ({
+  step,
+  isStepCompleted = false,
+  onStopPress,
+}: Props): React.JSX.Element => {
   const [failedImageResource, setFailedImageResource] = React.useState<
     string | null
   >(null);
-  const [showStopModal, setShowStopModal] = React.useState(false);
+  const [isStopModalVisible, setIsStopModalVisible] = React.useState(false);
   const imageResource = step?.imageResource?.trim() ?? '';
   const hasImageLoadError = failedImageResource === imageResource;
   const title = typeof step?.title === 'string' ? step.title : '';
@@ -52,8 +57,10 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
         </View>
 
         <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="응급처치 중단"
           className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-red bg-backgroud"
-          onPress={() => setShowStopModal(true)}
+          onPress={() => setIsStopModalVisible(true)}
         >
           <Text className="text-dangerText text-xs font-bold">
             응급처치 중단
@@ -62,10 +69,10 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
       </View>
 
       <Modal
-        visible={showStopModal}
+        visible={isStopModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowStopModal(false)}
+        onRequestClose={() => setIsStopModalVisible(false)}
       >
         <View className="flex-1 bg-black/60 items-center justify-center px-6">
           <View className="w-full max-w-[320px] rounded-2xl bg-white border border-white px-5 py-5">
@@ -74,26 +81,49 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
                 응급처치를 중단하시겠습니까?
               </Text>
               <Text className="mt-3 text-sm text-black text-center leading-5">
-                중단하면 현재 안내를 종료하고 구조대원 인계 페이지로 이동합니다.
+                {isStepCompleted
+                  ? `${stepNo}단계는 이미 완료로 기록되어 있습니다.`
+                  : `현재 ${stepNo}단계의 처치를 완료했나요?`}
+                {'\n'}완료한 처치만 기록하여 구조대원 인계 페이지로 이동합니다.
               </Text>
             </View>
 
-            <View className="mt-5 flex-row gap-3">
+            <View className="mt-5 gap-3">
               <TouchableOpacity
-                className="flex-1 h-12 rounded-xl border border-borderSubtle items-center justify-center"
-                onPress={() => setShowStopModal(false)}
-              >
-                <Text className="text-black font-bold">취소</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-1 h-12 rounded-xl bg-red items-center justify-center"
+                accessibilityRole="button"
+                accessibilityLabel={isStepCompleted ? '중단' : '완료했어요 · 중단'}
+                className="h-12 rounded-xl bg-red items-center justify-center"
                 onPress={() => {
-                  setShowStopModal(false);
-                  onStopPress?.();
+                  setIsStopModalVisible(false);
+                  onStopPress?.(true);
                 }}
               >
-                <Text className="text-white font-bold">중단</Text>
+                <Text className="text-white font-suitBold">
+                  {isStepCompleted ? '중단' : '완료했어요 · 중단'}
+                </Text>
+              </TouchableOpacity>
+
+              {!isStepCompleted ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="아직 안 했어요 · 중단"
+                  className="h-12 rounded-xl border border-borderSubtle items-center justify-center"
+                  onPress={() => {
+                    setIsStopModalVisible(false);
+                    onStopPress?.(false);
+                  }}
+                >
+                  <Text className="text-black font-suitBold">아직 안 했어요 · 중단</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="취소"
+                className="h-12 items-center justify-center"
+                onPress={() => setIsStopModalVisible(false)}
+              >
+                <Text className="text-black font-suitBold">취소</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -107,7 +137,7 @@ export const StepDetail = ({ step, onStopPress }: Props): React.JSX.Element => {
       </View>
 
       <View className="mt-6 items-center">
-        <View className="h-[200px] w-[260px] items-center justify-center overflow-hidden rounded-lg bg-offWhite">
+        <View className="h-[200px] w-[260px] items-center justify-center overflow-hidden rounded-lg bg-background">
           {imageResource && !hasImageLoadError ? (
             <Image
               key={imageResource}
