@@ -93,6 +93,9 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const markStepCompleted = useEmergencyGuideStore(
     state => state.markStepCompleted,
   );
+  const completedStepIds = useEmergencyGuideStore(
+    state => state.completedStepIds,
+  );
   const moveToNextStep = useEmergencyGuideStore(state => state.moveToNextStep);
   const moveToPreviousStep = useEmergencyGuideStore(
     state => state.moveToPreviousStep,
@@ -123,6 +126,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const elapsedLabel = formatElapsed(elapsedSeconds);
   const progress = steps.length ? (currentStepIndex + 1) / steps.length : 0;
   const isLastStep = currentStepIndex >= steps.length - 1;
+  const isCurrentStepCompleted =
+    currentStep?.stepId != null && completedStepIds.includes(currentStep.stepId);
   const currentInstruction = currentStep?.instruction?.trim() ?? '';
 
   React.useEffect(() => {
@@ -153,21 +158,46 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     };
   }, [currentInstruction]);
 
-  const moveToComplete = (): void => {
+  const handleStopPress = (hasCompletedCurrentStep: boolean): void => {
+    if (hasCompletedCurrentStep) {
+      markStepCompleted(currentStep?.stepId ?? null);
+    }
+
     setHandoverStatus('IN_PROGRESS');
     navigation.replace('QRCode');
   };
 
   const handleNextStep = (): void => {
-    markStepCompleted(currentStep?.stepId ?? null);
-
-    if (!isLastStep) {
-      moveToNextStep(steps.length);
+    if (!currentStep) {
       return;
     }
 
-    setHandoverStatus('COMPLETED');
-    navigation.replace('QRCode');
+    const handleConfirmCompletion = (): void => {
+      markStepCompleted(currentStep.stepId);
+
+      if (!isLastStep) {
+        moveToNextStep(steps.length);
+        return;
+      }
+
+      setHandoverStatus('COMPLETED');
+      navigation.replace('QRCode');
+    };
+
+    if (isCurrentStepCompleted) {
+      handleConfirmCompletion();
+      return;
+    }
+
+    Alert.alert(
+      '처치 완료 확인',
+      `${currentStep.stepNo}단계: ${currentInstruction}\n\n이 단계의 처치를 완료했나요?`,
+      [
+        { text: '아직 안 했어요', style: 'cancel' },
+        { text: '완료했어요', onPress: handleConfirmCompletion },
+      ],
+      { cancelable: true },
+    );
   };
 
   const handleBackStep = () => {
@@ -261,7 +291,11 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         showsVerticalScrollIndicator={false}
       >
         <View className="pb-4">
-          <StepDetail step={currentStep} onStopPress={moveToComplete} />
+          <StepDetail
+            step={currentStep}
+            isStepCompleted={isCurrentStepCompleted}
+            onStopPress={handleStopPress}
+          />
         </View>
       </ScrollView>
 

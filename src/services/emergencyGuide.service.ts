@@ -80,6 +80,8 @@ const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   IMAGE_TOO_LARGE:
     '이미지 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
   GUIDE_PENDING: '응급 평가가 완료되었습니다. 처치 안내를 다시 요청해 주세요.',
+  INVALID_RESPONSE:
+    '응급 가이드 서버 응답을 확인하지 못했습니다. 앱과 서버 버전을 확인해 주세요.',
   UNSUPPORTED_AUDIO_TYPE:
     '지원하지 않는 음성 형식입니다. 다른 음성 파일로 다시 요청해 주세요.',
   UNSUPPORTED_IMAGE_TYPE:
@@ -128,6 +130,25 @@ const logRequest = (requestUrl: string): void => {
   console.warn('[EmergencyGuide API][Request]', { requestUrl, method: 'POST' });
 };
 
+const summarizeHandoverUrl = (value: unknown): Record<string, unknown> => {
+  if (typeof value !== 'string') {
+    return { type: typeof value };
+  }
+
+  const hashIndex = value.indexOf('#');
+  const token = hashIndex >= 0 ? value.slice(hashIndex + 1) : '';
+
+  return {
+    type: 'string',
+    length: value.length,
+    path: hashIndex >= 0 ? value.slice(0, hashIndex) : value,
+    hasToken: token.startsWith('token='),
+    tokenLength: token.startsWith('token=') ? token.slice(6).length : 0,
+    matchesExpectedFormat:
+      /^https?:\/\/[^#]+\/handover\.html#token=[A-Za-z0-9_-]{43}$/.test(value),
+  };
+};
+
 const readFailure = (payload: unknown): ApiError | null => {
   if (!isRecord(payload) || !isRecord(payload.error)) {
     return null;
@@ -146,6 +167,36 @@ const readFailure = (payload: unknown): ApiError | null => {
       ? details.filter((detail): detail is string => typeof detail === 'string')
       : [],
   };
+};
+
+const getHandoverEnvelopeValidationIssue = (
+  payload: unknown,
+): string | null => {
+  if (!isRecord(payload)) {
+    return 'payload_not_object';
+  }
+
+  if (payload.success !== true) {
+    return 'success_not_true';
+  }
+
+  if (!isRecord(payload.data)) {
+    return 'data_not_object';
+  }
+
+  if (typeof payload.data.publicHandoverUrl !== 'string') {
+    return 'public_handover_url_not_string';
+  }
+
+  if (
+    !/^https?:\/\/[^#]+\/handover\.html#token=[A-Za-z0-9_-]{43}$/.test(
+      payload.data.publicHandoverUrl,
+    )
+  ) {
+    return 'public_handover_url_invalid_format';
+  }
+
+  return null;
 };
 
 const readEmergencyGuideResponse = async (
@@ -288,21 +339,15 @@ export const parseEmergencyGuideHandoverSnapshot = (
   value: unknown,
   requestUrl = '',
 ): EmergencyGuideHandoverSnapshot => {
-  if (
-    !isRecord(value) ||
-    ['handoverId', 'sessionId', 'token', 'evidence', 'routeCode', 'plan'].some(
-      key => key in value,
-    ) ||
-    value.version !== 2 ||
-    !isDateTime(value.generatedAt) ||
-    !isDateTime(value.expiresAt) ||
-    !['COMPLETED', 'IN_PROGRESS'].includes(String(value.status)) ||
-    !isHandoverAssessment(value.assessment) ||
-    !Array.isArray(value.completedTreatments) ||
-    !value.completedTreatments.every(isCompletedTreatment) ||
-    !Array.isArray(value.usedSupplies) ||
-    !value.usedSupplies.every(isUsedSupply)
-  ) {
+  const validationIssue = getHandoverSnapshotValidationIssue(value);
+
+  if (validationIssue) {
+    console.error('[EmergencyGuide API][Handover Snapshot]', {
+      requestUrl,
+      errorCode: 'INVALID_RESPONSE',
+      validationIssue,
+      snapshotKeys: isRecord(value) ? Object.keys(value) : [],
+    });
     throw new EmergencyGuideRequestError(
       '구급대원 인계 응답이 DTO 계약과 일치하지 않습니다.',
       200,
@@ -312,6 +357,63 @@ export const parseEmergencyGuideHandoverSnapshot = (
   }
 
   return value as unknown as EmergencyGuideHandoverSnapshot;
+};
+
+const getHandoverSnapshotValidationIssue = (value: unknown): string | null => {
+  if (!isRecord(value)) {
+    return 'snapshot_not_object';
+  }
+
+  const unexpectedKey = [
+    'handoverId',
+    'sessionId',
+    'token',
+    'evidence',
+    'routeCode',
+    'plan',
+  ].find(key => key in value);
+
+  if (unexpectedKey) {
+    return `unexpected_snapshot_key:${unexpectedKey}`;
+  }
+
+  if (value.version !== 2) {
+    return 'snapshot_version_invalid';
+  }
+
+  if (!isDateTime(value.generatedAt)) {
+    return 'snapshot_generated_at_invalid';
+  }
+
+  if (!isDateTime(value.expiresAt)) {
+    return 'snapshot_expires_at_invalid';
+  }
+
+  if (!['COMPLETED', 'IN_PROGRESS'].includes(String(value.status))) {
+    return 'snapshot_status_invalid';
+  }
+
+  if (!isHandoverAssessment(value.assessment)) {
+    return 'snapshot_assessment_invalid';
+  }
+
+  if (!Array.isArray(value.completedTreatments)) {
+    return 'completed_treatments_not_array';
+  }
+
+  if (!value.completedTreatments.every(isCompletedTreatment)) {
+    return 'completed_treatment_item_invalid';
+  }
+
+  if (!Array.isArray(value.usedSupplies)) {
+    return 'used_supplies_not_array';
+  }
+
+  if (!value.usedSupplies.every(isUsedSupply)) {
+    return 'used_supply_item_invalid';
+  }
+
+  return null;
 };
 
 const isDateTime = (value: unknown): value is string =>
@@ -367,11 +469,33 @@ const readEmergencyGuideHandoverResponse = async (
   }
 
   const failure = readFailure(payload);
+  const data =
+    isRecord(payload) && isRecord(payload.data) ? payload.data : null;
+  const snapshot = data && isRecord(data.snapshot) ? data.snapshot : null;
+  const validationIssue = getHandoverEnvelopeValidationIssue(payload);
   console.warn('[EmergencyGuide API][Response]', {
     requestUrl,
     status: response.status,
     ok: response.ok,
     errorCode: failure?.code ?? null,
+    success: isRecord(payload) ? payload.success ?? null : null,
+    payloadKeys: isRecord(payload) ? Object.keys(payload) : [],
+    dataKeys: data ? Object.keys(data) : [],
+    publicHandoverUrl: summarizeHandoverUrl(data?.publicHandoverUrl),
+    snapshot: snapshot
+      ? {
+          keys: Object.keys(snapshot),
+          version: snapshot.version ?? null,
+          status: snapshot.status ?? null,
+          completedTreatmentsCount: Array.isArray(snapshot.completedTreatments)
+            ? snapshot.completedTreatments.length
+            : null,
+          usedSuppliesCount: Array.isArray(snapshot.usedSupplies)
+            ? snapshot.usedSupplies.length
+            : null,
+        }
+      : null,
+    validationIssue,
   });
 
   if (!response.ok || failure) {
@@ -384,15 +508,7 @@ const readEmergencyGuideHandoverResponse = async (
     );
   }
 
-  if (
-    !isRecord(payload) ||
-    payload.success !== true ||
-    !isRecord(payload.data) ||
-    typeof payload.data.publicHandoverUrl !== 'string' ||
-    !/^https?:\/\/[^#]+\/handover\.html#token=[A-Za-z0-9_-]{43}$/.test(
-      payload.data.publicHandoverUrl,
-    )
-  ) {
+  if (validationIssue) {
     throw new EmergencyGuideRequestError(
       '구급대원 인계 응답이 DTO 계약과 일치하지 않습니다.',
       response.status,
@@ -402,11 +518,8 @@ const readEmergencyGuideHandoverResponse = async (
   }
 
   return {
-    publicHandoverUrl: payload.data.publicHandoverUrl,
-    snapshot: parseEmergencyGuideHandoverSnapshot(
-      payload.data.snapshot,
-      requestUrl,
-    ),
+    publicHandoverUrl: data?.publicHandoverUrl as string,
+    snapshot: parseEmergencyGuideHandoverSnapshot(data?.snapshot, requestUrl),
   };
 };
 

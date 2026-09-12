@@ -25,9 +25,11 @@ type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 const { colors } = tailwindConfig;
 const LOGIN_ERROR_MESSAGE =
   '로그인에 실패했습니다. 이메일과 비밀번호를 확인한 후 다시 시도해 주세요.';
+const INVALID_CREDENTIALS_MESSAGE =
+  '이메일 또는 비밀번호가 일치하지 않습니다. 가입한 정보를 확인하거나 비밀번호를 재설정해 주세요.';
 const LOGIN_ERROR_CODE_MESSAGES: Readonly<Record<string, string>> = {
-  AUTHENTICATION_REQUIRED: LOGIN_ERROR_MESSAGE,
-  INVALID_CREDENTIALS: LOGIN_ERROR_MESSAGE,
+  AUTHENTICATION_REQUIRED: INVALID_CREDENTIALS_MESSAGE,
+  INVALID_CREDENTIALS: INVALID_CREDENTIALS_MESSAGE,
   INVALID_REQUEST: '이메일과 비밀번호 형식을 확인해 주세요.',
 };
 const LOGIN_ERROR_STATUS_MESSAGES: Readonly<Record<number, string>> = {
@@ -89,6 +91,10 @@ export const LoginScreen = ({
 
   const handleSignUpPress = (): void => {
     navigation.navigate('SignUp');
+  };
+
+  const handlePasswordResetPress = (): void => {
+    navigation.navigate('PasswordReset');
   };
 
   return (
@@ -157,6 +163,16 @@ export const LoginScreen = ({
                 >
                   <Text className="text-2xl font-suitBold text-white">
                     {isSubmitting ? '로그인 중...' : '로그인'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityLabel="비밀번호 재설정"
+                  className="mt-5 self-end"
+                  onPress={handlePasswordResetPress}
+                >
+                  <Text className="text-base font-suitBold text-red">
+                    비밀번호를 잊으셨나요?
                   </Text>
                 </Pressable>
 
