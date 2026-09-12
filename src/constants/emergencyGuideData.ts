@@ -7,6 +7,7 @@ export type EmergencyGuideStep = {
 };
 
 export interface EmergencyGuideRuntimeStep {
+  stepId: number | null;
   stepNo: number;
   title: string;
   instruction: string;

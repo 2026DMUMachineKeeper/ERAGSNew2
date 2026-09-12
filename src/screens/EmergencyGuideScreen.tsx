@@ -50,6 +50,7 @@ const toGuideRuntimeStep = (
   step: (typeof emergencyGuideSteps)[number],
   index: number,
 ): EmergencyGuideRuntimeStep => ({
+  stepId: null,
   stepNo: index + 1,
   title: step.title,
   instruction: step.title.replace(/^\d+단계:\s*/, ''),
@@ -64,6 +65,7 @@ const toGuideRuntimeStep = (
 const toServerGuideRuntimeStep = (
   step: EmergencyGuideTreatmentStep,
 ): EmergencyGuideRuntimeStep => ({
+  stepId: step.stepId,
   stepNo: step.stepNo,
   title: `${step.stepNo}단계: ${step.instruction}`,
   instruction: step.instruction,
@@ -88,11 +90,20 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const incrementElapsedSeconds = useEmergencyGuideStore(
     state => state.incrementElapsedSeconds,
   );
+  const markStepCompleted = useEmergencyGuideStore(
+    state => state.markStepCompleted,
+  );
+  const completedStepIds = useEmergencyGuideStore(
+    state => state.completedStepIds,
+  );
   const moveToNextStep = useEmergencyGuideStore(state => state.moveToNextStep);
   const moveToPreviousStep = useEmergencyGuideStore(
     state => state.moveToPreviousStep,
   );
   const setGuide = useEmergencyGuideStore(state => state.setGuide);
+  const setHandoverStatus = useEmergencyGuideStore(
+    state => state.setHandoverStatus,
+  );
   const guide = storedGuide;
   const mainLabel = storedMainLabel;
   const subtypeLabel = storedSubtypeLabel;
@@ -115,6 +126,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const elapsedLabel = formatElapsed(elapsedSeconds);
   const progress = steps.length ? (currentStepIndex + 1) / steps.length : 0;
   const isLastStep = currentStepIndex >= steps.length - 1;
+  const isCurrentStepCompleted =
+    currentStep?.stepId != null && completedStepIds.includes(currentStep.stepId);
   const currentInstruction = currentStep?.instruction?.trim() ?? '';
 
   React.useEffect(() => {
@@ -145,17 +158,46 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     };
   }, [currentInstruction]);
 
-  const moveToComplete = () => {
+  const handleStopPress = (hasCompletedCurrentStep: boolean): void => {
+    if (hasCompletedCurrentStep) {
+      markStepCompleted(currentStep?.stepId ?? null);
+    }
+
+    setHandoverStatus('IN_PROGRESS');
     navigation.replace('QRCode');
   };
 
-  const handleNextStep = () => {
-    if (!isLastStep) {
-      moveToNextStep(steps.length);
+  const handleNextStep = (): void => {
+    if (!currentStep) {
       return;
     }
 
-    moveToComplete();
+    const handleConfirmCompletion = (): void => {
+      markStepCompleted(currentStep.stepId);
+
+      if (!isLastStep) {
+        moveToNextStep(steps.length);
+        return;
+      }
+
+      setHandoverStatus('COMPLETED');
+      navigation.replace('QRCode');
+    };
+
+    if (isCurrentStepCompleted) {
+      handleConfirmCompletion();
+      return;
+    }
+
+    Alert.alert(
+      '처치 완료 확인',
+      `${currentStep.stepNo}단계: ${currentInstruction}\n\n이 단계의 처치를 완료했나요?`,
+      [
+        { text: '아직 안 했어요', style: 'cancel' },
+        { text: '완료했어요', onPress: handleConfirmCompletion },
+      ],
+      { cancelable: true },
+    );
   };
 
   const handleBackStep = () => {
@@ -249,7 +291,11 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         showsVerticalScrollIndicator={false}
       >
         <View className="pb-4">
-          <StepDetail step={currentStep} onStopPress={moveToComplete} />
+          <StepDetail
+            step={currentStep}
+            isStepCompleted={isCurrentStepCompleted}
+            onStopPress={handleStopPress}
+          />
         </View>
       </ScrollView>
 

@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 
-import type { EmergencyGuideResponse } from '@/types';
+import type {
+  EmergencyGuideHandoverStatus,
+  EmergencyGuideResponse,
+} from '@/types';
 
 export type EmergencyGuideSource = 'manual' | 'machine' | 'voice' | 'image';
 
@@ -12,24 +15,30 @@ interface StartEmergencyGuideParams {
 }
 
 interface EmergencyGuideState {
+  completedStepIds: number[];
   currentStepIndex: number;
   elapsedSeconds: number;
   guide: EmergencyGuideResponse | null;
+  handoverStatus: EmergencyGuideHandoverStatus | null;
   mainLabel: string;
   source: EmergencyGuideSource | null;
   subtypeLabel: string;
   incrementElapsedSeconds: () => void;
+  markStepCompleted: (stepId: number | null) => void;
   moveToNextStep: (stepCount: number) => void;
   moveToPreviousStep: () => void;
   resetGuide: () => void;
   setGuide: (guide: EmergencyGuideResponse) => void;
+  setHandoverStatus: (status: EmergencyGuideHandoverStatus) => void;
   startGuide: (params: StartEmergencyGuideParams) => void;
 }
 
 const INITIAL_EMERGENCY_GUIDE_STATE = {
+  completedStepIds: [] as number[],
   currentStepIndex: 0,
   elapsedSeconds: 0,
   guide: null,
+  handoverStatus: null,
   mainLabel: '응급',
   source: null,
   subtypeLabel: '',
@@ -40,6 +49,18 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
 
   incrementElapsedSeconds: (): void => {
     set(state => ({ elapsedSeconds: state.elapsedSeconds + 1 }));
+  },
+
+  markStepCompleted: (stepId: number | null): void => {
+    if (stepId === null || !Number.isInteger(stepId) || stepId <= 0) {
+      return;
+    }
+
+    set(state => ({
+      completedStepIds: state.completedStepIds.includes(stepId)
+        ? state.completedStepIds
+        : [...state.completedStepIds, stepId],
+    }));
   },
 
   moveToNextStep: (stepCount: number): void => {
@@ -63,7 +84,16 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
   },
 
   setGuide: (guide: EmergencyGuideResponse): void => {
-    set({ guide, currentStepIndex: 0 });
+    set({
+      guide,
+      currentStepIndex: 0,
+      completedStepIds: [],
+      handoverStatus: null,
+    });
+  },
+
+  setHandoverStatus: (status: EmergencyGuideHandoverStatus): void => {
+    set({ handoverStatus: status });
   },
 
   startGuide: ({
@@ -73,9 +103,11 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
     subtypeLabel = '',
   }: StartEmergencyGuideParams): void => {
     set({
+      completedStepIds: [],
       currentStepIndex: 0,
       elapsedSeconds: 0,
       guide,
+      handoverStatus: null,
       mainLabel,
       source,
       subtypeLabel,

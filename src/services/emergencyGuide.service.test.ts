@@ -1,6 +1,7 @@
 import {
   createAudioEmergencyGuide,
   createEmergencyGuide,
+  createEmergencyGuideHandover,
   createImageEmergencyGuide,
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
@@ -170,6 +171,61 @@ describe('emergencyGuide.service', () => {
       '응급 가이드 sessionId가 없습니다.',
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('완료한 단계 ID와 인계 상태를 보내고 v2 snapshot을 반환한다', async (): Promise<void> => {
+    const token = 'A'.repeat(43);
+    fetchMock.mockResolvedValue(
+      createMockResponse(201, {
+        success: true,
+        data: {
+          publicHandoverUrl: `https://handover.example/handover.html#token=${token}`,
+          snapshot: {
+            version: 2,
+            generatedAt: '2026-09-03T00:00:00.000Z',
+            expiresAt: '2026-09-03T00:30:00.000Z',
+            status: 'IN_PROGRESS',
+            assessment: {
+              categoryCode: 'BLEEDING',
+              subtypeCode: 'BLEEDING_MODERATE',
+              severityCode: 'MEDIUM',
+              consciousness: 'UNKNOWN',
+              ageGroup: 'UNKNOWN',
+              redFlags: [],
+              call119Required: false,
+              summary: '중간 수준의 출혈입니다.',
+            },
+            completedTreatments: [
+              { stepId: 7, stepNo: 1, instruction: '상처를 압박하세요.' },
+            ],
+            usedSupplies: [{ name: '서버 약품명', quantity: 1 }],
+          },
+        },
+      }),
+    );
+
+    const handover = await createEmergencyGuideHandover('session/1', {
+      status: 'IN_PROGRESS',
+      completedStepIds: [7],
+    });
+
+    expect(handover.snapshot.usedSupplies).toEqual([
+      { name: '서버 약품명', quantity: 1 },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'test-api-base-url/api/v1/emergency-guide-sessions/session%2F1/handover',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'IN_PROGRESS',
+          completedStepIds: [7],
+        }),
+      }),
+    );
   });
 
   it.each(['<html>Forbidden</html>', ''])(

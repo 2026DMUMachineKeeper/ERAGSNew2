@@ -18,7 +18,7 @@ export const initializeTts = (): Promise<void> => {
 
 export const speakTts = async (message: string): Promise<void> => {
   await initializeTts();
-  Tts.speak(message);
+  Tts.speak(message.replace(/119/g, '일일구'));
 };
 
 export const stopTts = (): Promise<boolean> => Tts.stop();
