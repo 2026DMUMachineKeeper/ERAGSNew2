@@ -61,10 +61,12 @@ export const KakaoMapHeader = ({
           <Pressable
             accessibilityLabel="AED 사용법 보기"
             accessibilityRole="button"
-            className="ml-auto h-9 w-9 items-center justify-center rounded-full bg-red shadow"
+            className="ml-auto h-9 items-center justify-center rounded-full bg-red px-3 shadow"
             onPress={onOpenAedGuide}
           >
-            <Text className="text-[10px] font-suitBold text-white">AED</Text>
+            <Text className="text-[10px] font-suitBold text-white">
+              AED 사용법
+            </Text>
           </Pressable>
         </View>
       </View>
