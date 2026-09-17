@@ -4,6 +4,7 @@ import {
   Image,
   PanResponder,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -18,23 +19,29 @@ export type MedicalLocationListItem = {
   name: string;
   address: string;
   distanceInMeters: number;
+  detailPlaces?: readonly string[];
+  phone?: string;
 };
 
 export type MedicalPlacesSheetRef = {
   dismiss: () => void;
-};
-
-type MedicalPlacesSheetProps = {
-  locations: readonly MedicalLocationListItem[];
-  mapHeight: number;
-  onLocationPress: (location: MedicalLocationListItem) => void;
-  searchQuery: string;
+  expand: () => void;
 };
 
 type MedicalPlacesSheetStage = 'collapsed' | 'middle' | 'expanded';
 
+type MedicalPlacesSheetProps = {
+  floatingControl?: React.ReactNode;
+  locations: readonly MedicalLocationListItem[];
+  mapHeight: number;
+  onLocationPress: (location: MedicalLocationListItem) => void;
+  searchQuery: string;
+  selectedLocation?: MedicalLocationListItem | null;
+};
+
 const SHEET_MIDDLE_TRANSLATE_RATIO = 0.5;
 const DISMISSED_SHEET_VISIBLE_HEIGHT = 24;
+const SHEET_CONTENT_HEADER_HEIGHT = 92;
 
 const getDismissedTranslateY = (mapHeight: number): number =>
   Math.max(0, mapHeight - DISMISSED_SHEET_VISIBLE_HEIGHT);
@@ -91,7 +98,14 @@ export const MedicalPlacesSheet = React.forwardRef<
   MedicalPlacesSheetProps
 >(
   (
-    { locations, mapHeight, onLocationPress, searchQuery },
+    {
+      floatingControl,
+      locations,
+      mapHeight,
+      onLocationPress,
+      searchQuery,
+      selectedLocation,
+    },
     ref,
   ): React.JSX.Element => {
     const [sheetStage, setSheetStage] =
@@ -129,7 +143,7 @@ export const MedicalPlacesSheet = React.forwardRef<
           overshootClamping: true,
           stiffness: 160,
           toValue: getSheetTranslateY(stage, mapHeight),
-          useNativeDriver: true,
+          useNativeDriver: false,
         }).start();
       },
       [mapHeight, placesSheetTranslateY],
@@ -137,10 +151,15 @@ export const MedicalPlacesSheet = React.forwardRef<
     const handleDismiss = React.useCallback((): void => {
       handleSnap('collapsed');
     }, [handleSnap]);
+    const handleExpand = React.useCallback((): void => {
+      handleSnap('expanded');
+    }, [handleSnap]);
 
-    React.useImperativeHandle(ref, () => ({ dismiss: handleDismiss }), [
-      handleDismiss,
-    ]);
+    React.useImperativeHandle(
+      ref,
+      () => ({ dismiss: handleDismiss, expand: handleExpand }),
+      [handleDismiss, handleExpand],
+    );
 
     const placesSheetAnimatedStyle = React.useMemo(
       () => ({
@@ -148,14 +167,23 @@ export const MedicalPlacesSheet = React.forwardRef<
       }),
       [placesSheetTranslateY],
     );
+    const placesSheetScrollStyle = React.useMemo(
+      () => ({
+        flexGrow: 0,
+        height: Math.max(
+          0,
+          mapHeight -
+            getSheetTranslateY(sheetStage, mapHeight) -
+            SHEET_CONTENT_HEADER_HEIGHT,
+        ),
+      }),
+      [mapHeight, sheetStage],
+    );
     const placesSheetPanResponder = React.useMemo(
       () =>
         PanResponder.create({
           onStartShouldSetPanResponder: () => false,
           onMoveShouldSetPanResponder: (_, gestureState) =>
-            Math.abs(gestureState.dy) > 6 &&
-            Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-          onMoveShouldSetPanResponderCapture: (_, gestureState) =>
             Math.abs(gestureState.dy) > 6 &&
             Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
           onPanResponderTerminationRequest: () => false,
@@ -238,104 +266,141 @@ export const MedicalPlacesSheet = React.forwardRef<
       [placesSheetTranslateY],
     );
 
-    const visibleLocations =
-      sheetStage === 'expanded' ? locations : locations.slice(0, 2);
-
     return (
-      <Animated.View
-        {...placesSheetPanResponder.panHandlers}
-        className="absolute bottom-0 left-0 right-0 z-20 h-full overflow-hidden rounded-t-3xl  bg-background px-4 pb-4 shadow-2xl"
-        style={placesSheetAnimatedStyle}
-      >
-        <View
-          accessible
-          accessibilityLabel={
-            sheetStage === 'collapsed'
-              ? '주변 응급시설 목록 펼치기'
-              : sheetStage === 'expanded'
-              ? '주변 응급시설 목록 접기'
-              : '주변 응급시설 목록 펼치기'
-          }
-          accessibilityRole="button"
-          className="items-center pb-3 pt-2"
+      <>
+        <Animated.View
+          className="absolute bottom-0 left-0 right-0 z-20 h-full overflow-hidden rounded-t-3xl  bg-background px-4 pb-4 shadow-2xl"
+          style={placesSheetAnimatedStyle}
         >
-          <View className="h-1 w-10 rounded-full bg-gray" />
-        </View>
+          <View
+            {...placesSheetPanResponder.panHandlers}
+            accessible
+            accessibilityLabel={
+              sheetStage === 'collapsed'
+                ? '주변 응급시설 목록 펼치기'
+                : sheetStage === 'expanded'
+                ? '주변 응급시설 목록 접기'
+                : '주변 응급시설 목록 펼치기'
+            }
+            accessibilityRole="button"
+            className="items-center pb-3 pt-2"
+          >
+            <View className="h-1 w-10 rounded-full bg-gray" />
+          </View>
 
-        {sheetStage !== 'collapsed' ? (
-          <>
-            <View className="flex-row items-center justify-between">
-              <View>
-                <Text className="text-body font-suitBold text-black">
-                  {searchQuery
-                    ? `검색 결과 ${locations.length}곳`
-                    : `가까운 장소 ${locations.length}곳`}
-                </Text>
-                <Text className="mt-1 text-coment text-textDim">
-                  현재 위치 기준 가까운 순서예요.
-                </Text>
-              </View>
-              <Text className="text-coment font-suitBold text-red">
-                {sheetStage === 'expanded' ? '접기' : '더보기'}
-              </Text>
-            </View>
-
-            <View className="mt-3 flex-1">
-              {visibleLocations.length > 0 ? (
-                visibleLocations.map(location => (
-                  <Pressable
-                    key={location.id}
-                    accessibilityLabel={`${location.name} 위치 보기`}
-                    accessibilityRole="button"
-                    className="mb-2 h-[58px] flex-row items-center rounded-xl bg-white px-3 shadow"
-                    onPress={() => onLocationPress(location)}
-                  >
-                    <Image
-                      accessibilityLabel={`${location.typeLabel} 마커`}
-                      className="h-9 w-9"
-                      resizeMode="contain"
-                      source={
-                        location.type === 'aed'
-                          ? aedMapMarker
-                          : hospitalMapMarker
-                      }
-                    />
-                    <View className="ml-2 flex-1">
-                      <Text
-                        className="text-body font-suitBold text-black"
-                        numberOfLines={1}
-                      >
-                        {location.name}
-                      </Text>
-                      <Text
-                        className="mt-1 text-coment text-textDim"
-                        numberOfLines={1}
-                      >
-                        {location.address}
-                      </Text>
-                    </View>
-                    <View className="ml-2 rounded-full bg-background px-2 py-1">
-                      <Text className="text-[11px] font-suitBold text-gray">
-                        {location.typeLabel} ·{' '}
-                        {formatDistance(location.distanceInMeters)}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))
-              ) : (
-                <View className="items-center justify-center py-8">
+          {sheetStage !== 'collapsed' ? (
+            <>
+              <View className="flex-row items-center justify-between">
+                <View>
                   <Text className="text-body font-suitBold text-black">
-                    검색 결과가 없습니다.
+                    {searchQuery
+                      ? `검색 결과 ${locations.length}곳`
+                      : `가까운 장소 ${locations.length}곳`}
                   </Text>
                   <Text className="mt-1 text-coment text-textDim">
-                    다른 장소명이나 주소로 검색해 보세요.
+                    현재 위치 기준 가까운 순서예요.
                   </Text>
                 </View>
-              )}
-            </View>
-          </>
+              </View>
+
+              <ScrollView
+                className="mt-3"
+                nestedScrollEnabled
+                scrollEnabled
+                showsVerticalScrollIndicator={false}
+                style={placesSheetScrollStyle}
+              >
+                {locations.length > 0 ? (
+                  locations.map(location => (
+                    <View
+                      key={location.id}
+                      className={`mb-2 overflow-hidden rounded-xl border bg-white shadow ${
+                        selectedLocation?.id === location.id
+                          ? 'border-red'
+                          : 'border-transparent'
+                      }`}
+                    >
+                      <Pressable
+                        accessibilityLabel={`${location.name} 위치 보기`}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          selected: selectedLocation?.id === location.id,
+                        }}
+                        className="min-h-[64px] flex-row items-center px-3 py-2"
+                        onPress={() => onLocationPress(location)}
+                      >
+                        <Image
+                          accessibilityLabel={`${location.typeLabel} 마커`}
+                          className="h-9 w-9"
+                          resizeMode="contain"
+                          source={
+                            location.type === 'aed'
+                              ? aedMapMarker
+                              : hospitalMapMarker
+                          }
+                        />
+                        <View className="ml-2 flex-1">
+                          <Text
+                            className="text-body font-suitBold text-black"
+                            numberOfLines={1}
+                          >
+                            {location.name}
+                          </Text>
+                          <Text
+                            className="mt-1 text-coment text-textDim"
+                            numberOfLines={2}
+                          >
+                            {location.address}
+                          </Text>
+                        </View>
+                        <View className="ml-2 rounded-full bg-background px-2 py-1">
+                          <Text className="text-[11px] font-suitBold text-gray">
+                            {location.typeLabel} ·{' '}
+                            {formatDistance(location.distanceInMeters)}
+                          </Text>
+                        </View>
+                      </Pressable>
+                      {selectedLocation?.id === location.id ? (
+                        <View className="border-t border-memoLine px-3 pb-4 pt-3">
+                          {location.detailPlaces?.length ? (
+                            <>
+                              <Text className="text-coment font-suitBold text-black">
+                                설치 위치
+                              </Text>
+                              <Text className="mt-2 text-coment leading-5 text-textDim">
+                                {location.detailPlaces.join(' · ')}
+                              </Text>
+                            </>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  ))
+                ) : (
+                  <View className="items-center justify-center py-8">
+                    <Text className="text-body font-suitBold text-black">
+                      검색 결과가 없습니다.
+                    </Text>
+                    <Text className="mt-1 text-coment text-textDim">
+                      다른 장소명이나 주소로 검색해 보세요.
+                    </Text>
+                  </View>
+                )}
+                <View className="h-24" />
+              </ScrollView>
+            </>
+          ) : null}
+        </Animated.View>
+        {floatingControl ? (
+          <Animated.View
+            className="absolute right-4 z-30"
+            pointerEvents="box-none"
+            style={[{ bottom: mapHeight + 12 }, placesSheetAnimatedStyle]}
+          >
+            {floatingControl}
+          </Animated.View>
         ) : null}
-      </Animated.View>
+      </>
     );
   },
 );

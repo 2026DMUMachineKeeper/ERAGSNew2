@@ -17,13 +17,11 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  useIsFocused,
   type NavigationProp,
   type ParamListBase,
 } from '@react-navigation/native';
 
 import aedMapMarker from '@/assets/icons/markers/aed-map-marker.png';
-import hospitalMapMarker from '@/assets/icons/markers/hospital-map-marker.png';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { requestLocationPermission } from '@/services';
 
@@ -35,6 +33,7 @@ import {
   type MedicalLocationListItem,
   type MedicalPlacesSheetRef,
 } from './kakaoMap/components';
+import { useNearbyAeds } from './kakaoMap/useNearbyAeds';
 
 type KakaoMapScreenProps = {
   navigation: Pick<NavigationProp<ParamListBase>, 'goBack' | 'setOptions'>;
@@ -45,87 +44,55 @@ const KAKAO_MAP_CENTER = {
   latitude: 37.4999957879,
   longitude: 126.8681696567,
 };
-const KAKAO_MAP_BASE_URL = 'https://localhost';
+const KAKAO_MAP_BASE_URL = 'http://localhost';
+const LOCATION_PERMISSION_REQUEST_DELAY_MS = 300;
 
-const DEMO_MEDICAL_LOCATIONS = [
-  {
-    id: 'demo-hospital-1',
-    type: 'hospital',
-    typeLabel: '병원',
-    name: '데모 병원 A',
-    address: '임시 좌표 · 동양미래대학교 인근',
-    latitude: 37.50115,
-    longitude: 126.86695,
-  },
-  {
-    id: 'demo-hospital-2',
-    type: 'hospital',
-    typeLabel: '병원',
-    name: '데모 병원 B',
-    address: '임시 좌표 · 동양미래대학교 서쪽 인근',
-    latitude: 37.49842,
-    longitude: 126.87008,
-  },
-  {
-    id: 'demo-aed-1',
-    type: 'aed',
-    typeLabel: 'AED',
-    name: '임시 AED 위치 1',
-    address: '임시 좌표 · 동양미래대학교 본관 인근',
-    latitude: 37.50055,
-    longitude: 126.86715,
-  },
-  {
-    id: 'demo-aed-2',
-    type: 'aed',
-    typeLabel: 'AED',
-    name: '임시 AED 위치 2',
-    address: '임시 좌표 · 동양미래대학교 동쪽 인근',
-    latitude: 37.49865,
-    longitude: 126.86935,
-  },
-  {
-    id: 'demo-aed-3',
-    type: 'aed',
-    typeLabel: 'AED',
-    name: '임시 AED 위치 3',
-    address: '임시 좌표 · 동양미래대학교 북쪽 인근',
-    latitude: 37.50125,
-    longitude: 126.8692,
-  },
-] as const;
-
-const DEMO_MARKER_ASSET_URIS = {
-  hospital: Image.resolveAssetSource(hospitalMapMarker).uri,
+const MARKER_ASSET_URIS = {
   aed: Image.resolveAssetSource(aedMapMarker).uri,
 } as const;
+
+type MedicalMapLocation = {
+  address: string;
+  detailPlaces: readonly string[];
+  distanceInMeters: number;
+  id: string;
+  latitude: number;
+  longitude: number;
+  name: string;
+  phone: string;
+  type: 'aed';
+  typeLabel: 'AED';
+};
 
 interface MapCoordinates {
   latitude: number;
   longitude: number;
 }
 
-const getDistanceInMeters = (
-  origin: MapCoordinates,
-  destination: MapCoordinates,
-): number => {
-  const earthRadiusInMeters = 6371000;
-  const latitudeDelta =
-    ((destination.latitude - origin.latitude) * Math.PI) / 180;
-  const longitudeDelta =
-    ((destination.longitude - origin.longitude) * Math.PI) / 180;
-  const originLatitude = (origin.latitude * Math.PI) / 180;
-  const destinationLatitude = (destination.latitude * Math.PI) / 180;
-  const haversine =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.sin(longitudeDelta / 2) ** 2 *
-      Math.cos(originLatitude) *
-      Math.cos(destinationLatitude);
+type MedicalLocationPressedMessage = {
+  locationId: string;
+  type: 'medical-location-pressed';
+};
 
-  return (
-    2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine)) *
-    earthRadiusInMeters
-  );
+const getPressedMedicalLocationId = (message: string): string | null => {
+  try {
+    const parsedMessage: unknown = JSON.parse(message);
+
+    if (
+      typeof parsedMessage !== 'object' ||
+      parsedMessage === null ||
+      !('type' in parsedMessage) ||
+      !('locationId' in parsedMessage) ||
+      parsedMessage.type !== 'medical-location-pressed' ||
+      typeof parsedMessage.locationId !== 'string'
+    ) {
+      return null;
+    }
+
+    return (parsedMessage as MedicalLocationPressedMessage).locationId;
+  } catch {
+    return null;
+  }
 };
 
 const requestCurrentPosition = (
@@ -159,7 +126,8 @@ const getCurrentMapCoordinates = async (
 
 const createKakaoMapHtml = (
   appKey: string,
-  markerAssetUris: typeof DEMO_MARKER_ASSET_URIS,
+  markerAssetUris: typeof MARKER_ASSET_URIS,
+  medicalLocations: readonly MedicalMapLocation[],
 ): string => `
 <!doctype html>
 <html lang="ko">
@@ -186,66 +154,54 @@ const createKakaoMapHtml = (
       };
       window.eragsMap = new kakao.maps.Map(mapContainer, mapOption);
 
-      const demoMedicalLocations = ${JSON.stringify(DEMO_MEDICAL_LOCATIONS)};
-      const demoMarkerAssetUris = ${JSON.stringify(markerAssetUris)};
+      const medicalLocations = ${JSON.stringify(medicalLocations).replace(
+        /</g,
+        '\\u003c',
+      )};
+      const markerAssetUris = ${JSON.stringify(markerAssetUris)};
       const createMarkerImage = (assetUri) => new kakao.maps.MarkerImage(
         assetUri,
         new kakao.maps.Size(40, 40),
         { offset: new kakao.maps.Point(20, 40) },
       );
-      const demoMarkerImages = {
-        hospital: createMarkerImage(demoMarkerAssetUris.hospital),
-        aed: createMarkerImage(demoMarkerAssetUris.aed),
+      const markerImages = {
+        aed: createMarkerImage(markerAssetUris.aed),
       };
-      const demoInfoWindow = new kakao.maps.InfoWindow({ zIndex: 10 });
-      const demoBounds = new kakao.maps.LatLngBounds();
-      const demoMarkers = {};
-      const escapeHtml = value => value.replace(/[&<>"']/g, character => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;',
-      })[character]);
+      const bounds = new kakao.maps.LatLngBounds();
+      const markers = {};
 
-      demoMedicalLocations.forEach(location => {
+      medicalLocations.forEach(location => {
         const position = new kakao.maps.LatLng(
           location.latitude,
           location.longitude,
         );
-        demoBounds.extend(position);
+        bounds.extend(position);
 
         const marker = new kakao.maps.Marker({
-          image: demoMarkerImages[location.type],
+          image: markerImages[location.type],
           map: window.eragsMap,
           position,
           title: location.name,
         });
-        demoMarkers[location.id] = marker;
+        markers[location.id] = marker;
 
         kakao.maps.event.addListener(marker, 'click', () => {
-          const accentColor = location.type === 'hospital' ? '#FF3A3A' : '#18A999';
-          demoInfoWindow.setContent(
-            '<div style="min-width:180px;padding:12px 14px;border-radius:12px;background:#fff;box-shadow:0 3px 12px rgba(0,0,0,.16);font-family:Arial,sans-serif;">' +
-              '<strong style="display:block;color:#111;font-size:14px;">' +
-              escapeHtml(location.name) +
-              '</strong>' +
-              '<span style="display:inline-block;margin-top:5px;color:' +
-              accentColor +
-              ';font-size:12px;font-weight:700;">' +
-              escapeHtml(location.typeLabel) +
-              '</span>' +
-              '<div style="margin-top:5px;color:#666;font-size:12px;">' +
-              escapeHtml(location.address) +
-              '</div>' +
-            '</div>',
-          );
-          demoInfoWindow.open(window.eragsMap, marker);
+          window.ReactNativeWebView?.postMessage(JSON.stringify({
+            locationId: location.id,
+            type: 'medical-location-pressed',
+          }));
         });
       });
 
-      if (demoMedicalLocations.length > 1) {
-        window.eragsMap.setBounds(demoBounds, 56, 56, 56, 56);
+      if (medicalLocations.length === 1) {
+        window.eragsMap.setCenter(
+          new kakao.maps.LatLng(
+            medicalLocations[0].latitude,
+            medicalLocations[0].longitude,
+          ),
+        );
+      } else if (medicalLocations.length > 1) {
+        window.eragsMap.setBounds(bounds, 56, 56, 56, 56);
       }
 
       kakao.maps.event.addListener(window.eragsMap, 'click', () => {
@@ -255,18 +211,18 @@ const createKakaoMapHtml = (
       window.eragsFilterMedicalLocations = function (filter, query) {
         const normalizedQuery = (query || '').trim().toLocaleLowerCase();
 
-        demoMedicalLocations.forEach(location => {
+        medicalLocations.forEach(location => {
           const matchesFilter = filter === 'all' || location.type === filter;
           const searchableText = (location.name + ' ' + location.address).toLocaleLowerCase();
           const matchesQuery = !normalizedQuery || searchableText.includes(normalizedQuery);
-          const marker = demoMarkers[location.id];
+          const marker = markers[location.id];
 
           marker?.setMap(matchesFilter && matchesQuery ? window.eragsMap : null);
         });
       };
 
       window.eragsFocusMedicalLocation = function (locationId) {
-        const marker = demoMarkers[locationId];
+        const marker = markers[locationId];
 
         if (!marker) {
           return;
@@ -306,9 +262,9 @@ const createMedicalFilterScript = (
   filter: MedicalFilter,
   query: string,
 ): string => `
-  window.eragsFilterMedicalLocations?.(${JSON.stringify(filter)}, ${JSON.stringify(
-    query,
-  )});
+  window.eragsFilterMedicalLocations?.(${JSON.stringify(
+    filter,
+  )}, ${JSON.stringify(query)});
   true;
 `;
 
@@ -323,7 +279,6 @@ export const KakaoMapScreen = ({
 }: KakaoMapScreenProps): React.JSX.Element => {
   const appKey = Config.KAKAO_MAP_APP_KEY;
   const isStackScreen = route?.name === 'KakaoMap';
-  const isMapFocused = useIsFocused();
   const mapWebViewRef = React.useRef<WebView<unknown>>(null);
   const placesSheetRef = React.useRef<MedicalPlacesSheetRef>(null);
   const [currentLocation, setCurrentLocation] =
@@ -335,41 +290,61 @@ export const KakaoMapScreen = ({
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedMedicalFilter, setSelectedMedicalFilter] =
     React.useState<MedicalFilter>('all');
+  const [selectedMedicalLocation, setSelectedMedicalLocation] =
+    React.useState<MedicalLocationListItem | null>(null);
   const [mapHeight, setMapHeight] = React.useState(0);
+  const { aeds, error: aedError } = useNearbyAeds({
+    coordinates: currentLocation,
+  });
+  const medicalLocations = React.useMemo<readonly MedicalMapLocation[]>(
+    () =>
+      aeds.map((aed, index) => ({
+        address: aed.address,
+        detailPlaces: aed.detailPlaces,
+        distanceInMeters: aed.distanceInMeters,
+        id: `${aed.latitude}:${aed.longitude}:${aed.name}:${index}`,
+        latitude: aed.latitude,
+        longitude: aed.longitude,
+        name: aed.name,
+        phone: aed.phone,
+        type: 'aed',
+        typeLabel: 'AED',
+      })),
+    [aeds],
+  );
   const nearbyMedicalLocations = React.useMemo(() => {
-    const origin = currentLocation ?? KAKAO_MAP_CENTER;
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR');
 
-    return DEMO_MEDICAL_LOCATIONS.filter(location => {
-      const matchesFilter =
-        selectedMedicalFilter === 'all' ||
-        location.type === selectedMedicalFilter;
-      const searchableText = `${location.name} ${location.address}`.toLocaleLowerCase(
-        'ko-KR',
-      );
+    return medicalLocations
+      .filter(location => {
+        const matchesFilter =
+          selectedMedicalFilter === 'all' ||
+          location.type === selectedMedicalFilter;
+        const searchableText =
+          `${location.name} ${location.address}`.toLocaleLowerCase('ko-KR');
 
-      return (
-        matchesFilter &&
-        (!normalizedQuery || searchableText.includes(normalizedQuery))
-      );
-    })
-      .map(location => ({
-        ...location,
-        distanceInMeters: getDistanceInMeters(origin, location),
-      }))
-      .sort((firstLocation, secondLocation) =>
-        firstLocation.distanceInMeters - secondLocation.distanceInMeters,
+        return (
+          matchesFilter &&
+          (!normalizedQuery || searchableText.includes(normalizedQuery))
+        );
+      })
+      .sort(
+        (firstLocation, secondLocation) =>
+          firstLocation.distanceInMeters - secondLocation.distanceInMeters,
       )
       .slice(0, 5);
-  }, [currentLocation, searchQuery, selectedMedicalFilter]);
+  }, [medicalLocations, searchQuery, selectedMedicalFilter]);
   const mapSource = React.useMemo(
     () => ({
       baseUrl: KAKAO_MAP_BASE_URL,
-      html: createKakaoMapHtml(appKey ?? '', DEMO_MARKER_ASSET_URIS),
+      html: createKakaoMapHtml(
+        appKey ?? '',
+        MARKER_ASSET_URIS,
+        medicalLocations,
+      ),
     }),
-    [appKey],
+    [appKey, medicalLocations],
   );
-
   React.useLayoutEffect(() => {
     if (!isAedGuideVisible || route?.name !== 'MapTab') {
       return;
@@ -381,7 +356,7 @@ export const KakaoMapScreen = ({
   }, [isAedGuideVisible, navigation, route?.name]);
 
   React.useEffect(() => {
-    if (!appKey || !isMapFocused) {
+    if (!appKey) {
       return;
     }
 
@@ -405,14 +380,24 @@ export const KakaoMapScreen = ({
       }
     };
 
-    loadCurrentLocation().catch((error: unknown) => {
-      console.warn('[KakaoMapScreen] 위치 권한 요청 실패:', error);
-    });
+    // 화면 전환 직후 권한 API가 Activity에 연결되기 전 요청되는 것을 막습니다.
+    const permissionRequestTimer = setTimeout(() => {
+      loadCurrentLocation().catch((error: unknown) => {
+        console.warn('[KakaoMapScreen] 위치 권한 요청 실패:', error);
+      });
+    }, LOCATION_PERMISSION_REQUEST_DELAY_MS);
 
     return () => {
       isActive = false;
+      clearTimeout(permissionRequestTimer);
     };
-  }, [appKey, isMapFocused]);
+  }, [appKey]);
+
+  React.useEffect(() => {
+    if (aedError) {
+      console.warn('[KakaoMapScreen] 주변 AED 조회 실패:', aedError);
+    }
+  }, [aedError]);
 
   React.useEffect(() => {
     if (!isMapReady || !currentLocation) {
@@ -460,6 +445,7 @@ export const KakaoMapScreen = ({
         window.eragsMap?.setLevel(3);
         true;
       `);
+      setSelectedMedicalLocation(null);
       placesSheetRef.current?.dismiss();
     } catch {
       Alert.alert(
@@ -475,20 +461,34 @@ export const KakaoMapScreen = ({
   const handleMedicalLocationPress = (
     location: MedicalLocationListItem,
   ): void => {
-    if (!isMapReady) {
-      return;
-    }
+    setSelectedMedicalLocation(location);
 
-    mapWebViewRef.current?.injectJavaScript(
-      createFocusMedicalLocationScript(location.id),
-    );
+    if (isMapReady) {
+      mapWebViewRef.current?.injectJavaScript(
+        createFocusMedicalLocationScript(location.id),
+      );
+    }
   };
   const handleMapMessage = (event: WebViewMessageEvent): void => {
-    if (event.nativeEvent.data !== 'map-clicked') {
+    const { data } = event.nativeEvent;
+
+    if (data === 'map-clicked') {
+      setSelectedMedicalLocation(null);
+      placesSheetRef.current?.dismiss();
       return;
     }
 
-    placesSheetRef.current?.dismiss();
+    const locationId = getPressedMedicalLocationId(data);
+    const selectedLocation = medicalLocations.find(
+      location => location.id === locationId,
+    );
+
+    if (!selectedLocation) {
+      return;
+    }
+
+    setSelectedMedicalLocation(selectedLocation);
+    placesSheetRef.current?.expand();
   };
 
   return (
@@ -504,6 +504,7 @@ export const KakaoMapScreen = ({
           <WebView
             domStorageEnabled
             javaScriptEnabled
+            onLoadStart={() => setIsMapReady(false)}
             onMessage={handleMapMessage}
             originWhitelist={['*']}
             onLoadEnd={() => setIsMapReady(true)}
@@ -530,41 +531,47 @@ export const KakaoMapScreen = ({
             selectedMedicalFilter={selectedMedicalFilter}
           />
           <MedicalPlacesSheet
+            floatingControl={
+              <Pressable
+                accessibilityLabel="현재 위치로 이동"
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: !isMapReady || isLocating,
+                  busy: isLocating,
+                }}
+                disabled={!isMapReady || isLocating}
+                onPress={handleCurrentLocationPress}
+                className="h-12 w-12 items-center justify-center rounded-full border border-authInputBorder bg-white shadow-lg active:bg-background"
+              >
+                {isLocating ? (
+                  <ActivityIndicator color="#525D6D" />
+                ) : (
+                  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                    <Circle
+                      cx={12}
+                      cy={12}
+                      r={7}
+                      stroke="#525D6D"
+                      strokeWidth={1.8}
+                    />
+                    <Circle cx={12} cy={12} r={3} fill="#525D6D" />
+                    <Path
+                      d="M12 2V5M12 19V22M2 12H5M19 12H22"
+                      stroke="#525D6D"
+                      strokeWidth={1.8}
+                      strokeLinecap="round"
+                    />
+                  </Svg>
+                )}
+              </Pressable>
+            }
             locations={nearbyMedicalLocations}
             mapHeight={mapHeight}
             onLocationPress={handleMedicalLocationPress}
             ref={placesSheetRef}
             searchQuery={searchQuery}
+            selectedLocation={selectedMedicalLocation}
           />
-          <Pressable
-            accessibilityLabel="현재 위치로 이동"
-            accessibilityRole="button"
-            accessibilityState={{
-              disabled: !isMapReady || isLocating,
-              busy: isLocating,
-            }}
-            disabled={!isMapReady || isLocating}
-            onPress={handleCurrentLocationPress}
-            className="absolute bottom-10 right-4 z-30 h-12 w-12 items-center justify-center rounded-full border border-authInputBorder bg-white shadow-lg active:bg-background"
-          >
-            {isLocating ? (
-              <ActivityIndicator color="#525D6D" />
-            ) : (
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Circle
-                  cx={12} cy={12} r={7}
-                  stroke="#525D6D" strokeWidth={1.8}
-                />
-                <Circle cx={12} cy={12} r={3} fill="#525D6D" />
-                <Path
-                  d="M12 2V5M12 19V22M2 12H5M19 12H22"
-                  stroke="#525D6D"
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                />
-              </Svg>
-            )}
-          </Pressable>
         </View>
       ) : (
         <View className="flex-1 items-center justify-center px-5">

@@ -3,17 +3,22 @@ import { Alert } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import Geolocation from '@react-native-community/geolocation';
 
-import { requestLocationPermission } from '@/services';
+import { fetchNearbyAeds, requestLocationPermission } from '@/services';
+import type { MedicalLocationListItem } from './kakaoMap/components';
 import { KakaoMapScreen } from './KakaoMapScreen';
 
 const mockInjectJavaScript = jest.fn();
 const mockDismiss = jest.fn();
+const mockExpand = jest.fn();
+const mockMedicalPlacesSheet = jest.fn();
 jest.mock('react-native-config', () => ({ KAKAO_MAP_APP_KEY: 'test-key' }));
-jest.mock('@react-navigation/native', () => ({ useIsFocused: () => false }));
 jest.mock('@react-native-community/geolocation', () => ({
   getCurrentPosition: jest.fn(),
 }));
-jest.mock('@/services', () => ({ requestLocationPermission: jest.fn() }));
+jest.mock('@/services', () => ({
+  fetchNearbyAeds: jest.fn(),
+  requestLocationPermission: jest.fn(),
+}));
 jest.mock('react-native-webview', () => {
   const ReactModule: typeof React = require('react');
   const { View } = require('react-native');
@@ -47,15 +52,24 @@ jest.mock('./kakaoMap/components', () => {
         testID: 'aed-guide',
         visible,
       }),
-    MedicalPlacesSheet: ReactModule.forwardRef((_props, ref) => {
-      ReactModule.useImperativeHandle(ref, () => ({ dismiss: mockDismiss }));
-      return null;
-    }),
+    MedicalPlacesSheet: ReactModule.forwardRef(
+      (props: { floatingControl?: React.ReactNode }, ref) => {
+        mockMedicalPlacesSheet(props);
+        ReactModule.useImperativeHandle(ref, () => ({
+          dismiss: mockDismiss,
+          expand: mockExpand,
+        }));
+        return props.floatingControl;
+      },
+    ),
   };
 });
 
 describe('현재 위치 버튼', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([]);
+  });
   afterEach(() => jest.restoreAllMocks());
 
   it.each(['granted', 'denied'] as const)(
@@ -145,5 +159,173 @@ describe('현재 위치 버튼', () => {
     );
     expect(setOptions).toHaveBeenLastCalledWith({ tabBarStyle: undefined });
     act(() => renderer!.unmount());
+  });
+
+  it('하단 시트의 AED를 누르면 시트는 유지하고 지도를 해당 위치로 이동한다', () => {
+    jest.mocked(requestLocationPermission).mockResolvedValue('denied');
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    const location: MedicalLocationListItem = {
+      address: '인천광역시 계양구 향교로 24',
+      distanceInMeters: 160,
+      id: 'calculation-office',
+      name: '계산1동주민센터',
+      type: 'aed',
+      typeLabel: 'AED',
+    };
+
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <KakaoMapScreen
+          navigation={{ goBack: jest.fn(), setOptions: jest.fn() }}
+          route={{ name: 'MapTab' }}
+        />,
+      );
+    });
+    act(() => renderer!.root.findByProps({ testID: 'map' }).props.onLoadEnd());
+    mockExpand.mockClear();
+    mockInjectJavaScript.mockClear();
+
+    const sheetProps = mockMedicalPlacesSheet.mock.lastCall?.[0] as {
+      onLocationPress: (item: MedicalLocationListItem) => void;
+    };
+    act(() => sheetProps.onLocationPress(location));
+
+    expect(mockExpand).not.toHaveBeenCalled();
+    expect(mockMedicalPlacesSheet).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selectedLocation: location }),
+    );
+    expect(mockInjectJavaScript).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'eragsFocusMedicalLocation?.("calculation-office")',
+      ),
+    );
+    act(() => renderer!.unmount());
+  });
+
+  it('조회한 AED 좌표를 카카오맵 마커 데이터로 전달한다', async () => {
+    jest.useFakeTimers();
+    jest.mocked(requestLocationPermission).mockResolvedValue('granted');
+    jest.mocked(Geolocation.getCurrentPosition).mockImplementation(success =>
+      success({
+        coords: {
+          latitude: 37.538,
+          longitude: 126.722,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: 1,
+      }),
+    );
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([
+      {
+        name: '계산1동주민센터',
+        address: '인천광역시 계양구 향교로 24',
+        latitude: 37.5396051913,
+        longitude: 126.7213476855,
+        phone: '032*******',
+        distanceInMeters: 160,
+        detailPlaces: ['1층 민원실내'],
+      },
+    ]);
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+
+    try {
+      act(() => {
+        renderer = ReactTestRenderer.create(
+          <KakaoMapScreen
+            navigation={{ goBack: jest.fn(), setOptions: jest.fn() }}
+            route={{ name: 'MapTab' }}
+          />,
+        );
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(300);
+      });
+
+      expect(fetchNearbyAeds).toHaveBeenCalledWith(
+        expect.objectContaining({ latitude: 37.538, longitude: 126.722 }),
+      );
+      expect(
+        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
+      ).toContain('계산1동주민센터');
+      expect(
+        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
+      ).not.toContain('임시 AED 위치');
+      act(() => renderer!.unmount());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('AED 마커를 누르면 선택한 장소를 하단 시트에 표시한다', async () => {
+    jest.useFakeTimers();
+    jest.mocked(requestLocationPermission).mockResolvedValue('granted');
+    jest.mocked(Geolocation.getCurrentPosition).mockImplementation(success =>
+      success({
+        coords: {
+          latitude: 37.538,
+          longitude: 126.722,
+          altitude: null,
+          accuracy: 10,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        },
+        timestamp: 1,
+      }),
+    );
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([
+      {
+        name: '계산1동주민센터',
+        address: '인천광역시 계양구 향교로 24',
+        latitude: 37.5396051913,
+        longitude: 126.7213476855,
+        phone: '032*******',
+        distanceInMeters: 160,
+        detailPlaces: ['1층 민원실내'],
+      },
+    ]);
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+
+    try {
+      act(() => {
+        renderer = ReactTestRenderer.create(
+          <KakaoMapScreen
+            navigation={{ goBack: jest.fn(), setOptions: jest.fn() }}
+            route={{ name: 'MapTab' }}
+          />,
+        );
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(300);
+      });
+      act(() => {
+        renderer!.root.findByProps({ testID: 'map' }).props.onMessage({
+          nativeEvent: {
+            data: JSON.stringify({
+              locationId: '37.5396051913:126.7213476855:계산1동주민센터:0',
+              type: 'medical-location-pressed',
+            }),
+          },
+        });
+      });
+
+      expect(mockExpand).toHaveBeenCalledTimes(1);
+      expect(mockMedicalPlacesSheet).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          selectedLocation: expect.objectContaining({
+            detailPlaces: ['1층 민원실내'],
+            name: '계산1동주민센터',
+            phone: '032*******',
+          }),
+        }),
+      );
+      act(() => renderer!.unmount());
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
