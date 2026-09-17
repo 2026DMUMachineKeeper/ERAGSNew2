@@ -17,9 +17,17 @@ export type LocationPermissionRequestStatus =
 
 export const hasLocationPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'android') {
-    return PermissionsAndroid.check(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    );
+    const [hasFineLocationPermission, hasCoarseLocationPermission] =
+      await Promise.all([
+        PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ),
+        PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ),
+      ]);
+
+    return hasFineLocationPermission || hasCoarseLocationPermission;
   }
 
   if (Platform.OS === 'ios') {
@@ -50,24 +58,51 @@ export const requestLocationPermission = async (): Promise<LocationPermissionReq
     return 'granted';
   }
 
-  const granted = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    {
-      title: '위치 권한 필요',
-      message:
-        '긴급 신고 문자에 현재 위치를 포함하려면 위치 권한이 필요합니다.',
-      buttonPositive: '허용',
-      buttonNegative: '취소',
-    },
-  );
+  if (Platform.Version < 31) {
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: '위치 권한 필요',
+        message:
+          '긴급 신고 문자에 현재 위치를 포함하려면 위치 권한이 필요합니다.',
+        buttonPositive: '허용',
+        buttonNegative: '취소',
+      },
+    );
 
-  if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+    if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+      return 'granted';
+    }
+
+    return granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+      ? 'blocked'
+      : 'denied';
+  }
+
+  const permissionResults = await PermissionsAndroid.requestMultiple([
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+  ]);
+  const hasFineLocationPermission =
+    permissionResults[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
+    PermissionsAndroid.RESULTS.GRANTED;
+  const hasCoarseLocationPermission =
+    permissionResults[
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
+    ] === PermissionsAndroid.RESULTS.GRANTED;
+
+  if (hasFineLocationPermission || hasCoarseLocationPermission) {
     return 'granted';
   }
 
-  return granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-    ? 'blocked'
-    : 'denied';
+  const isBlocked =
+    permissionResults[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
+      PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN &&
+    permissionResults[
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
+    ] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
+
+  return isBlocked ? 'blocked' : 'denied';
 };
 
 export const markLocationPermissionPromptPending = async (
