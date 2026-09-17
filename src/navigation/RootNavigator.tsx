@@ -10,6 +10,7 @@ import { FirstAidScreen } from '@/screens/FirstAidScreen';
 import { MedicineAddScreen } from '@/screens/MedicineAddScreen';
 import { MedicineDetailScreen } from '@/screens/MedicineDetailScreen';
 import { MedicineManualInputScreen } from '@/screens/MedicineManualInputScreen';
+import { KakaoMapScreen } from '@/screens/KakaoMapScreen';
 import { PasswordResetScreen } from '@/screens/PasswordResetScreen';
 import { QRCodeScreen } from '@/screens/QRCodeScreen';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
@@ -30,6 +31,7 @@ export type RootStackParamList = {
   FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
   EmergencyGuide: undefined;
   QRCode: undefined;
+  KakaoMap: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -85,6 +87,7 @@ export const RootNavigator = (): React.JSX.Element => {
       <Stack.Screen name="FirstAidDetail" component={FirstAidDetail} />
       <Stack.Screen name="EmergencyGuide" component={EmergencyGuideScreen} />
       <Stack.Screen name="QRCode" component={QRCodeScreen} />
+      <Stack.Screen name="KakaoMap" component={KakaoMapScreen} />
     </Stack.Navigator>
   );
 };
