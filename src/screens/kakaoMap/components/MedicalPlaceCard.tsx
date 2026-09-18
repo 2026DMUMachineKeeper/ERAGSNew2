@@ -36,12 +36,14 @@ const formatEquipmentAvailability = (
 type MedicalPlaceCardProps = {
   isSelected: boolean;
   location: MedicalLocationListItem;
+  onDirectionsPress: () => void;
   onPress: () => void;
 };
 
 export const MedicalPlaceCard = ({
   isSelected,
   location,
+  onDirectionsPress,
   onPress,
 }: MedicalPlaceCardProps): React.JSX.Element => (
   <View className="mb-2 rounded-2xl border border-memoLine bg-white px-3 py-3 shadow-sm">
@@ -147,6 +149,16 @@ export const MedicalPlaceCard = ({
             </Text>
           </View>
         ) : null}
+        <Pressable
+          accessibilityLabel={`${location.name} 길찾기`}
+          accessibilityRole="button"
+          className="mt-3 items-center rounded-xl bg-[#FDE9EC] py-2.5"
+          onPress={onDirectionsPress}
+        >
+          <Text className="text-coment font-suitBold text-[#AF3145]">
+            카카오맵 길찾기 ›
+          </Text>
+        </Pressable>
       </View>
     ) : null}
   </View>

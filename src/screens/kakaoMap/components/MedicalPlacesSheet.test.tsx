@@ -47,6 +47,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={[location]}
           mapHeight={800}
+          onDirectionsPress={jest.fn()}
           onLocationPress={onLocationPress}
           searchQuery=""
         />,
@@ -77,6 +78,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={[]}
           mapHeight={800}
+          onDirectionsPress={jest.fn()}
           onLocationPress={jest.fn()}
           searchQuery=""
         />,
@@ -108,6 +110,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={[]}
           mapHeight={600}
+          onDirectionsPress={jest.fn()}
           onLocationPress={jest.fn()}
           searchQuery=""
         />,
@@ -134,6 +137,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={[]}
           mapHeight={800}
+          onDirectionsPress={jest.fn()}
           onLocationPress={jest.fn()}
           searchQuery=""
         />,
@@ -162,6 +166,7 @@ describe('MedicalPlacesSheet 스냅', () => {
   });
 
   it('선택한 AED의 상세 정보는 해당 항목 바로 아래에 표시한다', () => {
+    const onDirectionsPress = jest.fn();
     const locations = [
       {
         address: '서울특별시 관악구 조원로 25',
@@ -189,6 +194,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={locations}
           mapHeight={800}
+          onDirectionsPress={onDirectionsPress}
           onLocationPress={jest.fn()}
           searchQuery=""
           selectedLocation={locations[0]}
@@ -206,6 +212,12 @@ describe('MedicalPlacesSheet 스냅', () => {
     expect(renderedOutput).toContain('2단지 지하1층 방재실앞');
     expect(renderedOutput).not.toContain('연락처');
     expect(renderedOutput).not.toContain('831****');
+    act(() => {
+      renderer!.root
+        .findByProps({ accessibilityLabel: '힐스테이트뉴포레아파트 길찾기' })
+        .props.onPress();
+    });
+    expect(onDirectionsPress).toHaveBeenCalledWith(locations[0]);
     act(() => renderer!.unmount());
   });
 
@@ -231,6 +243,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={[location]}
           mapHeight={800}
+          onDirectionsPress={jest.fn()}
           onLocationPress={jest.fn()}
           searchQuery=""
           selectedLocation={location}
@@ -272,6 +285,7 @@ describe('MedicalPlacesSheet 스냅', () => {
         <MedicalPlacesSheet
           locations={[location]}
           mapHeight={800}
+          onDirectionsPress={jest.fn()}
           onLocationPress={jest.fn()}
           searchQuery=""
           selectedLocation={location}

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   type LayoutChangeEvent,
   Pressable,
   Text,
@@ -39,6 +40,7 @@ import {
   createFocusMedicalLocationScript,
   createKakaoMapHtml,
   createMedicalFilterScript,
+  createRequestMedicalDirectionsScript,
   type MapCoordinates,
 } from './kakaoMap/mapHtml';
 import {
@@ -61,12 +63,17 @@ const MARKER_ASSET_URIS = {
   hospital: Image.resolveAssetSource(hospitalMapMarker).uri,
 } as const;
 
-type MedicalLocationPressedMessage = {
-  locationId: string;
-  type: 'medical-location-pressed';
-};
+type MedicalMapMessage =
+  | { locationId: string; type: 'medical-location-pressed' }
+  | { locationId: string; type: 'medical-directions-unavailable' }
+  | {
+      locationId: string;
+      type: 'medical-directions-location';
+      latitude: number;
+      longitude: number;
+    };
 
-const getPressedMedicalLocationId = (message: string): string | null => {
+const getMedicalMapMessage = (message: string): MedicalMapMessage | null => {
   try {
     const parsedMessage: unknown = JSON.parse(message);
 
@@ -75,13 +82,39 @@ const getPressedMedicalLocationId = (message: string): string | null => {
       parsedMessage === null ||
       !('type' in parsedMessage) ||
       !('locationId' in parsedMessage) ||
-      parsedMessage.type !== 'medical-location-pressed' ||
       typeof parsedMessage.locationId !== 'string'
     ) {
       return null;
     }
 
-    return (parsedMessage as MedicalLocationPressedMessage).locationId;
+    if (
+      parsedMessage.type === 'medical-location-pressed' ||
+      parsedMessage.type === 'medical-directions-unavailable'
+    ) {
+      return {
+        locationId: parsedMessage.locationId,
+        type: parsedMessage.type,
+      };
+    }
+
+    if (
+      parsedMessage.type === 'medical-directions-location' &&
+      'latitude' in parsedMessage &&
+      'longitude' in parsedMessage &&
+      typeof parsedMessage.latitude === 'number' &&
+      typeof parsedMessage.longitude === 'number' &&
+      Number.isFinite(parsedMessage.latitude) &&
+      Number.isFinite(parsedMessage.longitude)
+    ) {
+      return {
+        locationId: parsedMessage.locationId,
+        type: 'medical-directions-location',
+        latitude: parsedMessage.latitude,
+        longitude: parsedMessage.longitude,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -114,6 +147,25 @@ const getCurrentMapCoordinates = async (
 
     return coords;
   }
+};
+
+const openKakaoDirections = (
+  name: string,
+  latitude: number,
+  longitude: number,
+  origin: MapCoordinates | null,
+): void => {
+  const from = origin
+    ? `from/${encodeURIComponent('현재 위치')},${origin.latitude},${
+        origin.longitude
+      }/`
+    : '';
+  const url = `https://map.kakao.com/link/${from}to/${encodeURIComponent(
+    name,
+  )},${latitude},${longitude}`;
+  Linking.openURL(url).catch(() => {
+    Alert.alert('길찾기 실패', '카카오맵을 열지 못했습니다.');
+  });
 };
 
 export const KakaoMapScreen = ({
@@ -295,6 +347,34 @@ export const KakaoMapScreen = ({
       );
     }
   };
+  const handleDirectionsPress = (location: MedicalLocationListItem): void => {
+    const mapLocation = medicalLocations.find(item => item.id === location.id);
+    if (!mapLocation) {
+      return;
+    }
+
+    if (
+      typeof mapLocation.latitude === 'number' &&
+      typeof mapLocation.longitude === 'number'
+    ) {
+      openKakaoDirections(
+        mapLocation.name,
+        mapLocation.latitude,
+        mapLocation.longitude,
+        currentLocation,
+      );
+      return;
+    }
+
+    if (!isMapReady) {
+      Alert.alert('길찾기 준비 중', '지도를 불러온 뒤 다시 시도해 주세요.');
+      return;
+    }
+
+    mapWebViewRef.current?.injectJavaScript(
+      createRequestMedicalDirectionsScript(location.id),
+    );
+  };
   const handleMapMessage = (event: WebViewMessageEvent): void => {
     const { data } = event.nativeEvent;
 
@@ -304,12 +384,31 @@ export const KakaoMapScreen = ({
       return;
     }
 
-    const locationId = getPressedMedicalLocationId(data);
+    const message = getMedicalMapMessage(data);
+    if (!message) {
+      return;
+    }
+
     const selectedLocation = medicalLocations.find(
-      location => location.id === locationId,
+      location => location.id === message.locationId,
     );
 
     if (!selectedLocation) {
+      return;
+    }
+
+    if (message.type === 'medical-directions-unavailable') {
+      Alert.alert('길찾기 불가', '장소 위치를 찾지 못했습니다.');
+      return;
+    }
+
+    if (message.type === 'medical-directions-location') {
+      openKakaoDirections(
+        selectedLocation.name,
+        message.latitude,
+        message.longitude,
+        currentLocation,
+      );
       return;
     }
 
@@ -332,6 +431,11 @@ export const KakaoMapScreen = ({
             javaScriptEnabled
             onLoadStart={() => setIsMapReady(false)}
             onMessage={handleMapMessage}
+            onShouldStartLoadWithRequest={request =>
+              request.url === KAKAO_MAP_BASE_URL ||
+              request.url === `${KAKAO_MAP_BASE_URL}/` ||
+              request.url === 'about:blank'
+            }
             originWhitelist={['*']}
             onLoadEnd={() => setIsMapReady(true)}
             ref={mapWebViewRef}
@@ -393,6 +497,7 @@ export const KakaoMapScreen = ({
             }
             locations={nearbyMedicalLocations}
             mapHeight={mapHeight}
+            onDirectionsPress={handleDirectionsPress}
             onLocationPress={handleMedicalLocationPress}
             ref={placesSheetRef}
             searchQuery={searchQuery}
