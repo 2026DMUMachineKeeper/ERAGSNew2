@@ -1,5 +1,6 @@
 export * from './audioRecording.service';
 export * from './aed.service';
+export * from './hospital.service';
 export * from './apiError.service';
 export * from './auth.service';
 export * from './authenticatedFetch.service';
