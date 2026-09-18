@@ -1,9 +1,14 @@
 import React from 'react';
+import { Script } from 'node:vm';
 import { Alert } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import Geolocation from '@react-native-community/geolocation';
 
-import { fetchNearbyAeds, requestLocationPermission } from '@/services';
+import {
+  fetchNearbyAeds,
+  fetchNearbyHospitals,
+  requestLocationPermission,
+} from '@/services';
 import type { MedicalLocationListItem } from './kakaoMap/components';
 import { KakaoMapScreen } from './KakaoMapScreen';
 
@@ -17,6 +22,7 @@ jest.mock('@react-native-community/geolocation', () => ({
 }));
 jest.mock('@/services', () => ({
   fetchNearbyAeds: jest.fn(),
+  fetchNearbyHospitals: jest.fn(),
   requestLocationPermission: jest.fn(),
 }));
 jest.mock('react-native-webview', () => {
@@ -69,6 +75,7 @@ describe('현재 위치 버튼', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(fetchNearbyAeds).mockResolvedValue([]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -202,7 +209,7 @@ describe('현재 위치 버튼', () => {
     act(() => renderer!.unmount());
   });
 
-  it('조회한 AED 좌표를 카카오맵 마커 데이터로 전달한다', async () => {
+  it('전체 목록에 가까운 AED가 다섯 곳이어도 병원을 포함한다', async () => {
     jest.useFakeTimers();
     jest.mocked(requestLocationPermission).mockResolvedValue('granted');
     jest.mocked(Geolocation.getCurrentPosition).mockImplementation(success =>
@@ -229,7 +236,27 @@ describe('현재 위치 버튼', () => {
         distanceInMeters: 160,
         detailPlaces: ['1층 민원실내'],
       },
+      ...Array.from({ length: 4 }, (_, index) => ({
+        name: `AED ${index + 2}`,
+        address: '인천광역시 계양구 향교로 24',
+        latitude: 37.54 + index * 0.001,
+        longitude: 126.72,
+        phone: '032*******',
+        distanceInMeters: 200 + index * 20,
+        detailPlaces: [],
+      })),
     ]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([{
+      hpid: 'A1403121',
+      name: '인천더드림병원',
+      address: '인천광역시 계양구 계양대로 123(작전동)',
+      distanceInMeters: 400,
+      isRealTimeAvailable: false,
+      availableBeds: null,
+      operatingRoomBeds: null,
+      ctAvailable: false,
+      mriAvailable: false,
+    }]);
     let renderer: ReactTestRenderer.ReactTestRenderer;
 
     try {
@@ -248,9 +275,29 @@ describe('현재 위치 버튼', () => {
       expect(fetchNearbyAeds).toHaveBeenCalledWith(
         expect.objectContaining({ latitude: 37.538, longitude: 126.722 }),
       );
+      expect(fetchNearbyHospitals).toHaveBeenCalledWith(
+        expect.objectContaining({ latitude: 37.538, longitude: 126.722 }),
+      );
+      expect(mockMedicalPlacesSheet).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          locations: expect.arrayContaining([
+            expect.objectContaining({ name: '인천더드림병원', type: 'hospital' }),
+          ]),
+        }),
+      );
       expect(
         renderer!.root.findByProps({ testID: 'map' }).props.source.html,
       ).toContain('계산1동주민센터');
+      expect(
+        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
+      ).toContain('인천더드림병원');
+      expect(
+        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
+      ).toContain('geocoder.addressSearch(searchAddress');
+      const html = renderer!.root.findByProps({ testID: 'map' }).props.source.html as string;
+      const mapScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+      expect(mapScript).toBeDefined();
+      expect(() => new Script(mapScript ?? '')).not.toThrow();
       expect(
         renderer!.root.findByProps({ testID: 'map' }).props.source.html,
       ).not.toContain('임시 AED 위치');
