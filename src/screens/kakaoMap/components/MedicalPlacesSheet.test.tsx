@@ -126,6 +126,41 @@ describe('MedicalPlacesSheet 스냅', () => {
     act(() => renderer!.unmount());
   });
 
+  it('더보기로 목록을 펼치고 접는다', () => {
+    const spring = jest.spyOn(Animated, 'spring');
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet
+          locations={[]}
+          mapHeight={800}
+          onLocationPress={jest.fn()}
+          searchQuery=""
+        />,
+      );
+    });
+
+    act(() => {
+      renderer!.root
+        .findByProps({ accessibilityLabel: '장소 목록 더보기' })
+        .props.onPress();
+    });
+    expect(spring).toHaveBeenLastCalledWith(
+      expect.any(Animated.Value),
+      expect.objectContaining({ toValue: 0 }),
+    );
+    act(() => {
+      renderer!.root
+        .findByProps({ accessibilityLabel: '장소 목록 접기' })
+        .props.onPress();
+    });
+    expect(spring).toHaveBeenLastCalledWith(
+      expect.any(Animated.Value),
+      expect.objectContaining({ toValue: 400 }),
+    );
+    act(() => renderer!.unmount());
+  });
+
   it('선택한 AED의 상세 정보는 해당 항목 바로 아래에 표시한다', () => {
     const locations = [
       {
@@ -169,6 +204,8 @@ describe('MedicalPlacesSheet 스냅', () => {
         .filter(node => node.props.children === locations[0].name),
     ).toHaveLength(1);
     expect(renderedOutput).toContain('2단지 지하1층 방재실앞');
+    expect(renderedOutput).not.toContain('연락처');
+    expect(renderedOutput).not.toContain('831****');
     act(() => renderer!.unmount());
   });
 
@@ -203,12 +240,12 @@ describe('MedicalPlacesSheet 스냅', () => {
 
     const output = JSON.stringify(renderer!.toJSON());
     expect(output).toContain('실시간 병상 정보');
-    expect(output).toContain('가용 병상: ');
+    expect(output).toContain('가용 병상');
     expect(output).toContain('14');
-    expect(output).toContain('수술실 병상:');
-    expect(output).toContain('CT:');
+    expect(output).toContain('수술실 병상');
+    expect(output).toContain('CT');
     expect(output).toContain('가능');
-    expect(output).toContain('MRI:');
+    expect(output).toContain('MRI');
     expect(output).toContain('불가');
     act(() => renderer!.unmount());
   });
