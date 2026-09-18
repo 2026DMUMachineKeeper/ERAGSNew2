@@ -1,6 +1,6 @@
 import React from 'react';
 import { Script } from 'node:vm';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import ReactTestRenderer, { act } from 'react-test-renderer';
 import Geolocation from '@react-native-community/geolocation';
 
@@ -10,6 +10,7 @@ import {
   requestLocationPermission,
 } from '@/services';
 import type { MedicalLocationListItem } from './kakaoMap/components';
+import { createKakaoMapHtml } from './kakaoMap/mapHtml';
 import { KakaoMapScreen } from './KakaoMapScreen';
 
 const mockInjectJavaScript = jest.fn();
@@ -78,6 +79,45 @@ describe('현재 위치 버튼', () => {
     jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
   });
   afterEach(() => jest.restoreAllMocks());
+
+  it('지도 화면의 외부 주소 이동을 막고 장소 데이터를 안전하게 삽입한다', () => {
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <KakaoMapScreen
+          navigation={{ goBack: jest.fn(), setOptions: jest.fn() }}
+          route={{ name: 'MapTab' }}
+        />,
+      );
+    });
+    const map = renderer!.root.findByProps({ testID: 'map' });
+    expect(
+      map.props.onShouldStartLoadWithRequest({ url: 'http://localhost/' }),
+    ).toBe(true);
+    expect(
+      map.props.onShouldStartLoadWithRequest({ url: 'https://example.com' }),
+    ).toBe(false);
+    act(() => renderer!.unmount());
+
+    const html = createKakaoMapHtml(
+      'test-key',
+      { aed: 'aed.png', hospital: 'hospital.png' },
+      [
+        {
+          address: '서울',
+          distanceInMeters: 100,
+          id: 'test',
+          name: '</script><script>alert(1)</script>',
+          type: 'aed',
+          typeLabel: 'AED',
+          latitude: 37.5,
+          longitude: 127,
+        },
+      ],
+    );
+    expect(html).not.toContain('</script><script>alert(1)</script>');
+    expect(html).toContain('\\u003c/script>');
+  });
 
   it.each(['granted', 'denied'] as const)(
     '%s 권한에 맞게 지도 이동 또는 안내를 처리한다',
@@ -246,17 +286,19 @@ describe('현재 위치 버튼', () => {
         detailPlaces: [],
       })),
     ]);
-    jest.mocked(fetchNearbyHospitals).mockResolvedValue([{
-      hpid: 'A1403121',
-      name: '인천더드림병원',
-      address: '인천광역시 계양구 계양대로 123(작전동)',
-      distanceInMeters: 400,
-      isRealTimeAvailable: false,
-      availableBeds: null,
-      operatingRoomBeds: null,
-      ctAvailable: false,
-      mriAvailable: false,
-    }]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([
+      {
+        hpid: 'A1403121',
+        name: '인천더드림병원',
+        address: '인천광역시 계양구 계양대로 123(작전동)',
+        distanceInMeters: 400,
+        isRealTimeAvailable: false,
+        availableBeds: null,
+        operatingRoomBeds: null,
+        ctAvailable: false,
+        mriAvailable: false,
+      },
+    ]);
     let renderer: ReactTestRenderer.ReactTestRenderer;
 
     try {
@@ -281,9 +323,75 @@ describe('현재 위치 버튼', () => {
       expect(mockMedicalPlacesSheet).toHaveBeenLastCalledWith(
         expect.objectContaining({
           locations: expect.arrayContaining([
-            expect.objectContaining({ name: '인천더드림병원', type: 'hospital' }),
+            expect.objectContaining({
+              name: '인천더드림병원',
+              type: 'hospital',
+            }),
           ]),
         }),
+      );
+      const openURL = jest
+        .spyOn(Linking, 'openURL')
+        .mockResolvedValue(undefined);
+      act(() =>
+        renderer!.root.findByProps({ testID: 'map' }).props.onLoadEnd(),
+      );
+      const sheetProps = mockMedicalPlacesSheet.mock.lastCall?.[0] as {
+        locations: MedicalLocationListItem[];
+        onDirectionsPress: (location: MedicalLocationListItem) => void;
+      };
+      act(() => sheetProps.onDirectionsPress(sheetProps.locations[0]));
+      expect(openURL).toHaveBeenCalledWith(
+        `https://map.kakao.com/link/from/${encodeURIComponent(
+          '현재 위치',
+        )},37.538,126.722/to/${encodeURIComponent(
+          '계산1동주민센터',
+        )},37.5396051913,126.7213476855`,
+      );
+
+      const hospital = sheetProps.locations.find(
+        location => location.type === 'hospital',
+      );
+      expect(hospital).toBeDefined();
+      act(() => sheetProps.onDirectionsPress(hospital!));
+      expect(mockInjectJavaScript).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'eragsRequestMedicalDirections?.("hospital:A1403121")',
+        ),
+      );
+      act(() => {
+        renderer!.root.findByProps({ testID: 'map' }).props.onMessage({
+          nativeEvent: {
+            data: JSON.stringify({
+              type: 'medical-directions-location',
+              locationId: 'hospital:A1403121',
+              latitude: 37.54,
+              longitude: 126.73,
+            }),
+          },
+        });
+      });
+      expect(openURL).toHaveBeenLastCalledWith(
+        `https://map.kakao.com/link/from/${encodeURIComponent(
+          '현재 위치',
+        )},37.538,126.722/to/${encodeURIComponent(
+          '인천더드림병원',
+        )},37.54,126.73`,
+      );
+      const alert = jest.spyOn(Alert, 'alert');
+      act(() => {
+        renderer!.root.findByProps({ testID: 'map' }).props.onMessage({
+          nativeEvent: {
+            data: JSON.stringify({
+              type: 'medical-directions-unavailable',
+              locationId: 'hospital:A1403121',
+            }),
+          },
+        });
+      });
+      expect(alert).toHaveBeenCalledWith(
+        '길찾기 불가',
+        '장소 위치를 찾지 못했습니다.',
       );
       expect(
         renderer!.root.findByProps({ testID: 'map' }).props.source.html,
@@ -294,7 +402,11 @@ describe('현재 위치 버튼', () => {
       expect(
         renderer!.root.findByProps({ testID: 'map' }).props.source.html,
       ).toContain('geocoder.addressSearch(searchAddress');
-      const html = renderer!.root.findByProps({ testID: 'map' }).props.source.html as string;
+      expect(
+        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
+      ).toContain('window.eragsRequestMedicalDirections =');
+      const html = renderer!.root.findByProps({ testID: 'map' }).props.source
+        .html as string;
       const mapScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
       expect(mapScript).toBeDefined();
       expect(() => new Script(mapScript ?? '')).not.toThrow();

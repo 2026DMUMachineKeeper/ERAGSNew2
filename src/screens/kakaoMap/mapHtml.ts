@@ -54,11 +54,22 @@ export const createKakaoMapHtml = (
       };
       const bounds = new kakao.maps.LatLngBounds();
       const markers = {};
+      const failedHospitalIds = new Set();
       let markerCount = 0;
       let activeFilter = 'all';
       let activeQuery = '';
       let pendingFocusId = null;
+      let pendingDirectionsId = null;
       let hasFocusedLocation = false;
+
+      const sendDirectionsPosition = (locationId, position) => {
+        window.ReactNativeWebView?.postMessage(JSON.stringify({
+          type: 'medical-directions-location',
+          locationId,
+          latitude: position.getLat(),
+          longitude: position.getLng(),
+        }));
+      };
 
       const matchesCurrentFilter = location =>
         (activeFilter === 'all' || location.type === activeFilter) &&
@@ -89,6 +100,10 @@ export const createKakaoMapHtml = (
           pendingFocusId = null;
           hasFocusedLocation = true;
         }
+        if (pendingDirectionsId === location.id) {
+          sendDirectionsPosition(location.id, position);
+          pendingDirectionsId = null;
+        }
       };
 
       const geocoder = new kakao.maps.services.Geocoder();
@@ -108,6 +123,15 @@ export const createKakaoMapHtml = (
           geocoder.addressSearch(searchAddress, (results, status) => {
             if (status === kakao.maps.services.Status.OK && results.length) {
               addMarker(location, new kakao.maps.LatLng(results[0].y, results[0].x));
+            } else {
+              failedHospitalIds.add(location.id);
+              if (pendingDirectionsId === location.id) {
+                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                  type: 'medical-directions-unavailable',
+                  locationId: location.id,
+                }));
+                pendingDirectionsId = null;
+              }
             }
             resolve();
           });
@@ -153,6 +177,20 @@ export const createKakaoMapHtml = (
         window.eragsMap.setLevel(3);
       };
 
+      window.eragsRequestMedicalDirections = function (locationId) {
+        const marker = markers[locationId];
+        if (marker) {
+          sendDirectionsPosition(locationId, marker.getPosition());
+        } else if (failedHospitalIds.has(locationId)) {
+          window.ReactNativeWebView?.postMessage(JSON.stringify({
+            type: 'medical-directions-unavailable',
+            locationId,
+          }));
+        } else {
+          pendingDirectionsId = locationId;
+        }
+      };
+
       window.eragsUpdateCurrentLocation = function (latitude, longitude) {
         const position = new kakao.maps.LatLng(latitude, longitude);
 
@@ -193,5 +231,12 @@ export const createFocusMedicalLocationScript = (
   locationId: string,
 ): string => `
   window.eragsFocusMedicalLocation?.(${JSON.stringify(locationId)});
+  true;
+`;
+
+export const createRequestMedicalDirectionsScript = (
+  locationId: string,
+): string => `
+  window.eragsRequestMedicalDirections?.(${JSON.stringify(locationId)});
   true;
 `;

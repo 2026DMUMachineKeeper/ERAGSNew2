@@ -21,6 +21,7 @@ type MedicalPlacesSheetProps = {
   floatingControl?: React.ReactNode;
   locations: readonly MedicalLocationListItem[];
   mapHeight: number;
+  onDirectionsPress: (location: MedicalLocationListItem) => void;
   onLocationPress: (location: MedicalLocationListItem) => void;
   searchQuery: string;
   selectedLocation?: MedicalLocationListItem | null;
@@ -81,6 +82,7 @@ export const MedicalPlacesSheet = React.forwardRef<
       floatingControl,
       locations,
       mapHeight,
+      onDirectionsPress,
       onLocationPress,
       searchQuery,
       selectedLocation,
@@ -309,6 +311,7 @@ export const MedicalPlacesSheet = React.forwardRef<
                       key={location.id}
                       isSelected={selectedLocation?.id === location.id}
                       location={location}
+                      onDirectionsPress={() => onDirectionsPress(location)}
                       onPress={() => onLocationPress(location)}
                     />
                   ))
