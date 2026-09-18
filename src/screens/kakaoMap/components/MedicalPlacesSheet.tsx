@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Animated,
   PanResponder,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -132,6 +133,9 @@ export const MedicalPlacesSheet = React.forwardRef<
     const handleExpand = React.useCallback((): void => {
       handleSnap('expanded');
     }, [handleSnap]);
+    const handleShowMore = (): void => {
+      handleSnap(sheetStage === 'expanded' ? 'middle' : 'expanded');
+    };
 
     React.useImperativeHandle(
       ref,
@@ -247,7 +251,7 @@ export const MedicalPlacesSheet = React.forwardRef<
     return (
       <>
         <Animated.View
-          className="absolute bottom-0 left-0 right-0 z-20 h-full overflow-hidden rounded-t-3xl  bg-background px-4 pb-4 shadow-2xl"
+          className="absolute bottom-0 left-0 right-0 z-20 h-full overflow-hidden rounded-t-3xl bg-background px-4 pb-4 shadow-2xl"
           style={placesSheetAnimatedStyle}
         >
           <View
@@ -263,22 +267,33 @@ export const MedicalPlacesSheet = React.forwardRef<
             accessibilityRole="button"
             className="items-center pb-3 pt-2"
           >
-            <View className="h-1 w-10 rounded-full bg-gray" />
+            <View className="h-1 w-12 rounded-full bg-gray" />
           </View>
 
           {sheetStage !== 'collapsed' ? (
             <>
-              <View className="flex-row items-center justify-between">
+              <View className="flex-row items-start justify-between px-1">
                 <View>
-                  <Text className="text-body font-suitBold text-black">
+                  <Text className="text-[18px] font-suitBold text-black">
                     {searchQuery
                       ? `검색 결과 ${locations.length}곳`
                       : `가까운 장소 ${locations.length}곳`}
                   </Text>
-                  <Text className="mt-1 text-coment text-textDim">
+                  <Text className="mt-1 text-[13px] font-suitRegular text-textDim">
                     현재 위치 기준 가까운 순서예요.
                   </Text>
                 </View>
+                <Pressable
+                  accessibilityLabel={sheetStage === 'expanded' ? '장소 목록 접기' : '장소 목록 더보기'}
+                  accessibilityRole="button"
+                  className="min-h-9 flex-row items-center px-1"
+                  onPress={handleShowMore}
+                >
+                  <Text className="text-[13px] font-suitBold text-[#9E2B3F]">
+                    {sheetStage === 'expanded' ? '접기' : '더보기'}
+                  </Text>
+                  <Text className="ml-1 text-lg leading-5 text-[#9E2B3F]">›</Text>
+                </Pressable>
               </View>
 
               <ScrollView
