@@ -1,27 +1,13 @@
 import React from 'react';
 import {
   Animated,
-  Image,
   PanResponder,
-  Pressable,
   ScrollView,
   Text,
   View,
 } from 'react-native';
 
-import aedMapMarker from '@/assets/icons/markers/aed-map-marker.png';
-import hospitalMapMarker from '@/assets/icons/markers/hospital-map-marker.png';
-
-export type MedicalLocationListItem = {
-  id: string;
-  type: 'hospital' | 'aed';
-  typeLabel: string;
-  name: string;
-  address: string;
-  distanceInMeters: number;
-  detailPlaces?: readonly string[];
-  phone?: string;
-};
+import { MedicalPlaceCard, type MedicalLocationListItem } from './MedicalPlaceCard';
 
 export type MedicalPlacesSheetRef = {
   dismiss: () => void;
@@ -83,14 +69,6 @@ const getNearestSheetStage = (
       ? snapPoint
       : closest,
   ).stage;
-};
-
-const formatDistance = (distanceInMeters: number): string => {
-  if (distanceInMeters < 1000) {
-    return `${Math.max(10, Math.round(distanceInMeters / 10) * 10)}m`;
-  }
-
-  return `${(distanceInMeters / 1000).toFixed(1)}km`;
 };
 
 export const MedicalPlacesSheet = React.forwardRef<
@@ -312,69 +290,12 @@ export const MedicalPlacesSheet = React.forwardRef<
               >
                 {locations.length > 0 ? (
                   locations.map(location => (
-                    <View
+                    <MedicalPlaceCard
                       key={location.id}
-                      className={`mb-2 overflow-hidden rounded-xl border bg-white shadow ${
-                        selectedLocation?.id === location.id
-                          ? 'border-red'
-                          : 'border-transparent'
-                      }`}
-                    >
-                      <Pressable
-                        accessibilityLabel={`${location.name} 위치 보기`}
-                        accessibilityRole="button"
-                        accessibilityState={{
-                          selected: selectedLocation?.id === location.id,
-                        }}
-                        className="min-h-[64px] flex-row items-center px-3 py-2"
-                        onPress={() => onLocationPress(location)}
-                      >
-                        <Image
-                          accessibilityLabel={`${location.typeLabel} 마커`}
-                          className="h-9 w-9"
-                          resizeMode="contain"
-                          source={
-                            location.type === 'aed'
-                              ? aedMapMarker
-                              : hospitalMapMarker
-                          }
-                        />
-                        <View className="ml-2 flex-1">
-                          <Text
-                            className="text-body font-suitBold text-black"
-                            numberOfLines={1}
-                          >
-                            {location.name}
-                          </Text>
-                          <Text
-                            className="mt-1 text-coment text-textDim"
-                            numberOfLines={2}
-                          >
-                            {location.address}
-                          </Text>
-                        </View>
-                        <View className="ml-2 rounded-full bg-background px-2 py-1">
-                          <Text className="text-[11px] font-suitBold text-gray">
-                            {location.typeLabel} ·{' '}
-                            {formatDistance(location.distanceInMeters)}
-                          </Text>
-                        </View>
-                      </Pressable>
-                      {selectedLocation?.id === location.id ? (
-                        <View className="border-t border-memoLine px-3 pb-4 pt-3">
-                          {location.detailPlaces?.length ? (
-                            <>
-                              <Text className="text-coment font-suitBold text-black">
-                                설치 위치
-                              </Text>
-                              <Text className="mt-2 text-coment leading-5 text-textDim">
-                                {location.detailPlaces.join(' · ')}
-                              </Text>
-                            </>
-                          ) : null}
-                        </View>
-                      ) : null}
-                    </View>
+                      isSelected={selectedLocation?.id === location.id}
+                      location={location}
+                      onPress={() => onLocationPress(location)}
+                    />
                   ))
                 ) : (
                   <View className="items-center justify-center py-8">

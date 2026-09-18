@@ -22,6 +22,7 @@ import {
 } from '@react-navigation/native';
 
 import aedMapMarker from '@/assets/icons/markers/aed-map-marker.png';
+import hospitalMapMarker from '@/assets/icons/markers/hospital-map-marker.png';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { requestLocationPermission } from '@/services';
 
@@ -33,41 +34,32 @@ import {
   type MedicalLocationListItem,
   type MedicalPlacesSheetRef,
 } from './kakaoMap/components';
+import {
+  createCurrentLocationScript,
+  createFocusMedicalLocationScript,
+  createKakaoMapHtml,
+  createMedicalFilterScript,
+  type MapCoordinates,
+} from './kakaoMap/mapHtml';
+import {
+  getNearbyMedicalLocations,
+  toMedicalMapLocations,
+} from './kakaoMap/medicalLocations';
 import { useNearbyAeds } from './kakaoMap/useNearbyAeds';
+import { useNearbyHospitals } from './kakaoMap/useNearbyHospitals';
 
 type KakaoMapScreenProps = {
   navigation: Pick<NavigationProp<ParamListBase>, 'goBack' | 'setOptions'>;
   route?: { name?: keyof RootStackParamList | 'MapTab' };
 };
 
-const KAKAO_MAP_CENTER = {
-  latitude: 37.4999957879,
-  longitude: 126.8681696567,
-};
 const KAKAO_MAP_BASE_URL = 'http://localhost';
 const LOCATION_PERMISSION_REQUEST_DELAY_MS = 300;
 
 const MARKER_ASSET_URIS = {
   aed: Image.resolveAssetSource(aedMapMarker).uri,
+  hospital: Image.resolveAssetSource(hospitalMapMarker).uri,
 } as const;
-
-type MedicalMapLocation = {
-  address: string;
-  detailPlaces: readonly string[];
-  distanceInMeters: number;
-  id: string;
-  latitude: number;
-  longitude: number;
-  name: string;
-  phone: string;
-  type: 'aed';
-  typeLabel: 'AED';
-};
-
-interface MapCoordinates {
-  latitude: number;
-  longitude: number;
-}
 
 type MedicalLocationPressedMessage = {
   locationId: string;
@@ -124,155 +116,6 @@ const getCurrentMapCoordinates = async (
   }
 };
 
-const createKakaoMapHtml = (
-  appKey: string,
-  markerAssetUris: typeof MARKER_ASSET_URIS,
-  medicalLocations: readonly MedicalMapLocation[],
-): string => `
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>카카오맵</title>
-    <style>
-      html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
-    </style>
-    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(
-      appKey,
-    )}"></script>
-  </head>
-  <body>
-    <div id="map"></div>
-    <script>
-      const mapContainer = document.getElementById('map');
-      const mapOption = {
-        center: new kakao.maps.LatLng(${KAKAO_MAP_CENTER.latitude}, ${
-  KAKAO_MAP_CENTER.longitude
-}),
-        level: 4,
-      };
-      window.eragsMap = new kakao.maps.Map(mapContainer, mapOption);
-
-      const medicalLocations = ${JSON.stringify(medicalLocations).replace(
-        /</g,
-        '\\u003c',
-      )};
-      const markerAssetUris = ${JSON.stringify(markerAssetUris)};
-      const createMarkerImage = (assetUri) => new kakao.maps.MarkerImage(
-        assetUri,
-        new kakao.maps.Size(40, 40),
-        { offset: new kakao.maps.Point(20, 40) },
-      );
-      const markerImages = {
-        aed: createMarkerImage(markerAssetUris.aed),
-      };
-      const bounds = new kakao.maps.LatLngBounds();
-      const markers = {};
-
-      medicalLocations.forEach(location => {
-        const position = new kakao.maps.LatLng(
-          location.latitude,
-          location.longitude,
-        );
-        bounds.extend(position);
-
-        const marker = new kakao.maps.Marker({
-          image: markerImages[location.type],
-          map: window.eragsMap,
-          position,
-          title: location.name,
-        });
-        markers[location.id] = marker;
-
-        kakao.maps.event.addListener(marker, 'click', () => {
-          window.ReactNativeWebView?.postMessage(JSON.stringify({
-            locationId: location.id,
-            type: 'medical-location-pressed',
-          }));
-        });
-      });
-
-      if (medicalLocations.length === 1) {
-        window.eragsMap.setCenter(
-          new kakao.maps.LatLng(
-            medicalLocations[0].latitude,
-            medicalLocations[0].longitude,
-          ),
-        );
-      } else if (medicalLocations.length > 1) {
-        window.eragsMap.setBounds(bounds, 56, 56, 56, 56);
-      }
-
-      kakao.maps.event.addListener(window.eragsMap, 'click', () => {
-        window.ReactNativeWebView?.postMessage('map-clicked');
-      });
-
-      window.eragsFilterMedicalLocations = function (filter, query) {
-        const normalizedQuery = (query || '').trim().toLocaleLowerCase();
-
-        medicalLocations.forEach(location => {
-          const matchesFilter = filter === 'all' || location.type === filter;
-          const searchableText = (location.name + ' ' + location.address).toLocaleLowerCase();
-          const matchesQuery = !normalizedQuery || searchableText.includes(normalizedQuery);
-          const marker = markers[location.id];
-
-          marker?.setMap(matchesFilter && matchesQuery ? window.eragsMap : null);
-        });
-      };
-
-      window.eragsFocusMedicalLocation = function (locationId) {
-        const marker = markers[locationId];
-
-        if (!marker) {
-          return;
-        }
-
-        window.eragsMap.setCenter(marker.getPosition());
-        window.eragsMap.setLevel(3);
-      };
-
-      window.eragsUpdateCurrentLocation = function (latitude, longitude) {
-        const position = new kakao.maps.LatLng(latitude, longitude);
-
-        if (!window.eragsCurrentLocationMarker) {
-          window.eragsCurrentLocationMarker = new kakao.maps.Marker({
-            position,
-          });
-        } else {
-          window.eragsCurrentLocationMarker.setPosition(position);
-        }
-
-        window.eragsCurrentLocationMarker.setMap(window.eragsMap);
-      };
-    </script>
-  </body>
-</html>
-`;
-
-const createCurrentLocationScript = ({
-  latitude,
-  longitude,
-}: MapCoordinates): string => `
-  window.eragsUpdateCurrentLocation?.(${latitude}, ${longitude});
-  true;
-`;
-
-const createMedicalFilterScript = (
-  filter: MedicalFilter,
-  query: string,
-): string => `
-  window.eragsFilterMedicalLocations?.(${JSON.stringify(
-    filter,
-  )}, ${JSON.stringify(query)});
-  true;
-`;
-
-const createFocusMedicalLocationScript = (locationId: string): string => `
-  window.eragsFocusMedicalLocation?.(${JSON.stringify(locationId)});
-  true;
-`;
-
 export const KakaoMapScreen = ({
   navigation,
   route,
@@ -296,44 +139,21 @@ export const KakaoMapScreen = ({
   const { aeds, error: aedError } = useNearbyAeds({
     coordinates: currentLocation,
   });
-  const medicalLocations = React.useMemo<readonly MedicalMapLocation[]>(
-    () =>
-      aeds.map((aed, index) => ({
-        address: aed.address,
-        detailPlaces: aed.detailPlaces,
-        distanceInMeters: aed.distanceInMeters,
-        id: `${aed.latitude}:${aed.longitude}:${aed.name}:${index}`,
-        latitude: aed.latitude,
-        longitude: aed.longitude,
-        name: aed.name,
-        phone: aed.phone,
-        type: 'aed',
-        typeLabel: 'AED',
-      })),
-    [aeds],
+  const { hospitals, error: hospitalError } =
+    useNearbyHospitals(currentLocation);
+  const medicalLocations = React.useMemo(
+    () => toMedicalMapLocations(aeds, hospitals),
+    [aeds, hospitals],
   );
-  const nearbyMedicalLocations = React.useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR');
-
-    return medicalLocations
-      .filter(location => {
-        const matchesFilter =
-          selectedMedicalFilter === 'all' ||
-          location.type === selectedMedicalFilter;
-        const searchableText =
-          `${location.name} ${location.address}`.toLocaleLowerCase('ko-KR');
-
-        return (
-          matchesFilter &&
-          (!normalizedQuery || searchableText.includes(normalizedQuery))
-        );
-      })
-      .sort(
-        (firstLocation, secondLocation) =>
-          firstLocation.distanceInMeters - secondLocation.distanceInMeters,
-      )
-      .slice(0, 5);
-  }, [medicalLocations, searchQuery, selectedMedicalFilter]);
+  const nearbyMedicalLocations = React.useMemo(
+    () =>
+      getNearbyMedicalLocations(
+        medicalLocations,
+        selectedMedicalFilter,
+        searchQuery,
+      ),
+    [medicalLocations, searchQuery, selectedMedicalFilter],
+  );
   const mapSource = React.useMemo(
     () => ({
       baseUrl: KAKAO_MAP_BASE_URL,
@@ -398,6 +218,12 @@ export const KakaoMapScreen = ({
       console.warn('[KakaoMapScreen] 주변 AED 조회 실패:', aedError);
     }
   }, [aedError]);
+
+  React.useEffect(() => {
+    if (hospitalError) {
+      console.warn('[KakaoMapScreen] 주변 병원 조회 실패:', hospitalError);
+    }
+  }, [hospitalError]);
 
   React.useEffect(() => {
     if (!isMapReady || !currentLocation) {

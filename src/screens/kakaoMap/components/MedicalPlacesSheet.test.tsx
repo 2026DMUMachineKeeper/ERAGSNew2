@@ -171,4 +171,80 @@ describe('MedicalPlacesSheet 스냅', () => {
     expect(renderedOutput).toContain('2단지 지하1층 방재실앞');
     act(() => renderer!.unmount());
   });
+
+  it('병원 선택 시 실시간 병상과 장비 정보를 표시한다', () => {
+    const location = {
+      address: '인천광역시 계양구 장제로 722',
+      distanceInMeters: 1250,
+      id: 'hospital:A1400014',
+      name: '한림병원',
+      type: 'hospital' as const,
+      typeLabel: '병원',
+      hospitalDetails: {
+        isRealTimeAvailable: true,
+        availableBeds: 14,
+        operatingRoomBeds: 6,
+        ctAvailable: true,
+        mriAvailable: false,
+      },
+    };
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet
+          locations={[location]}
+          mapHeight={800}
+          onLocationPress={jest.fn()}
+          searchQuery=""
+          selectedLocation={location}
+        />,
+      );
+    });
+
+    const output = JSON.stringify(renderer!.toJSON());
+    expect(output).toContain('실시간 병상 정보');
+    expect(output).toContain('가용 병상: ');
+    expect(output).toContain('14');
+    expect(output).toContain('수술실 병상:');
+    expect(output).toContain('CT:');
+    expect(output).toContain('가능');
+    expect(output).toContain('MRI:');
+    expect(output).toContain('불가');
+    act(() => renderer!.unmount());
+  });
+
+  it('실시간 정보가 없는 병원은 병상과 장비 상태를 정보 없음으로 표시한다', () => {
+    const location = {
+      address: '인천광역시 계양구 계양대로 123',
+      distanceInMeters: 400,
+      id: 'hospital:A1403121',
+      name: '인천더드림병원',
+      type: 'hospital' as const,
+      typeLabel: '병원',
+      hospitalDetails: {
+        isRealTimeAvailable: false,
+        availableBeds: null,
+        operatingRoomBeds: null,
+        ctAvailable: false,
+        mriAvailable: false,
+      },
+    };
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet
+          locations={[location]}
+          mapHeight={800}
+          onLocationPress={jest.fn()}
+          searchQuery=""
+          selectedLocation={location}
+        />,
+      );
+    });
+
+    const output = JSON.stringify(renderer!.toJSON());
+    expect(output).toContain('실시간 병상 정보 미제공');
+    expect(output.match(/정보 없음/g)).toHaveLength(4);
+    act(() => renderer!.unmount());
+  });
 });
