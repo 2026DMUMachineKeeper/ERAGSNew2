@@ -21,11 +21,15 @@ import {
   type NavigationProp,
   type ParamListBase,
 } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import aedMapMarker from '@/assets/icons/markers/aed-map-marker.png';
 import hospitalMapMarker from '@/assets/icons/markers/hospital-map-marker.png';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { requestLocationPermission } from '@/services';
+import { getApiErrorUserMessage } from '@/services/apiError.service';
+import { isAuthSessionExpiredError } from '@/services/auth.service';
+import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 
 import {
   AedUsageModal,
@@ -51,7 +55,10 @@ import { useNearbyAeds } from './kakaoMap/useNearbyAeds';
 import { useNearbyHospitals } from './kakaoMap/useNearbyHospitals';
 
 type KakaoMapScreenProps = {
-  navigation: Pick<NavigationProp<ParamListBase>, 'goBack' | 'setOptions'>;
+  navigation: Pick<NavigationProp<ParamListBase>, 'goBack' | 'setOptions'> &
+    Partial<Pick<NativeStackNavigationProp<RootStackParamList>, 'reset'>> & {
+      getParent?: () => Pick<NativeStackNavigationProp<RootStackParamList>, 'reset'> | undefined;
+    };
   route?: { name?: keyof RootStackParamList | 'MapTab' };
 };
 
@@ -181,6 +188,7 @@ export const KakaoMapScreen = ({
   const [isMapReady, setIsMapReady] = React.useState(false);
   const [isLocating, setIsLocating] = React.useState(false);
   const isLocatingRef = React.useRef(false);
+  const hasRedirectedForExpiredSession = React.useRef(false);
   const [isAedGuideVisible, setIsAedGuideVisible] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedMedicalFilter, setSelectedMedicalFilter] =
@@ -188,11 +196,25 @@ export const KakaoMapScreen = ({
   const [selectedMedicalLocation, setSelectedMedicalLocation] =
     React.useState<MedicalLocationListItem | null>(null);
   const [mapHeight, setMapHeight] = React.useState(0);
-  const { aeds, error: aedError } = useNearbyAeds({
+  const { aeds, error: aedError, isLoading: isAedLoading,
+    hasLoaded: hasAedLoaded, retry: retryAeds } = useNearbyAeds({
     coordinates: currentLocation,
   });
-  const { hospitals, error: hospitalError } =
+  const { hospitals, error: hospitalError, isLoading: isHospitalLoading,
+    hasLoaded: hasHospitalLoaded, retry: retryHospitals } =
     useNearbyHospitals(currentLocation);
+  const isAedAuthExpired = isAuthSessionExpiredError(aedError);
+  const isHospitalAuthExpired = isAuthSessionExpiredError(hospitalError);
+  const aedErrorMessage = aedError && !isAedAuthExpired
+    ? getApiErrorUserMessage(aedError, {
+        fallbackMessage: 'AED 정보를 불러오지 못했습니다. 다시 시도해 주세요.',
+      })
+    : null;
+  const hospitalErrorMessage = hospitalError && !isHospitalAuthExpired
+    ? getApiErrorUserMessage(hospitalError, {
+        fallbackMessage: '병원 정보를 불러오지 못했습니다. 다시 시도해 주세요.',
+      })
+    : null;
   const medicalLocations = React.useMemo(
     () => toMedicalMapLocations(aeds, hospitals),
     [aeds, hospitals],
@@ -266,16 +288,16 @@ export const KakaoMapScreen = ({
   }, [appKey]);
 
   React.useEffect(() => {
-    if (aedError) {
-      console.warn('[KakaoMapScreen] 주변 AED 조회 실패:', aedError);
+    if ((!isAedAuthExpired && !isHospitalAuthExpired) ||
+        hasRedirectedForExpiredSession.current) {
+      return;
     }
-  }, [aedError]);
-
-  React.useEffect(() => {
-    if (hospitalError) {
-      console.warn('[KakaoMapScreen] 주변 병원 조회 실패:', hospitalError);
-    }
-  }, [hospitalError]);
+    hasRedirectedForExpiredSession.current = true;
+    const rootNavigation = route?.name === 'MapTab'
+      ? navigation.getParent?.()
+      : navigation.reset ? { reset: navigation.reset } : undefined;
+    redirectToLoginForExpiredSession(rootNavigation);
+  }, [isAedAuthExpired, isHospitalAuthExpired, navigation, route?.name]);
 
   React.useEffect(() => {
     if (!isMapReady || !currentLocation) {
@@ -461,6 +483,15 @@ export const KakaoMapScreen = ({
             selectedMedicalFilter={selectedMedicalFilter}
           />
           <MedicalPlacesSheet
+            aedErrorMessage={aedErrorMessage}
+            hospitalErrorMessage={hospitalErrorMessage}
+            isAedLoading={isAedLoading}
+            isHospitalLoading={isHospitalLoading}
+            hasLoaded={hasAedLoaded && hasHospitalLoaded}
+            hasSearchConditions={!!searchQuery.trim() || selectedMedicalFilter !== 'all'}
+            isLocatingPlaces={!currentLocation}
+            onRetryAeds={retryAeds}
+            onRetryHospitals={retryHospitals}
             floatingControl={
               <Pressable
                 accessibilityLabel="현재 위치로 이동"
