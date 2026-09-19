@@ -12,6 +12,9 @@ import {
 import type { MedicalLocationListItem } from './kakaoMap/components';
 import { createKakaoMapHtml } from './kakaoMap/mapHtml';
 import { KakaoMapScreen } from './KakaoMapScreen';
+import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
+import type { NearbyAed } from '@/types';
+import { ApiRequestError } from '@/services/apiError.service';
 
 const mockInjectJavaScript = jest.fn();
 const mockDismiss = jest.fn();
@@ -26,6 +29,13 @@ jest.mock('@/services', () => ({
   fetchNearbyHospitals: jest.fn(),
   requestLocationPermission: jest.fn(),
 }));
+jest.mock('@/services/auth.service', () => ({
+  isAuthSessionExpiredError: (error: unknown) =>
+    error instanceof Error && error.name === 'AuthSessionExpiredError',
+}));
+jest.mock('@/utils/authSessionNavigation', () => ({
+  redirectToLoginForExpiredSession: jest.fn(),
+}));
 jest.mock('react-native-webview', () => {
   const ReactModule: typeof React = require('react');
   const { View } = require('react-native');
@@ -38,13 +48,214 @@ jest.mock('react-native-webview', () => {
     }),
   };
 });
+
+describe('주변 병원·AED 조회 상태', () => {
+  const aed: NearbyAed = {
+    name: '테스트 AED', address: '서울', latitude: 37.5, longitude: 127,
+    phone: '02-0000-0000', distanceInMeters: 100, detailPlaces: [],
+  };
+  const getSheet = (): {
+    locations: MedicalLocationListItem[];
+    aedStatus: {
+      errorMessage: string | null;
+      isLoading: boolean;
+      onRetry: () => void;
+    };
+    hospitalStatus: {
+      errorMessage: string | null;
+      isLoading: boolean;
+      onRetry: () => void;
+    };
+    hasLoaded: boolean;
+    hasSearchConditions: boolean;
+    isAuthRedirecting: boolean;
+    locationLoadState: 'loading' | 'ready' | 'permission-denied' | 'error';
+  } => mockMedicalPlacesSheet.mock.lastCall?.[0];
+  const renderAtCurrentLocation = async (navigation = {
+    goBack: jest.fn(), setOptions: jest.fn(), reset: jest.fn(),
+    getParent: jest.fn(() => ({ reset: jest.fn() })),
+  }): Promise<ReactTestRenderer.ReactTestRenderer> => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <KakaoMapScreen navigation={navigation} route={{ name: 'MapTab' }} />,
+      );
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(300);
+    });
+    return renderer;
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+    jest.mocked(requestLocationPermission).mockResolvedValue('granted');
+    jest.mocked(Geolocation.getCurrentPosition).mockImplementation(success =>
+      success({
+        coords: {
+          latitude: 37.5, longitude: 127, altitude: null, accuracy: 10,
+          altitudeAccuracy: null, heading: null, speed: null,
+        },
+        timestamp: 1,
+      }),
+    );
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it('최초 로딩과 정상적인 빈 결과를 구분한다', async () => {
+    let resolveAeds!: (items: NearbyAed[]) => void;
+    jest.mocked(fetchNearbyAeds).mockImplementation(() => new Promise(resolve => {
+      resolveAeds = resolve;
+    }));
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet()).toEqual(expect.objectContaining({
+      locations: [], hasLoaded: false, locationLoadState: 'ready',
+      aedStatus: expect.objectContaining({ isLoading: true }),
+    }));
+    await act(async () => resolveAeds([]));
+    expect(getSheet()).toEqual(expect.objectContaining({
+      locations: [], hasLoaded: true,
+      aedStatus: expect.objectContaining({ errorMessage: null, isLoading: false }),
+      hospitalStatus: expect.objectContaining({ errorMessage: null }),
+    }));
+    act(() => renderer.root.findByProps({ testID: 'open-aed-guide' })
+      .props.onSearchQueryChange('없는 장소'));
+    expect(getSheet().hasSearchConditions).toBe(true);
+    act(() => renderer.unmount());
+  });
+
+  it('한쪽 실패 시 성공 결과를 유지하고 중복 없이 재시도한다', async () => {
+    let resolveRetry!: (items: []) => void;
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([aed]);
+    jest.mocked(fetchNearbyHospitals)
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveRetry = resolve; }));
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().locations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '테스트 AED' }),
+    ]));
+    expect(getSheet().hospitalStatus.errorMessage).toContain('병원 정보를');
+    act(() => {
+      getSheet().hospitalStatus.onRetry();
+      getSheet().hospitalStatus.onRetry();
+    });
+    expect(fetchNearbyHospitals).toHaveBeenCalledTimes(2);
+    expect(getSheet().locations).toHaveLength(1);
+    expect(getSheet().hospitalStatus.isLoading).toBe(true);
+    await act(async () => resolveRetry([]));
+    expect(getSheet().hospitalStatus.errorMessage).toBeNull();
+    expect(getSheet().locations).toHaveLength(1);
+    expect(redirectToLoginForExpiredSession).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('두 조회의 인증 만료가 동시에 도착해도 로그인 이동을 한 번만 요청한다', async () => {
+    const expired = new Error();
+    expired.name = 'AuthSessionExpiredError';
+    jest.mocked(fetchNearbyAeds).mockRejectedValue(expired);
+    jest.mocked(fetchNearbyHospitals).mockRejectedValue(expired);
+    const parentNavigation = { reset: jest.fn() };
+    const renderer = await renderAtCurrentLocation({
+      goBack: jest.fn(), setOptions: jest.fn(), reset: jest.fn(),
+      getParent: jest.fn(() => parentNavigation),
+    });
+    expect(redirectToLoginForExpiredSession).toHaveBeenCalledTimes(1);
+    expect(redirectToLoginForExpiredSession).toHaveBeenCalledWith(parentNavigation);
+    expect(getSheet().isAuthRedirecting).toBe(true);
+    expect(getSheet().aedStatus.errorMessage).toBeNull();
+    expect(getSheet().hospitalStatus.errorMessage).toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('서버 오류는 인증 만료로 취급하지 않는다', async () => {
+    jest.mocked(fetchNearbyAeds).mockRejectedValue(new ApiRequestError(
+      { code: 'SERVER_ERROR', details: [], message: '서버 오류' }, 500,
+    ));
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().aedStatus.errorMessage).toContain('서버에 문제가 있습니다.');
+    expect(redirectToLoginForExpiredSession).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('위치가 바뀌면 이전 위치의 결과를 현재 결과로 표시하지 않는다', async () => {
+    let positionCount = 0;
+    jest.mocked(Geolocation.getCurrentPosition).mockImplementation(success => {
+      positionCount += 1;
+      success({
+        coords: {
+          latitude: positionCount === 1 ? 37.5 : 38,
+          longitude: 127, altitude: null, accuracy: 10,
+          altitudeAccuracy: null, heading: null, speed: null,
+        },
+        timestamp: 1,
+      });
+    });
+    let resolveNext!: (items: NearbyAed[]) => void;
+    jest.mocked(fetchNearbyAeds).mockResolvedValueOnce([aed])
+      .mockImplementationOnce(() => new Promise(resolve => { resolveNext = resolve; }));
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().locations).toHaveLength(1);
+    act(() => renderer.root.findByProps({ testID: 'map' }).props.onLoadEnd());
+    await act(async () => {
+      await renderer.root.findByProps({ accessibilityLabel: '현재 위치로 이동' })
+        .props.onPress();
+    });
+    expect(getSheet().locations).toHaveLength(0);
+    expect(getSheet().aedStatus.isLoading).toBe(true);
+    expect(renderer.root.findByProps({ testID: 'map' }).props.source.html)
+      .not.toContain('테스트 AED');
+    await act(async () => resolveNext([]));
+    expect(getSheet().hasLoaded).toBe(true);
+    act(() => renderer.unmount());
+  });
+
+  it('위치 권한 거절을 위치 확인 중 상태로 남기지 않는다', async () => {
+    jest.mocked(requestLocationPermission).mockResolvedValue('denied');
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().locationLoadState).toBe('permission-denied');
+    expect(fetchNearbyAeds).not.toHaveBeenCalled();
+    expect(fetchNearbyHospitals).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('위치 조회 실패를 위치 확인 중 상태로 남기지 않는다', async () => {
+    jest.mocked(Geolocation.getCurrentPosition).mockImplementation(
+      (_success, error) => error?.({
+        code: 2,
+        message: '위치 조회 실패',
+        PERMISSION_DENIED: 1,
+        POSITION_UNAVAILABLE: 2,
+        TIMEOUT: 3,
+      }),
+    );
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().locationLoadState).toBe('error');
+    expect(fetchNearbyAeds).not.toHaveBeenCalled();
+    expect(fetchNearbyHospitals).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+});
 jest.mock('./kakaoMap/components', () => {
   const ReactModule: typeof React = require('react');
   const { View } = require('react-native');
   return {
-    KakaoMapHeader: ({ onOpenAedGuide }: { onOpenAedGuide: () => void }) =>
+    KakaoMapHeader: ({ onOpenAedGuide, onSearchQueryChange, onFilterChange }: {
+      onOpenAedGuide: () => void;
+      onSearchQueryChange: (value: string) => void;
+      onFilterChange: (value: 'all' | 'aed' | 'hospital') => void;
+    }) =>
       ReactModule.createElement(View, {
         onPress: onOpenAedGuide,
+        onSearchQueryChange,
+        onFilterChange,
         testID: 'open-aed-guide',
       }),
     AedUsageModal: ({
