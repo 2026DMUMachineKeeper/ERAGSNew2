@@ -56,14 +56,20 @@ describe('주변 병원·AED 조회 상태', () => {
   };
   const getSheet = (): {
     locations: MedicalLocationListItem[];
-    aedErrorMessage: string | null;
-    hospitalErrorMessage: string | null;
-    isAedLoading: boolean;
-    isHospitalLoading: boolean;
+    aedStatus: {
+      errorMessage: string | null;
+      isLoading: boolean;
+      onRetry: () => void;
+    };
+    hospitalStatus: {
+      errorMessage: string | null;
+      isLoading: boolean;
+      onRetry: () => void;
+    };
     hasLoaded: boolean;
     hasSearchConditions: boolean;
-    onRetryAeds: () => void;
-    onRetryHospitals: () => void;
+    isAuthRedirecting: boolean;
+    locationLoadState: 'loading' | 'ready' | 'permission-denied' | 'error';
   } => mockMedicalPlacesSheet.mock.lastCall?.[0];
   const renderAtCurrentLocation = async (navigation = {
     goBack: jest.fn(), setOptions: jest.fn(), reset: jest.fn(),
@@ -105,12 +111,14 @@ describe('주변 병원·AED 조회 상태', () => {
     jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
     const renderer = await renderAtCurrentLocation();
     expect(getSheet()).toEqual(expect.objectContaining({
-      locations: [], isAedLoading: true, hasLoaded: false,
+      locations: [], hasLoaded: false, locationLoadState: 'ready',
+      aedStatus: expect.objectContaining({ isLoading: true }),
     }));
     await act(async () => resolveAeds([]));
     expect(getSheet()).toEqual(expect.objectContaining({
-      locations: [], isAedLoading: false, hasLoaded: true,
-      aedErrorMessage: null, hospitalErrorMessage: null,
+      locations: [], hasLoaded: true,
+      aedStatus: expect.objectContaining({ errorMessage: null, isLoading: false }),
+      hospitalStatus: expect.objectContaining({ errorMessage: null }),
     }));
     act(() => renderer.root.findByProps({ testID: 'open-aed-guide' })
       .props.onSearchQueryChange('없는 장소'));
@@ -128,16 +136,16 @@ describe('주변 병원·AED 조회 상태', () => {
     expect(getSheet().locations).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: '테스트 AED' }),
     ]));
-    expect(getSheet().hospitalErrorMessage).toContain('병원 정보를');
+    expect(getSheet().hospitalStatus.errorMessage).toContain('병원 정보를');
     act(() => {
-      getSheet().onRetryHospitals();
-      getSheet().onRetryHospitals();
+      getSheet().hospitalStatus.onRetry();
+      getSheet().hospitalStatus.onRetry();
     });
     expect(fetchNearbyHospitals).toHaveBeenCalledTimes(2);
     expect(getSheet().locations).toHaveLength(1);
-    expect(getSheet().isHospitalLoading).toBe(true);
+    expect(getSheet().hospitalStatus.isLoading).toBe(true);
     await act(async () => resolveRetry([]));
-    expect(getSheet().hospitalErrorMessage).toBeNull();
+    expect(getSheet().hospitalStatus.errorMessage).toBeNull();
     expect(getSheet().locations).toHaveLength(1);
     expect(redirectToLoginForExpiredSession).not.toHaveBeenCalled();
     act(() => renderer.unmount());
@@ -155,8 +163,9 @@ describe('주변 병원·AED 조회 상태', () => {
     });
     expect(redirectToLoginForExpiredSession).toHaveBeenCalledTimes(1);
     expect(redirectToLoginForExpiredSession).toHaveBeenCalledWith(parentNavigation);
-    expect(getSheet().aedErrorMessage).toBeNull();
-    expect(getSheet().hospitalErrorMessage).toBeNull();
+    expect(getSheet().isAuthRedirecting).toBe(true);
+    expect(getSheet().aedStatus.errorMessage).toBeNull();
+    expect(getSheet().hospitalStatus.errorMessage).toBeNull();
     act(() => renderer.unmount());
   });
 
@@ -166,7 +175,7 @@ describe('주변 병원·AED 조회 상태', () => {
     ));
     jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
     const renderer = await renderAtCurrentLocation();
-    expect(getSheet().aedErrorMessage).toContain('서버에 문제가 있습니다.');
+    expect(getSheet().aedStatus.errorMessage).toContain('서버에 문제가 있습니다.');
     expect(redirectToLoginForExpiredSession).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
@@ -196,11 +205,41 @@ describe('주변 병원·AED 조회 상태', () => {
         .props.onPress();
     });
     expect(getSheet().locations).toHaveLength(0);
-    expect(getSheet().isAedLoading).toBe(true);
+    expect(getSheet().aedStatus.isLoading).toBe(true);
     expect(renderer.root.findByProps({ testID: 'map' }).props.source.html)
       .not.toContain('테스트 AED');
     await act(async () => resolveNext([]));
     expect(getSheet().hasLoaded).toBe(true);
+    act(() => renderer.unmount());
+  });
+
+  it('위치 권한 거절을 위치 확인 중 상태로 남기지 않는다', async () => {
+    jest.mocked(requestLocationPermission).mockResolvedValue('denied');
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().locationLoadState).toBe('permission-denied');
+    expect(fetchNearbyAeds).not.toHaveBeenCalled();
+    expect(fetchNearbyHospitals).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('위치 조회 실패를 위치 확인 중 상태로 남기지 않는다', async () => {
+    jest.mocked(Geolocation.getCurrentPosition).mockImplementation(
+      (_success, error) => error?.({
+        code: 2,
+        message: '위치 조회 실패',
+        PERMISSION_DENIED: 1,
+        POSITION_UNAVAILABLE: 2,
+        TIMEOUT: 3,
+      }),
+    );
+    jest.mocked(fetchNearbyAeds).mockResolvedValue([]);
+    jest.mocked(fetchNearbyHospitals).mockResolvedValue([]);
+    const renderer = await renderAtCurrentLocation();
+    expect(getSheet().locationLoadState).toBe('error');
+    expect(fetchNearbyAeds).not.toHaveBeenCalled();
+    expect(fetchNearbyHospitals).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 });

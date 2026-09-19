@@ -1,7 +1,7 @@
 import { fetchNearbyHospitals } from '@/services';
 import type { NearbyHospital } from '@/types';
 
-import { useNearbyPlaces } from './useNearbyAeds';
+import { useNearbyPlaces } from './useNearbyPlaces';
 
 type Coordinates = { latitude: number; longitude: number };
 

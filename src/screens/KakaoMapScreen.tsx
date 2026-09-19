@@ -65,6 +65,12 @@ type KakaoMapScreenProps = {
 const KAKAO_MAP_BASE_URL = 'http://localhost';
 const LOCATION_PERMISSION_REQUEST_DELAY_MS = 300;
 
+type LocationLoadState =
+  | 'loading'
+  | 'ready'
+  | 'permission-denied'
+  | 'error';
+
 const MARKER_ASSET_URIS = {
   aed: Image.resolveAssetSource(aedMapMarker).uri,
   hospital: Image.resolveAssetSource(hospitalMapMarker).uri,
@@ -185,6 +191,8 @@ export const KakaoMapScreen = ({
   const placesSheetRef = React.useRef<MedicalPlacesSheetRef>(null);
   const [currentLocation, setCurrentLocation] =
     React.useState<MapCoordinates | null>(null);
+  const [locationLoadState, setLocationLoadState] =
+    React.useState<LocationLoadState>('loading');
   const [isMapReady, setIsMapReady] = React.useState(false);
   const [isLocating, setIsLocating] = React.useState(false);
   const isLocatingRef = React.useRef(false);
@@ -205,6 +213,7 @@ export const KakaoMapScreen = ({
     useNearbyHospitals(currentLocation);
   const isAedAuthExpired = isAuthSessionExpiredError(aedError);
   const isHospitalAuthExpired = isAuthSessionExpiredError(hospitalError);
+  const isAuthRedirecting = isAedAuthExpired || isHospitalAuthExpired;
   const aedErrorMessage = aedError && !isAedAuthExpired
     ? getApiErrorUserMessage(aedError, {
         fallbackMessage: 'AED 정보를 불러오지 못했습니다. 다시 시도해 주세요.',
@@ -260,6 +269,9 @@ export const KakaoMapScreen = ({
       const permissionStatus = await requestLocationPermission();
 
       if (permissionStatus !== 'granted') {
+        if (isActive) {
+          setLocationLoadState('permission-denied');
+        }
         return;
       }
 
@@ -268,9 +280,13 @@ export const KakaoMapScreen = ({
 
         if (isActive) {
           setCurrentLocation(coordinates);
+          setLocationLoadState('ready');
         }
       } catch (error: unknown) {
         console.warn('[KakaoMapScreen] 현재 위치 조회 실패:', error);
+        if (isActive) {
+          setLocationLoadState('error');
+        }
       }
     };
 
@@ -278,6 +294,9 @@ export const KakaoMapScreen = ({
     const permissionRequestTimer = setTimeout(() => {
       loadCurrentLocation().catch((error: unknown) => {
         console.warn('[KakaoMapScreen] 위치 권한 요청 실패:', error);
+        if (isActive) {
+          setLocationLoadState('error');
+        }
       });
     }, LOCATION_PERMISSION_REQUEST_DELAY_MS);
 
@@ -330,15 +349,22 @@ export const KakaoMapScreen = ({
 
     isLocatingRef.current = true;
     setIsLocating(true);
+    if (!currentLocation) {
+      setLocationLoadState('loading');
+    }
     try {
       const permissionStatus = await requestLocationPermission();
       if (permissionStatus !== 'granted') {
+        if (!currentLocation) {
+          setLocationLoadState('permission-denied');
+        }
         Alert.alert('위치 권한 필요', '설정에서 위치 권한을 허용해 주세요.');
         return;
       }
 
       const coordinates = await getCurrentMapCoordinates(0);
       setCurrentLocation(coordinates);
+      setLocationLoadState('ready');
       mapWebViewRef.current?.injectJavaScript(`
         window.eragsUpdateCurrentLocation?.(${coordinates.latitude}, ${coordinates.longitude});
         window.eragsMap?.setCenter(new kakao.maps.LatLng(${coordinates.latitude}, ${coordinates.longitude}));
@@ -348,6 +374,9 @@ export const KakaoMapScreen = ({
       setSelectedMedicalLocation(null);
       placesSheetRef.current?.dismiss();
     } catch {
+      if (!currentLocation) {
+        setLocationLoadState('error');
+      }
       Alert.alert(
         '위치 조회 실패',
         '현재 위치를 가져오지 못했습니다. 위치 설정을 확인하고 다시 시도해 주세요.',
@@ -483,15 +512,20 @@ export const KakaoMapScreen = ({
             selectedMedicalFilter={selectedMedicalFilter}
           />
           <MedicalPlacesSheet
-            aedErrorMessage={aedErrorMessage}
-            hospitalErrorMessage={hospitalErrorMessage}
-            isAedLoading={isAedLoading}
-            isHospitalLoading={isHospitalLoading}
+            aedStatus={{
+              errorMessage: aedErrorMessage,
+              isLoading: isAedLoading,
+              onRetry: retryAeds,
+            }}
+            hospitalStatus={{
+              errorMessage: hospitalErrorMessage,
+              isLoading: isHospitalLoading,
+              onRetry: retryHospitals,
+            }}
             hasLoaded={hasAedLoaded && hasHospitalLoaded}
             hasSearchConditions={!!searchQuery.trim() || selectedMedicalFilter !== 'all'}
-            isLocatingPlaces={!currentLocation}
-            onRetryAeds={retryAeds}
-            onRetryHospitals={retryHospitals}
+            isAuthRedirecting={isAuthRedirecting}
+            locationLoadState={locationLoadState}
             floatingControl={
               <Pressable
                 accessibilityLabel="현재 위치로 이동"
