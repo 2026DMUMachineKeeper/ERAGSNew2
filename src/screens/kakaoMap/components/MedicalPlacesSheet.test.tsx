@@ -30,6 +30,43 @@ const gesture = (dy: number): PanResponderGestureState => ({
 describe('MedicalPlacesSheet 스냅', () => {
   afterEach(() => jest.restoreAllMocks());
 
+  it('로딩, 빈 결과, 검색 결과 없음과 개별 조회 오류를 구분해 표시한다', () => {
+    const onRetryHospitals = jest.fn();
+    const props = {
+      locations: [], mapHeight: 800, onDirectionsPress: jest.fn(),
+      onLocationPress: jest.fn(), searchQuery: '',
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    const messages = (): string[] => renderer.root.findAllByType(Text)
+      .map(node => React.Children.toArray(node.props.children).join(''));
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet {...props} hasLoaded={false} isAedLoading />,
+      );
+    });
+    expect(messages()).toContain('주변 장소 조회 중');
+    expect(messages()).toContain('주변 병원·AED를 불러오는 중입니다.');
+    expect(messages()).not.toContain('주변 병원·AED가 없습니다.');
+
+    act(() => renderer.update(<MedicalPlacesSheet {...props} />));
+    expect(messages()).toContain('주변 병원·AED가 없습니다.');
+
+    act(() => renderer.update(
+      <MedicalPlacesSheet {...props} hasSearchConditions searchQuery="없는 장소" />,
+    ));
+    expect(messages()).toContain('검색 조건에 맞는 결과가 없습니다.');
+
+    act(() => renderer.update(
+      <MedicalPlacesSheet {...props} hospitalErrorMessage="네트워크 오류" 
+        onRetryHospitals={onRetryHospitals} />,
+    ));
+    expect(messages()).toContain('병원: 네트워크 오류');
+    expect(messages()).not.toContain('주변 병원·AED가 없습니다.');
+    act(() => renderer.root.findByProps({ accessibilityLabel: '병원 다시 시도' }).props.onPress());
+    expect(onRetryHospitals).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
   it('안드로이드 목록은 기본 스크롤을 허용하고 AED 선택을 유지한다', () => {
     jest.replaceProperty(Platform, 'OS', 'android');
     const onLocationPress = jest.fn();

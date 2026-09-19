@@ -18,11 +18,20 @@ export type MedicalPlacesSheetRef = {
 type MedicalPlacesSheetStage = 'collapsed' | 'middle' | 'expanded';
 
 type MedicalPlacesSheetProps = {
+  aedErrorMessage?: string | null;
   floatingControl?: React.ReactNode;
+  hasLoaded?: boolean;
+  hasSearchConditions?: boolean;
+  hospitalErrorMessage?: string | null;
+  isAedLoading?: boolean;
+  isHospitalLoading?: boolean;
+  isLocatingPlaces?: boolean;
   locations: readonly MedicalLocationListItem[];
   mapHeight: number;
   onDirectionsPress: (location: MedicalLocationListItem) => void;
   onLocationPress: (location: MedicalLocationListItem) => void;
+  onRetryAeds?: () => void;
+  onRetryHospitals?: () => void;
   searchQuery: string;
   selectedLocation?: MedicalLocationListItem | null;
 };
@@ -79,11 +88,20 @@ export const MedicalPlacesSheet = React.forwardRef<
 >(
   (
     {
+      aedErrorMessage,
       floatingControl,
+      hasLoaded = true,
+      hasSearchConditions = false,
+      hospitalErrorMessage,
+      isAedLoading = false,
+      isHospitalLoading = false,
+      isLocatingPlaces = false,
       locations,
       mapHeight,
       onDirectionsPress,
       onLocationPress,
+      onRetryAeds,
+      onRetryHospitals,
       searchQuery,
       selectedLocation,
     },
@@ -277,7 +295,9 @@ export const MedicalPlacesSheet = React.forwardRef<
               <View className="flex-row items-start justify-between px-1">
                 <View>
                   <Text className="text-[18px] font-suitBold text-black">
-                    {searchQuery
+                    {!hasLoaded && locations.length === 0
+                      ? '주변 장소 조회 중'
+                      : searchQuery
                       ? `검색 결과 ${locations.length}곳`
                       : `가까운 장소 ${locations.length}곳`}
                   </Text>
@@ -305,6 +325,31 @@ export const MedicalPlacesSheet = React.forwardRef<
                 showsVerticalScrollIndicator={false}
                 style={placesSheetScrollStyle}
               >
+                {isLocatingPlaces || isAedLoading || isHospitalLoading ? (
+                  <View className="mb-3 flex-row items-center">
+                    <Text className="text-coment text-textDim">
+                      {isLocatingPlaces ? '현재 위치를 확인하는 중입니다.' : '주변 병원·AED를 불러오는 중입니다.'}
+                    </Text>
+                  </View>
+                ) : null}
+                {aedErrorMessage ? (
+                  <View className="mb-3 rounded-xl bg-white p-3">
+                    <Text className="text-coment text-textDim">AED: {aedErrorMessage}</Text>
+                    <Pressable accessibilityLabel="AED 다시 시도" accessibilityRole="button"
+                      disabled={isAedLoading} onPress={onRetryAeds}>
+                      <Text className="mt-2 font-suitBold text-[#9E2B3F]">다시 시도</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {hospitalErrorMessage ? (
+                  <View className="mb-3 rounded-xl bg-white p-3">
+                    <Text className="text-coment text-textDim">병원: {hospitalErrorMessage}</Text>
+                    <Pressable accessibilityLabel="병원 다시 시도" accessibilityRole="button"
+                      disabled={isHospitalLoading} onPress={onRetryHospitals}>
+                      <Text className="mt-2 font-suitBold text-[#9E2B3F]">다시 시도</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 {locations.length > 0 ? (
                   locations.map(location => (
                     <MedicalPlaceCard
@@ -315,16 +360,17 @@ export const MedicalPlacesSheet = React.forwardRef<
                       onPress={() => onLocationPress(location)}
                     />
                   ))
-                ) : (
+                ) : hasLoaded && !isAedLoading && !isHospitalLoading &&
+                  !aedErrorMessage && !hospitalErrorMessage ? (
                   <View className="items-center justify-center py-8">
                     <Text className="text-body font-suitBold text-black">
-                      검색 결과가 없습니다.
+                      {hasSearchConditions ? '검색 조건에 맞는 결과가 없습니다.' : '주변 병원·AED가 없습니다.'}
                     </Text>
                     <Text className="mt-1 text-coment text-textDim">
-                      다른 장소명이나 주소로 검색해 보세요.
+                      {hasSearchConditions ? '다른 검색어나 필터를 선택해 보세요.' : '다른 위치에서 다시 확인해 보세요.'}
                     </Text>
                   </View>
-                )}
+                ) : null}
                 <View className="h-24" />
               </ScrollView>
             </>
