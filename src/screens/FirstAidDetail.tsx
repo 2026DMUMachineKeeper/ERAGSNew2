@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { QuestionAnswers } from '@/types';
@@ -25,6 +26,7 @@ type FirstAidDetailProps = NativeStackScreenProps<RootStackParamList, 'FirstAidD
 
 export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): React.JSX.Element => {
   const startGuide = useEmergencyGuideStore(state => state.startGuide);
+  const isFocused = useIsFocused();
   const category = FIRST_AID_CATEGORIES.find(item => item.id === route.params?.mainId);
   const questions = React.useMemo(
     () => (category ? getEmergencyQuestions(category.id) : []),
@@ -43,6 +45,52 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
     },
   );
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const activeSubmissionRef = React.useRef<AbortController | null>(null);
+  const isFocusedRef = React.useRef(isFocused);
+  const isMountedRef = React.useRef(true);
+  const isSubmittingRef = React.useRef(false);
+
+  const cancelActiveSubmission = React.useCallback((): void => {
+    const controller = activeSubmissionRef.current;
+
+    if (!controller) {
+      return;
+    }
+
+    activeSubmissionRef.current = null;
+    controller.abort();
+    isSubmittingRef.current = false;
+
+    if (isMountedRef.current) {
+      setIsSubmitting(false);
+    }
+  }, []);
+
+  React.useEffect((): void => {
+    isFocusedRef.current = isFocused;
+
+    if (!isFocused) {
+      cancelActiveSubmission();
+    }
+  }, [cancelActiveSubmission, isFocused]);
+
+  React.useEffect(
+    (): (() => void) => {
+      isMountedRef.current = true;
+
+      return (): void => {
+        isMountedRef.current = false;
+        cancelActiveSubmission();
+      };
+    },
+    [cancelActiveSubmission],
+  );
+
+  React.useEffect(
+    (): (() => void) =>
+      navigation.addListener('beforeRemove', cancelActiveSubmission),
+    [cancelActiveSubmission, navigation],
+  );
 
   if (!category) {
     return (
@@ -79,6 +127,8 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
   };
 
   const handleBackPress = (): void => {
+    cancelActiveSubmission();
+
     if (currentQuestionIndex === 0) {
       navigation.goBack();
       return;
@@ -93,6 +143,13 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
       return;
     }
 
+    if (isSubmittingRef.current) {
+      return;
+    }
+
+    const requestController = new AbortController();
+    activeSubmissionRef.current = requestController;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -110,15 +167,40 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
       console.warn('[EmergencyGuide API][Questionnaire]', questionnaire);
       formData.append('questionnaire', questionnaire);
 
+      const guide = await createEmergencyGuide(formData, requestController.signal);
+      if (
+        activeSubmissionRef.current !== requestController ||
+        requestController.signal.aborted ||
+        !isMountedRef.current ||
+        !isFocusedRef.current
+      ) {
+        return;
+      }
+
       startGuide({
-        guide: await createEmergencyGuide(formData),
+        guide,
         mainLabel: category.label,
         source: 'manual',
       });
       navigation.replace('EmergencyGuide');
     } catch (error) {
+      if (
+        activeSubmissionRef.current !== requestController ||
+        requestController.signal.aborted ||
+        !isMountedRef.current ||
+        !isFocusedRef.current
+      ) {
+        return;
+      }
+
       Alert.alert('응급 가이드 생성 실패', getEmergencyGuideErrorMessage(error));
     } finally {
+      if (activeSubmissionRef.current !== requestController) {
+        return;
+      }
+
+      activeSubmissionRef.current = null;
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

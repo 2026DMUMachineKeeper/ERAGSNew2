@@ -55,6 +55,32 @@ describe('emergencyGuide.service', () => {
     ).toBe('test-api-base-url/images/bleed_severe_b_press.png');
   });
 
+  it('호출자 취소 신호로 생성 요청을 취소한다', async (): Promise<void> => {
+    let requestSignal: AbortSignal | undefined;
+    fetchMock.mockImplementation(
+      (_input: RequestInfo, init?: RequestInit): Promise<Response> =>
+        new Promise((_, reject): void => {
+          requestSignal = init?.signal ?? undefined;
+          requestSignal?.addEventListener(
+            'abort',
+            (): void => {
+              const error = new Error('The operation was aborted.');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const controller = new AbortController();
+    const request = createEmergencyGuide(new FormData(), controller.signal);
+
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it('생성 응답의 data.sessionId로 body 없이 재시도한다', async (): Promise<void> => {
     const sessionId = 'emg-session/001';
     fetchMock
