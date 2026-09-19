@@ -30,6 +30,76 @@ const gesture = (dy: number): PanResponderGestureState => ({
 describe('MedicalPlacesSheet 스냅', () => {
   afterEach(() => jest.restoreAllMocks());
 
+  it('로딩, 빈 결과, 검색 결과 없음과 개별 조회 오류를 구분해 표시한다', () => {
+    const onRetryHospitals = jest.fn();
+    const props = {
+      locations: [], mapHeight: 800, onDirectionsPress: jest.fn(),
+      onLocationPress: jest.fn(), searchQuery: '',
+    };
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    const messages = (): string[] => renderer.root.findAllByType(Text)
+      .map(node => React.Children.toArray(node.props.children).join(''));
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet {...props} hasLoaded={false}
+          aedStatus={{ isLoading: true }} />,
+      );
+    });
+    expect(messages()).toContain('주변 장소 조회 중');
+    expect(messages()).toContain('주변 병원·AED를 불러오는 중입니다.');
+    expect(messages()).not.toContain('주변 병원·AED가 없습니다.');
+
+    act(() => renderer.update(<MedicalPlacesSheet {...props} />));
+    expect(messages()).toContain('주변 병원·AED가 없습니다.');
+
+    act(() => renderer.update(
+      <MedicalPlacesSheet {...props} hasSearchConditions searchQuery="없는 장소" />,
+    ));
+    expect(messages()).toContain('검색 조건에 맞는 결과가 없습니다.');
+
+    act(() => renderer.update(
+      <MedicalPlacesSheet {...props}
+        hospitalStatus={{
+          errorMessage: '네트워크 오류',
+          isLoading: false,
+          onRetry: onRetryHospitals,
+        }} />,
+    ));
+    expect(messages()).toContain('병원: 네트워크 오류');
+    expect(messages()).toContain('주변 장소 조회 실패');
+    expect(messages()).not.toContain('주변 병원·AED가 없습니다.');
+    act(() => renderer.root.findByProps({ accessibilityLabel: '병원 다시 시도' }).props.onPress());
+    expect(onRetryHospitals).toHaveBeenCalledTimes(1);
+
+    act(() => renderer.update(
+      <MedicalPlacesSheet {...props} isAuthRedirecting />,
+    ));
+    expect(messages()).toContain('로그인 화면으로 이동 중');
+    expect(messages()).toContain('로그인 화면으로 이동하고 있습니다.');
+    expect(messages()).not.toContain('주변 병원·AED가 없습니다.');
+    act(() => renderer.unmount());
+  });
+
+  it.each([
+    ['permission-denied', '주변 장소를 보려면 위치 권한이 필요합니다.'],
+    ['error', '현재 위치를 확인하지 못했습니다. 위치 버튼을 눌러 다시 시도해 주세요.'],
+  ] as const)('%s 위치 상태를 정확히 안내한다', (locationLoadState, message) => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet locations={[]} mapHeight={800}
+          locationLoadState={locationLoadState}
+          onDirectionsPress={jest.fn()} onLocationPress={jest.fn()}
+          searchQuery="" />,
+      );
+    });
+    const messages = renderer.root.findAllByType(Text)
+      .map(node => React.Children.toArray(node.props.children).join(''));
+    expect(messages).toContain(message);
+    expect(messages).not.toContain('주변 병원·AED가 없습니다.');
+    act(() => renderer.unmount());
+  });
+
   it('안드로이드 목록은 기본 스크롤을 허용하고 AED 선택을 유지한다', () => {
     jest.replaceProperty(Platform, 'OS', 'android');
     const onLocationPress = jest.fn();

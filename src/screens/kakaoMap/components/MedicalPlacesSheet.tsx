@@ -16,9 +16,26 @@ export type MedicalPlacesSheetRef = {
 };
 
 type MedicalPlacesSheetStage = 'collapsed' | 'middle' | 'expanded';
+type LocationLoadState =
+  | 'loading'
+  | 'ready'
+  | 'permission-denied'
+  | 'error';
+
+type MedicalPlaceRequestStatus = {
+  errorMessage?: string | null;
+  isLoading: boolean;
+  onRetry?: () => void;
+};
 
 type MedicalPlacesSheetProps = {
+  aedStatus?: MedicalPlaceRequestStatus;
   floatingControl?: React.ReactNode;
+  hasLoaded?: boolean;
+  hasSearchConditions?: boolean;
+  hospitalStatus?: MedicalPlaceRequestStatus;
+  isAuthRedirecting?: boolean;
+  locationLoadState?: LocationLoadState;
   locations: readonly MedicalLocationListItem[];
   mapHeight: number;
   onDirectionsPress: (location: MedicalLocationListItem) => void;
@@ -30,6 +47,7 @@ type MedicalPlacesSheetProps = {
 const SHEET_MIDDLE_TRANSLATE_RATIO = 0.5;
 const DISMISSED_SHEET_VISIBLE_HEIGHT = 24;
 const SHEET_CONTENT_HEADER_HEIGHT = 92;
+const IDLE_REQUEST_STATUS: MedicalPlaceRequestStatus = { isLoading: false };
 
 const getDismissedTranslateY = (mapHeight: number): number =>
   Math.max(0, mapHeight - DISMISSED_SHEET_VISIBLE_HEIGHT);
@@ -79,18 +97,40 @@ export const MedicalPlacesSheet = React.forwardRef<
 >(
   (
     {
+      aedStatus = IDLE_REQUEST_STATUS,
       floatingControl,
+      hasLoaded = true,
+      hasSearchConditions = false,
+      hospitalStatus = IDLE_REQUEST_STATUS,
+      isAuthRedirecting = false,
+      locationLoadState = 'ready',
       locations,
       mapHeight,
       onDirectionsPress,
       onLocationPress,
-      searchQuery,
       selectedLocation,
     },
     ref,
   ): React.JSX.Element => {
     const [sheetStage, setSheetStage] =
       React.useState<MedicalPlacesSheetStage>('middle');
+    const hasRequestError =
+      !!aedStatus.errorMessage || !!hospitalStatus.errorMessage;
+    const isLoadingPlaces =
+      aedStatus.isLoading || hospitalStatus.isLoading;
+    const title = isAuthRedirecting
+      ? '로그인 화면으로 이동 중'
+      : locationLoadState !== 'ready'
+      ? locationLoadState === 'loading'
+        ? '주변 장소 조회 중'
+        : '주변 장소 안내'
+      : isLoadingPlaces && locations.length === 0
+      ? '주변 장소 조회 중'
+      : hasRequestError && locations.length === 0
+      ? '주변 장소 조회 실패'
+      : hasSearchConditions
+      ? `검색 결과 ${locations.length}곳`
+      : `가까운 장소 ${locations.length}곳`;
     const placesSheetTranslateY = React.useRef(new Animated.Value(0)).current;
     const placesSheetTranslateYValue = React.useRef(0);
     const hasInitializedPlacesSheet = React.useRef(false);
@@ -277,12 +317,12 @@ export const MedicalPlacesSheet = React.forwardRef<
               <View className="flex-row items-start justify-between px-1">
                 <View>
                   <Text className="text-[18px] font-suitBold text-black">
-                    {searchQuery
-                      ? `검색 결과 ${locations.length}곳`
-                      : `가까운 장소 ${locations.length}곳`}
+                    {title}
                   </Text>
                   <Text className="mt-1 text-[13px] font-suitRegular text-textDim">
-                    현재 위치 기준 가까운 순서예요.
+                    {locationLoadState === 'ready'
+                      ? '현재 위치 기준 가까운 순서예요.'
+                      : '위치 상태를 확인해 주세요.'}
                   </Text>
                 </View>
                 <Pressable
@@ -305,7 +345,48 @@ export const MedicalPlacesSheet = React.forwardRef<
                 showsVerticalScrollIndicator={false}
                 style={placesSheetScrollStyle}
               >
-                {locations.length > 0 ? (
+                {isAuthRedirecting ? (
+                  <View className="mb-3 flex-row items-center">
+                    <Text className="text-coment text-textDim">
+                      로그인 화면으로 이동하고 있습니다.
+                    </Text>
+                  </View>
+                ) : locationLoadState !== 'ready' ? (
+                  <View className="mb-3 flex-row items-center">
+                    <Text className="text-coment text-textDim">
+                      {locationLoadState === 'loading'
+                        ? '현재 위치를 확인하는 중입니다.'
+                        : locationLoadState === 'permission-denied'
+                        ? '주변 장소를 보려면 위치 권한이 필요합니다.'
+                        : '현재 위치를 확인하지 못했습니다. 위치 버튼을 눌러 다시 시도해 주세요.'}
+                    </Text>
+                  </View>
+                ) : isLoadingPlaces ? (
+                  <View className="mb-3 flex-row items-center">
+                    <Text className="text-coment text-textDim">
+                      주변 병원·AED를 불러오는 중입니다.
+                    </Text>
+                  </View>
+                ) : null}
+                {!isAuthRedirecting && aedStatus.errorMessage ? (
+                  <View className="mb-3 rounded-xl bg-white p-3">
+                    <Text className="text-coment text-textDim">AED: {aedStatus.errorMessage}</Text>
+                    <Pressable accessibilityLabel="AED 다시 시도" accessibilityRole="button"
+                      disabled={aedStatus.isLoading} onPress={aedStatus.onRetry}>
+                      <Text className="mt-2 font-suitBold text-[#9E2B3F]">다시 시도</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {!isAuthRedirecting && hospitalStatus.errorMessage ? (
+                  <View className="mb-3 rounded-xl bg-white p-3">
+                    <Text className="text-coment text-textDim">병원: {hospitalStatus.errorMessage}</Text>
+                    <Pressable accessibilityLabel="병원 다시 시도" accessibilityRole="button"
+                      disabled={hospitalStatus.isLoading} onPress={hospitalStatus.onRetry}>
+                      <Text className="mt-2 font-suitBold text-[#9E2B3F]">다시 시도</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {!isAuthRedirecting && locations.length > 0 ? (
                   locations.map(location => (
                     <MedicalPlaceCard
                       key={location.id}
@@ -315,16 +396,17 @@ export const MedicalPlacesSheet = React.forwardRef<
                       onPress={() => onLocationPress(location)}
                     />
                   ))
-                ) : (
+                ) : !isAuthRedirecting && locationLoadState === 'ready' &&
+                  hasLoaded && !isLoadingPlaces && !hasRequestError ? (
                   <View className="items-center justify-center py-8">
                     <Text className="text-body font-suitBold text-black">
-                      검색 결과가 없습니다.
+                      {hasSearchConditions ? '검색 조건에 맞는 결과가 없습니다.' : '주변 병원·AED가 없습니다.'}
                     </Text>
                     <Text className="mt-1 text-coment text-textDim">
-                      다른 장소명이나 주소로 검색해 보세요.
+                      {hasSearchConditions ? '다른 검색어나 필터를 선택해 보세요.' : '다른 위치에서 다시 확인해 보세요.'}
                     </Text>
                   </View>
-                )}
+                ) : null}
                 <View className="h-24" />
               </ScrollView>
             </>
