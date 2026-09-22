@@ -6,11 +6,14 @@ import {
   Platform,
   ScrollView,
   Text,
+  View,
   type GestureResponderEvent,
   type PanResponderGestureState,
 } from 'react-native';
 
 import { MedicalPlacesSheet } from '@/screens/kakaoMap/components/MedicalPlacesSheet';
+import { Gesture, GestureHandlerRootView, State, type PanGesture } from 'react-native-gesture-handler';
+import { fireGestureHandler } from 'react-native-gesture-handler/jest-utils';
 
 const event = {} as GestureResponderEvent;
 const gesture = (dy: number): PanResponderGestureState => ({
@@ -29,6 +32,24 @@ const gesture = (dy: number): PanResponderGestureState => ({
 
 describe('MedicalPlacesSheet 스냅', () => {
   afterEach(() => jest.restoreAllMocks());
+
+  it('지도 위의 제스처 영역은 움직이는 시트 안에만 두고 위치 버튼은 밖에 둔다', () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet locations={[]} mapHeight={800}
+          floatingControl={<View testID="location-control" />}
+          onDirectionsPress={jest.fn()} onLocationPress={jest.fn()} searchQuery="" />,
+      );
+    });
+    const gestureRoot = renderer.root.findByType(GestureHandlerRootView);
+    expect(renderer.root.findAllByType(Animated.View).some(panel =>
+      panel.findAllByType(GestureHandlerRootView).includes(gestureRoot),
+    )).toBe(true);
+    expect(gestureRoot.findAllByProps({ testID: 'location-control' })).toHaveLength(0);
+    expect(gestureRoot.findAllByType(ScrollView)).toHaveLength(1);
+    act(() => renderer.unmount());
+  });
 
   it('로딩, 빈 결과, 검색 결과 없음과 개별 조회 오류를 구분해 표시한다', () => {
     const onRetryHospitals = jest.fn();
@@ -125,7 +146,7 @@ describe('MedicalPlacesSheet 스냅', () => {
     });
     const list = renderer!.root.findByType(ScrollView);
     expect(list.props.scrollEnabled).toBe(true);
-    expect(list.props.style).toContainEqual({ flexGrow: 0, height: 308 });
+    expect(list.props.style).toContainEqual({ flexGrow: 0, height: 292 });
     expect(list.props.onMoveShouldSetResponderCapture).toBeUndefined();
     expect(list.props.onResponderMove).toBeUndefined();
     act(() => {
@@ -156,7 +177,7 @@ describe('MedicalPlacesSheet 스냅', () => {
     });
     const handlers = responder.mock.calls[0][0];
 
-    for (const dy of [-80, 80, 7]) {
+    for (const dy of [-40, 40, 7]) {
       act(() => {
         handlers.onPanResponderGrant?.(event, gesture(0));
         handlers.onPanResponderMove?.(event, gesture(dy));
@@ -164,11 +185,38 @@ describe('MedicalPlacesSheet 스냅', () => {
       });
       expect(spring).toHaveBeenLastCalledWith(
         expect.any(Animated.Value),
-        expect.objectContaining({ toValue: 400, useNativeDriver: false }),
+        expect.objectContaining({ toValue: 400, useNativeDriver: true }),
       );
     }
     expect(spring).toHaveBeenCalledTimes(3);
     act(() => renderer!.unmount());
+  });
+
+  it.each([
+    [-30, -0.5, 0],
+    [30, 0.5, 760],
+    [-80, 0, 0],
+    [80, 0, 760],
+  ])('손잡이를 %s만큼 끌고 속도 %s로 놓으면 인접 단계로 이동한다', (dy, vy, targetY) => {
+    const responder = jest.spyOn(PanResponder, 'create');
+    const spring = jest.spyOn(Animated, 'spring');
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet locations={[]} mapHeight={800}
+          onDirectionsPress={jest.fn()} onLocationPress={jest.fn()} searchQuery="" />,
+      );
+    });
+    const handlers = responder.mock.calls[0][0];
+    act(() => {
+      handlers.onPanResponderGrant?.(event, gesture(0));
+      handlers.onPanResponderMove?.(event, gesture(dy));
+      handlers.onPanResponderRelease?.(event, { ...gesture(dy), vy });
+    });
+    expect(spring).toHaveBeenLastCalledWith(
+      expect.any(Animated.Value), expect.objectContaining({ toValue: targetY, useNativeDriver: true }),
+    );
+    act(() => renderer.unmount());
   });
 
   it('제스처가 취소되어도 중간 위치로 복귀한다', () => {
@@ -233,6 +281,99 @@ describe('MedicalPlacesSheet 스냅', () => {
       expect.objectContaining({ toValue: 400 }),
     );
     act(() => renderer!.unmount());
+  });
+
+  it.each([
+    ['목록 맨 위에서 아래로 끌면 시트를 내린다', 0, 300, 760],
+    ['목록 맨 아래에서 위로 끌면 시트를 올린다', 708, -300, 0],
+    ['목록 끝에서 짧게 아래로 끌어도 시트를 내린다', 0, 90, 760],
+    ['목록 끝에서 짧게 위로 끌어도 시트를 올린다', 708, -90, 0],
+    ['목록 중간에서 아래로 끌면 목록만 스크롤한다', 300, 300, null],
+    ['목록 중간에서 위로 끌면 목록만 스크롤한다', 300, -300, null],
+    ['목록 맨 위에서 위로 끌면 목록만 스크롤한다', 0, -300, null],
+    ['목록 맨 아래에서 아래로 끌면 목록만 스크롤한다', 708, 300, null],
+  ] as const)('%s', (_label, offset, translationY, expectedY) => {
+    const panFactory = jest.spyOn(Gesture, 'Pan');
+    const spring = jest.spyOn(Animated, 'spring');
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet locations={[]} mapHeight={800}
+          onDirectionsPress={jest.fn()} onLocationPress={jest.fn()} searchQuery="" />,
+      );
+    });
+    const pan = panFactory.mock.results[0].value as PanGesture;
+    act(() => {
+      renderer.root.findByType(ScrollView).props.onScroll({ nativeEvent: {
+        contentOffset: { y: offset }, contentSize: { height: 1000 },
+        layoutMeasurement: { height: 292 },
+      } });
+      fireGestureHandler<PanGesture>(pan, [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: Math.sign(translationY) * 10 },
+        { state: State.ACTIVE, translationY, velocityY: 0 },
+        { state: State.END, translationY, velocityY: 0 },
+      ]);
+    });
+    if (expectedY === null) {
+      expect(spring).not.toHaveBeenCalled();
+    } else {
+      expect(spring).toHaveBeenLastCalledWith(
+        expect.any(Animated.Value), expect.objectContaining({ toValue: expectedY }),
+      );
+    }
+    if (expectedY === 760) {
+      expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    } else {
+      expect(renderer.root.findByType(ScrollView).props.scrollEnabled).toBe(true);
+    }
+    act(() => renderer.unmount());
+  });
+
+  it.each([State.END, State.CANCELLED])('스크롤 도중 끝에 닿아도 시트가 튀지 않고 종료(%s) 후 스크롤을 복구한다', endState => {
+    const panFactory = jest.spyOn(Gesture, 'Pan');
+    const setValue = jest.spyOn(Animated.Value.prototype, 'setValue');
+    const spring = jest.spyOn(Animated, 'spring');
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet locations={[]} mapHeight={800}
+          onDirectionsPress={jest.fn()} onLocationPress={jest.fn()} searchQuery="" />,
+      );
+    });
+    const pan = panFactory.mock.results[0].value as PanGesture;
+    const handleScroll = (offset: number): void => {
+      renderer.root.findByType(ScrollView).props.onScroll({ nativeEvent: {
+        contentOffset: { y: offset }, contentSize: { height: 1000 },
+        layoutMeasurement: { height: 292 },
+      } });
+    };
+    const handleUpdate = pan.handlers.onUpdate;
+    pan.handlers.onUpdate = update => {
+      if (update.translationY === -100) {
+        handleScroll(708);
+      }
+      handleUpdate?.(update);
+    };
+    act(() => {
+      handleScroll(400);
+      fireGestureHandler<PanGesture>(pan, [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: -50 },
+        { state: State.ACTIVE, translationY: -100 },
+        { state: State.ACTIVE, translationY: -140 },
+        { state: endState, translationY: -140, velocityY: 0 },
+      ]);
+    });
+    expect(setValue).toHaveBeenCalledWith(360);
+    expect(setValue).not.toHaveBeenCalledWith(260);
+    expect(spring).toHaveBeenLastCalledWith(
+      expect.any(Animated.Value), expect.objectContaining({ toValue: 400 }),
+    );
+    expect(renderer.root.findByType(ScrollView).props.scrollEnabled).toBe(true);
+    act(() => renderer.unmount());
   });
 
   it('선택한 AED의 상세 정보는 해당 항목 바로 아래에 표시한다', () => {

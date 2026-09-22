@@ -4,6 +4,29 @@ import type { MedicalMapLocation } from './medicalLocations';
 export type MapCoordinates = { latitude: number; longitude: number };
 export type MarkerAssetUris = { aed: string; hospital: string };
 
+const createMarkerSvgUri = (
+  fill: string,
+  stroke: string,
+  symbol: string,
+): string => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+    <path d="M20 39C16 34 3 27 3 18a17 17 0 1 1 34 0c0 9-13 16-17 21Z"
+      fill="${fill}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>
+    ${symbol}
+  </svg>`,
+)}`;
+
+export const MEDICAL_MARKER_ASSET_URIS: MarkerAssetUris = {
+  aed: createMarkerSvgUri(
+    '#15803D', '#FFFFFF',
+    '<text x="20" y="22" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF">AED</text>',
+  ),
+  hospital: createMarkerSvgUri(
+    '#FFFFFF', '#FF3A3A',
+    '<path d="M17 9h6v6h6v6h-6v6h-6v-6h-6v-6h6Z" fill="#FF3A3A"/>',
+  ),
+};
+
 const KAKAO_MAP_CENTER = {
   latitude: 37.4999957879,
   longitude: 126.8681696567,
