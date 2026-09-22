@@ -46,7 +46,11 @@ export const MedicalPlaceCard = ({
   onDirectionsPress,
   onPress,
 }: MedicalPlaceCardProps): React.JSX.Element => (
-  <View className="mb-2 rounded-2xl border border-memoLine bg-white px-3 py-3 shadow-sm">
+  <View className={`mb-3 rounded-2xl border bg-white p-4 ${
+    isSelected
+      ? location.type === 'hospital' ? 'border-red' : 'border-green-700'
+      : 'border-memoLine'
+  }`}>
     <Pressable
       accessibilityLabel={`${location.name} 위치 보기`}
       accessibilityRole="button"
@@ -56,25 +60,14 @@ export const MedicalPlaceCard = ({
       className="min-h-[68px] flex-row items-center"
       onPress={onPress}
     >
-      <View className="relative h-14 w-14 items-center justify-center rounded-2xl bg-[#FDE9EC]">
-        <Text className="text-[17px] font-suitBold text-[#AF3145]">
+      <View className={`h-12 w-12 items-center justify-center rounded-xl ${location.type === 'aed' ? 'bg-green-700' : 'border border-red/20 bg-white'}`}>
+        <Text className={`text-[14px] font-suitBold ${location.type === 'aed' ? 'text-white' : 'text-danger'}`}>
           {location.type === 'aed' ? 'AED' : '병원'}
         </Text>
-        <View
-          className={`absolute -right-1 -top-1 items-center justify-center rounded-full bg-[#BC344A] ${
-            isSelected ? 'min-w-[22px] px-1 py-0.5' : 'h-3 w-3'
-          }`}
-        >
-          {isSelected ? (
-            <Text className="text-[8px] font-suitBold text-white">
-              {location.typeLabel}
-            </Text>
-          ) : null}
-        </View>
       </View>
       <View className="ml-3 flex-1">
         <Text
-          className="text-body font-suitBold text-black"
+          className="text-body font-suitBold text-memoText"
           numberOfLines={isSelected ? 2 : 1}
         >
           {location.name}
@@ -83,45 +76,41 @@ export const MedicalPlaceCard = ({
           {location.address}
         </Text>
       </View>
-      <View
-        className={`ml-2 self-start ${
-          isSelected ? 'pt-1' : 'rounded-full bg-[#FDE9EC] px-2 py-1'
-        }`}
-      >
-        <Text
-          className={`font-suitBold ${
-            isSelected ? 'text-coment text-black' : 'text-[11px] text-[#AF3145]'
-          }`}
-        >
-          {isSelected ? '' : `${location.typeLabel} · `}
+      <View className="ml-2 self-start pt-1">
+        <Text className="text-[14px] font-suitBold text-memoText">
           {formatDistance(location.distanceInMeters)}
         </Text>
+        {isSelected ? (
+          <Text className={`mt-1 text-coment font-suitBold ${location.type === 'aed' ? 'text-green-700' : 'text-danger'}`}>
+            선택됨
+          </Text>
+        ) : null}
       </View>
     </Pressable>
     {isSelected ? (
       <View className="mt-3 border-t border-memoLine pt-3">
         {location.type === 'hospital' && location.hospitalDetails ? (
           <>
-            <Text className="mb-2 text-coment font-suitBold text-black">
+            <Text className="mb-2 text-coment font-suitBold text-memoText">
               {location.hospitalDetails.isRealTimeAvailable
                 ? '실시간 병상 정보'
                 : '실시간 병상 정보 미제공'}
             </Text>
             <View className="flex-row py-1.5">
               <Text className="w-24 text-coment font-suitMedium text-gray">가용 병상</Text>
-              <Text className="flex-1 text-coment font-suitMedium text-black">
+              <Text className="flex-1 text-coment font-suitMedium text-memoText">
                 {location.hospitalDetails.availableBeds ?? '정보 없음'}
               </Text>
             </View>
             <View className="flex-row py-1.5">
               <Text className="w-24 text-coment font-suitMedium text-gray">수술실 병상</Text>
-              <Text className="flex-1 text-coment font-suitMedium text-black">
+              <Text className="flex-1 text-coment font-suitMedium text-memoText">
                 {location.hospitalDetails.operatingRoomBeds ?? '정보 없음'}
               </Text>
             </View>
             <View className="flex-row py-1.5">
               <Text className="w-24 text-coment font-suitMedium text-gray">CT</Text>
-              <Text className="flex-1 text-coment font-suitMedium text-black">
+              <Text className="flex-1 text-coment font-suitMedium text-memoText">
                 {formatEquipmentAvailability(
                   location.hospitalDetails.isRealTimeAvailable,
                   location.hospitalDetails.ctAvailable,
@@ -130,7 +119,7 @@ export const MedicalPlaceCard = ({
             </View>
             <View className="flex-row py-1.5">
               <Text className="w-24 text-coment font-suitMedium text-gray">MRI</Text>
-              <Text className="flex-1 text-coment font-suitMedium text-black">
+              <Text className="flex-1 text-coment font-suitMedium text-memoText">
                 {formatEquipmentAvailability(
                   location.hospitalDetails.isRealTimeAvailable,
                   location.hospitalDetails.mriAvailable,
@@ -144,7 +133,7 @@ export const MedicalPlaceCard = ({
             <Text className="w-24 text-coment font-suitMedium text-gray">
               설치 위치
             </Text>
-            <Text className="flex-1 text-coment font-suitMedium leading-5 text-black">
+            <Text className="flex-1 text-coment font-suitMedium leading-5 text-memoText">
               {location.detailPlaces.join(' · ')}
             </Text>
           </View>
@@ -152,10 +141,10 @@ export const MedicalPlaceCard = ({
         <Pressable
           accessibilityLabel={`${location.name} 길찾기`}
           accessibilityRole="button"
-          className="mt-3 items-center rounded-xl bg-[#FDE9EC] py-2.5"
+          className="mt-3 min-h-[48px] items-center justify-center rounded-xl bg-[#FEE500] py-3 active:bg-[#F2D900]"
           onPress={onDirectionsPress}
         >
-          <Text className="text-coment font-suitBold text-[#AF3145]">
+          <Text className="text-[14px] font-suitBold text-memoText">
             카카오맵 길찾기 ›
           </Text>
         </Pressable>
