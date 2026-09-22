@@ -2,7 +2,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Linking,
   type LayoutChangeEvent,
   Pressable,
@@ -23,8 +22,6 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import aedMapMarker from '@/assets/icons/markers/aed-map-marker.png';
-import hospitalMapMarker from '@/assets/icons/markers/hospital-map-marker.png';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { requestLocationPermission } from '@/services';
 import { getApiErrorUserMessage } from '@/services/apiError.service';
@@ -45,6 +42,7 @@ import {
   createKakaoMapHtml,
   createMedicalFilterScript,
   createRequestMedicalDirectionsScript,
+  MEDICAL_MARKER_ASSET_URIS,
   type MapCoordinates,
 } from './kakaoMap/mapHtml';
 import {
@@ -70,11 +68,6 @@ type LocationLoadState =
   | 'ready'
   | 'permission-denied'
   | 'error';
-
-const MARKER_ASSET_URIS = {
-  aed: Image.resolveAssetSource(aedMapMarker).uri,
-  hospital: Image.resolveAssetSource(hospitalMapMarker).uri,
-} as const;
 
 type MedicalMapMessage =
   | { locationId: string; type: 'medical-location-pressed' }
@@ -242,7 +235,7 @@ export const KakaoMapScreen = ({
       baseUrl: KAKAO_MAP_BASE_URL,
       html: createKakaoMapHtml(
         appKey ?? '',
-        MARKER_ASSET_URIS,
+        MEDICAL_MARKER_ASSET_URIS,
         medicalLocations,
       ),
     }),

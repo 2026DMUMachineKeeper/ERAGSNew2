@@ -4,9 +4,15 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 
 import { MedicalPlaceCard, type MedicalLocationListItem } from './MedicalPlaceCard';
 
@@ -45,9 +51,12 @@ type MedicalPlacesSheetProps = {
 };
 
 const SHEET_MIDDLE_TRANSLATE_RATIO = 0.5;
-const DISMISSED_SHEET_VISIBLE_HEIGHT = 24;
-const SHEET_CONTENT_HEADER_HEIGHT = 92;
+const DISMISSED_SHEET_VISIBLE_HEIGHT = 40;
+const SHEET_CONTENT_HEADER_HEIGHT = 108;
 const IDLE_REQUEST_STATUS: MedicalPlaceRequestStatus = { isLoading: false };
+const styles = StyleSheet.create({
+  gestureRoot: { flex: 1 },
+});
 
 const getDismissedTranslateY = (mapHeight: number): number =>
   Math.max(0, mapHeight - DISMISSED_SHEET_VISIBLE_HEIGHT);
@@ -89,6 +98,29 @@ const getNearestSheetStage = (
       ? snapPoint
       : closest,
   ).stage;
+};
+
+const getReleasedSheetStage = (
+  translateY: number,
+  velocity: number,
+  mapHeight: number,
+  currentStage: MedicalPlacesSheetStage,
+): MedicalPlacesSheetStage => {
+  const projectedStage = getNearestSheetStage(translateY + velocity * 240, mapHeight);
+  const distance = translateY - getSheetTranslateY(currentStage, mapHeight);
+  if (projectedStage !== currentStage) {
+    return projectedStage;
+  }
+  // 짧게 끌거나 가볍게 튕겨도 인접 단계로 이동해 원위치로 끌려가는 느낌을 줄인다.
+  const isFlick = Math.abs(velocity) >= 0.35 && Math.abs(distance) >= 8;
+  if (Math.abs(distance) < 72 && !isFlick) {
+    return currentStage;
+  }
+  const direction = isFlick ? velocity : distance;
+  if (direction < 0) {
+    return currentStage === 'collapsed' ? 'middle' : 'expanded';
+  }
+  return currentStage === 'expanded' ? 'middle' : 'collapsed';
 };
 
 export const MedicalPlacesSheet = React.forwardRef<
@@ -138,6 +170,9 @@ export const MedicalPlacesSheet = React.forwardRef<
     const sheetStageRef = React.useRef<MedicalPlacesSheetStage>('middle');
     const dragRevision = React.useRef(0);
     const hasMoved = React.useRef(false);
+    const scrollMetrics = React.useRef({ offset: 0, height: 0, contentHeight: 0 });
+    const listDrag = React.useRef({ isActive: false, previousY: 0, startY: 0, sheetY: 0 });
+    const [isDraggingFromList, setIsDraggingFromList] = React.useState(false);
 
     React.useEffect(() => {
       const listenerId = placesSheetTranslateY.addListener(({ value }) => {
@@ -159,12 +194,12 @@ export const MedicalPlacesSheet = React.forwardRef<
 
         // 같은 단계로 돌아와도 드래그로 이동한 위치를 반드시 복구한다.
         Animated.spring(placesSheetTranslateY, {
-          damping: 26,
-          mass: 0.9,
+          damping: 22,
+          mass: 0.8,
           overshootClamping: true,
-          stiffness: 160,
+          stiffness: 200,
           toValue: getSheetTranslateY(stage, mapHeight),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }).start();
       },
       [mapHeight, placesSheetTranslateY],
@@ -244,24 +279,82 @@ export const MedicalPlacesSheet = React.forwardRef<
               return;
             }
 
-            const dismissedTranslateY = getDismissedTranslateY(mapHeight);
-
-            const projectedTranslateY = Math.min(
-              dismissedTranslateY,
-              Math.max(
-                0,
-                placesSheetDragStart.current +
-                  gestureState.dy +
-                  gestureState.vy * mapHeight * 0.18,
-              ),
-            );
-
-            handleSnap(getNearestSheetStage(projectedTranslateY, mapHeight));
+            handleSnap(getReleasedSheetStage(
+              placesSheetTranslateYValue.current,
+              gestureState.vy,
+              mapHeight,
+              sheetStageRef.current,
+            ));
           },
           onPanResponderTerminate: () => handleSnap(sheetStageRef.current),
         }),
       [handleSnap, mapHeight, placesSheetTranslateY],
     );
+
+    const listGesture = React.useMemo(() => {
+      const pan = Gesture.Pan()
+        .activeOffsetY([-6, 6])
+        .failOffsetX([-12, 12])
+        .runOnJS(true)
+        .onStart(event => {
+          listDrag.current.isActive = false;
+          listDrag.current.previousY = event.translationY;
+        })
+        .onUpdate(event => {
+          const drag = listDrag.current;
+          const deltaY = event.translationY - drag.previousY;
+          drag.previousY = event.translationY;
+          if (!mapHeight) {
+            return;
+          }
+          if (!drag.isActive) {
+            const { offset, height, contentHeight } = scrollMetrics.current;
+            const canLowerSheet = deltaY > 0 && offset <= 1 &&
+              sheetStageRef.current !== 'collapsed';
+            const canRaiseSheet = deltaY < 0 && height > 0 &&
+              offset + height >= contentHeight - 1 &&
+              sheetStageRef.current !== 'expanded';
+            if (!canLowerSheet && !canRaiseSheet) {
+              return;
+            }
+            const revision = ++dragRevision.current;
+            hasMoved.current = false;
+            drag.isActive = true;
+            // 목록을 스크롤한 거리를 제외해 시트로 전환될 때 위치가 튀지 않게 한다.
+            drag.startY = event.translationY;
+            drag.sheetY = placesSheetTranslateYValue.current;
+            placesSheetTranslateY.stopAnimation(value => {
+              if (revision !== dragRevision.current || hasMoved.current) {
+                return;
+              }
+              placesSheetTranslateYValue.current = value;
+              drag.sheetY = value;
+            });
+            setIsDraggingFromList(true);
+            return;
+          }
+          const nextY = Math.min(getDismissedTranslateY(mapHeight), Math.max(
+            0, drag.sheetY + event.translationY - drag.startY,
+          ));
+          placesSheetTranslateYValue.current = nextY;
+          hasMoved.current = true;
+          placesSheetTranslateY.setValue(nextY);
+        })
+        .onFinalize((event, isSuccessful) => {
+          if (!listDrag.current.isActive) {
+            return;
+          }
+          listDrag.current.isActive = false;
+          setIsDraggingFromList(false);
+          handleSnap(isSuccessful ? getReleasedSheetStage(
+            placesSheetTranslateYValue.current,
+            event.velocityY / 1000,
+            mapHeight,
+            sheetStageRef.current,
+          ) : sheetStageRef.current);
+        });
+      return Gesture.Simultaneous(Gesture.Native(), pan);
+    }, [handleSnap, mapHeight, placesSheetTranslateY]);
 
     React.useEffect(() => {
       if (!mapHeight) {
@@ -296,121 +389,143 @@ export const MedicalPlacesSheet = React.forwardRef<
           className="absolute bottom-0 left-0 right-0 z-20 h-full overflow-hidden rounded-t-3xl bg-background px-4 pb-4 shadow-2xl"
           style={placesSheetAnimatedStyle}
         >
-          <View
-            {...placesSheetPanResponder.panHandlers}
-            accessible
-            accessibilityLabel={
-              sheetStage === 'collapsed'
-                ? '주변 응급시설 목록 펼치기'
-                : sheetStage === 'expanded'
-                ? '주변 응급시설 목록 접기'
-                : '주변 응급시설 목록 펼치기'
-            }
-            accessibilityRole="button"
-            className="items-center pb-3 pt-2"
-          >
-            <View className="h-1 w-12 rounded-full bg-gray" />
-          </View>
+          <GestureHandlerRootView style={styles.gestureRoot}>
+            <View
+              {...placesSheetPanResponder.panHandlers}
+              accessible
+              accessibilityLabel={
+                sheetStage === 'collapsed'
+                  ? '주변 응급시설 목록 펼치기'
+                  : sheetStage === 'expanded'
+                  ? '주변 응급시설 목록 접기'
+                  : '주변 응급시설 목록 펼치기'
+              }
+              accessibilityRole="button"
+              className="items-center pb-5 pt-4"
+            >
+              <View className="h-1 w-12 rounded-full bg-gray" />
+            </View>
 
-          {sheetStage !== 'collapsed' ? (
-            <>
-              <View className="flex-row items-start justify-between px-1">
-                <View>
-                  <Text className="text-[18px] font-suitBold text-black">
-                    {title}
-                  </Text>
-                  <Text className="mt-1 text-[13px] font-suitRegular text-textDim">
-                    {locationLoadState === 'ready'
-                      ? '현재 위치 기준 가까운 순서예요.'
-                      : '위치 상태를 확인해 주세요.'}
-                  </Text>
+            {sheetStage !== 'collapsed' ? (
+              <>
+                <View className="flex-row items-start justify-between px-1">
+                  <View className="mr-2 flex-1">
+                    <Text className="text-[18px] font-suitBold text-memoText">
+                      {title}
+                    </Text>
+                    <Text className="mt-1 text-[13px] font-suitRegular text-gray">
+                      {locationLoadState === 'ready'
+                        ? '현재 위치 기준 가까운 순서예요.'
+                        : '위치 상태를 확인해 주세요.'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel={sheetStage === 'expanded' ? '장소 목록 접기' : '장소 목록 더보기'}
+                    accessibilityRole="button"
+                    className="min-h-[44px] flex-row items-center px-2"
+                    onPress={handleShowMore}
+                  >
+                    <Text className="text-[13px] font-suitBold text-gray">
+                      {sheetStage === 'expanded' ? '지도 보기' : '목록 확대'}
+                    </Text>
+                  </Pressable>
                 </View>
-                <Pressable
-                  accessibilityLabel={sheetStage === 'expanded' ? '장소 목록 접기' : '장소 목록 더보기'}
-                  accessibilityRole="button"
-                  className="min-h-9 flex-row items-center px-1"
-                  onPress={handleShowMore}
-                >
-                  <Text className="text-[13px] font-suitBold text-[#9E2B3F]">
-                    {sheetStage === 'expanded' ? '접기' : '더보기'}
-                  </Text>
-                  <Text className="ml-1 text-lg leading-5 text-[#9E2B3F]">›</Text>
-                </Pressable>
-              </View>
 
-              <ScrollView
-                className="mt-3"
-                nestedScrollEnabled
-                scrollEnabled
-                showsVerticalScrollIndicator={false}
-                style={placesSheetScrollStyle}
-              >
-                {isAuthRedirecting ? (
-                  <View className="mb-3 flex-row items-center">
-                    <Text className="text-coment text-textDim">
-                      로그인 화면으로 이동하고 있습니다.
-                    </Text>
-                  </View>
-                ) : locationLoadState !== 'ready' ? (
-                  <View className="mb-3 flex-row items-center">
-                    <Text className="text-coment text-textDim">
-                      {locationLoadState === 'loading'
-                        ? '현재 위치를 확인하는 중입니다.'
-                        : locationLoadState === 'permission-denied'
-                        ? '주변 장소를 보려면 위치 권한이 필요합니다.'
-                        : '현재 위치를 확인하지 못했습니다. 위치 버튼을 눌러 다시 시도해 주세요.'}
-                    </Text>
-                  </View>
-                ) : isLoadingPlaces ? (
-                  <View className="mb-3 flex-row items-center">
-                    <Text className="text-coment text-textDim">
-                      주변 병원·AED를 불러오는 중입니다.
-                    </Text>
-                  </View>
-                ) : null}
-                {!isAuthRedirecting && aedStatus.errorMessage ? (
-                  <View className="mb-3 rounded-xl bg-white p-3">
-                    <Text className="text-coment text-textDim">AED: {aedStatus.errorMessage}</Text>
-                    <Pressable accessibilityLabel="AED 다시 시도" accessibilityRole="button"
-                      disabled={aedStatus.isLoading} onPress={aedStatus.onRetry}>
-                      <Text className="mt-2 font-suitBold text-[#9E2B3F]">다시 시도</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-                {!isAuthRedirecting && hospitalStatus.errorMessage ? (
-                  <View className="mb-3 rounded-xl bg-white p-3">
-                    <Text className="text-coment text-textDim">병원: {hospitalStatus.errorMessage}</Text>
-                    <Pressable accessibilityLabel="병원 다시 시도" accessibilityRole="button"
-                      disabled={hospitalStatus.isLoading} onPress={hospitalStatus.onRetry}>
-                      <Text className="mt-2 font-suitBold text-[#9E2B3F]">다시 시도</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-                {!isAuthRedirecting && locations.length > 0 ? (
-                  locations.map(location => (
-                    <MedicalPlaceCard
-                      key={location.id}
-                      isSelected={selectedLocation?.id === location.id}
-                      location={location}
-                      onDirectionsPress={() => onDirectionsPress(location)}
-                      onPress={() => onLocationPress(location)}
-                    />
-                  ))
-                ) : !isAuthRedirecting && locationLoadState === 'ready' &&
-                  hasLoaded && !isLoadingPlaces && !hasRequestError ? (
-                  <View className="items-center justify-center py-8">
-                    <Text className="text-body font-suitBold text-black">
-                      {hasSearchConditions ? '검색 조건에 맞는 결과가 없습니다.' : '주변 병원·AED가 없습니다.'}
-                    </Text>
-                    <Text className="mt-1 text-coment text-textDim">
-                      {hasSearchConditions ? '다른 검색어나 필터를 선택해 보세요.' : '다른 위치에서 다시 확인해 보세요.'}
-                    </Text>
-                  </View>
-                ) : null}
-                <View className="h-24" />
-              </ScrollView>
-            </>
-          ) : null}
+                <GestureDetector gesture={listGesture}>
+                  <ScrollView
+                    className="mt-3"
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    scrollEnabled={!isDraggingFromList}
+                    bounces={false}
+                    overScrollMode="never"
+                    scrollEventThrottle={16}
+                    onLayout={event => {
+                      scrollMetrics.current.height = event.nativeEvent.layout.height;
+                    }}
+                    onContentSizeChange={(_width, height) => {
+                      scrollMetrics.current.contentHeight = height;
+                    }}
+                    onScroll={event => {
+                      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+                      scrollMetrics.current = {
+                        offset: contentOffset.y,
+                        height: layoutMeasurement.height,
+                        contentHeight: contentSize.height,
+                      };
+                    }}
+                    showsVerticalScrollIndicator={false}
+                    style={placesSheetScrollStyle}
+                  >
+                    {isAuthRedirecting ? (
+                      <View className="mb-3 flex-row items-center">
+                        <Text className="text-coment text-gray">
+                          로그인 화면으로 이동하고 있습니다.
+                        </Text>
+                      </View>
+                    ) : locationLoadState !== 'ready' ? (
+                      <View className="mb-3 flex-row items-center">
+                        <Text className="text-coment text-gray">
+                          {locationLoadState === 'loading'
+                            ? '현재 위치를 확인하는 중입니다.'
+                            : locationLoadState === 'permission-denied'
+                            ? '주변 장소를 보려면 위치 권한이 필요합니다.'
+                            : '현재 위치를 확인하지 못했습니다. 위치 버튼을 눌러 다시 시도해 주세요.'}
+                        </Text>
+                      </View>
+                    ) : isLoadingPlaces ? (
+                      <View className="mb-3 flex-row items-center">
+                        <Text className="text-coment text-gray">
+                          주변 병원·AED를 불러오는 중입니다.
+                        </Text>
+                      </View>
+                    ) : null}
+                    {!isAuthRedirecting && aedStatus.errorMessage ? (
+                      <View className="mb-3 rounded-xl bg-white p-3">
+                        <Text className="text-coment text-gray">AED: {aedStatus.errorMessage}</Text>
+                        <Pressable accessibilityLabel="AED 다시 시도" accessibilityRole="button"
+                          disabled={aedStatus.isLoading} onPress={aedStatus.onRetry}>
+                          <Text className="mt-2 font-suitBold text-gray">다시 시도</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {!isAuthRedirecting && hospitalStatus.errorMessage ? (
+                      <View className="mb-3 rounded-xl bg-white p-3">
+                        <Text className="text-coment text-gray">병원: {hospitalStatus.errorMessage}</Text>
+                        <Pressable accessibilityLabel="병원 다시 시도" accessibilityRole="button"
+                          disabled={hospitalStatus.isLoading} onPress={hospitalStatus.onRetry}>
+                          <Text className="mt-2 font-suitBold text-gray">다시 시도</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {!isAuthRedirecting && locations.length > 0 ? (
+                      locations.map(location => (
+                        <MedicalPlaceCard
+                          key={location.id}
+                          isSelected={selectedLocation?.id === location.id}
+                          location={location}
+                          onDirectionsPress={() => onDirectionsPress(location)}
+                          onPress={() => onLocationPress(location)}
+                        />
+                      ))
+                    ) : !isAuthRedirecting && locationLoadState === 'ready' &&
+                      hasLoaded && !isLoadingPlaces && !hasRequestError ? (
+                      <View className="items-center justify-center py-8">
+                        <Text className="text-body font-suitBold text-memoText">
+                          {hasSearchConditions ? '검색 조건에 맞는 결과가 없습니다.' : '주변 병원·AED가 없습니다.'}
+                        </Text>
+                        <Text className="mt-1 text-coment text-gray">
+                          {hasSearchConditions ? '다른 검색어나 필터를 선택해 보세요.' : '다른 위치에서 다시 확인해 보세요.'}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View className="h-24" />
+                  </ScrollView>
+                </GestureDetector>
+              </>
+            ) : null}
+          </GestureHandlerRootView>
         </Animated.View>
         {floatingControl ? (
           <Animated.View
