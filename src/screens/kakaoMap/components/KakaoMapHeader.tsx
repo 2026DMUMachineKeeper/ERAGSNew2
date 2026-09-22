@@ -44,7 +44,7 @@ export const KakaoMapHeader = ({
         <Pressable
           accessibilityLabel="뒤로 가기"
           accessibilityRole="button"
-          className="h-11 w-11 items-start justify-center"
+          className="h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm"
           hitSlop={10}
           onPress={onBackPress}
         >
@@ -61,10 +61,10 @@ export const KakaoMapHeader = ({
           <Pressable
             accessibilityLabel="AED 사용법 보기"
             accessibilityRole="button"
-            className="ml-auto h-9 items-center justify-center rounded-full bg-red px-3 shadow"
+            className="ml-auto min-h-[44px] items-center justify-center rounded-full border border-memoLine bg-white px-3 shadow-sm active:bg-background"
             onPress={onOpenAedGuide}
           >
-            <Text className="text-[10px] font-suitBold text-white">
+            <Text className="text-coment font-suitBold text-danger">
               AED 사용법
             </Text>
           </Pressable>
@@ -72,7 +72,7 @@ export const KakaoMapHeader = ({
       </View>
     </View>
 
-    <View className="mt-2 h-10 flex-row items-center rounded-full border border-memoLine bg-white px-3 shadow">
+    <View className="mt-2 min-h-[52px] flex-row items-center rounded-2xl border border-authInputBorder bg-white px-4 shadow-sm">
       <View className="h-4 w-4 rounded-full border-2 border-gray">
         <View className="absolute -bottom-1 -right-1 h-2 w-0.5 rotate-[-45deg] rounded-full bg-gray" />
       </View>
@@ -80,7 +80,7 @@ export const KakaoMapHeader = ({
         accessibilityLabel="AED와 병원 검색"
         className="ml-3 flex-1 py-0 text-body font-suitRegular text-black"
         onChangeText={onSearchQueryChange}
-        placeholder="장소명 또는 주소 검색"
+        placeholder="주변 장소명·주소로 검색"
         placeholderTextColor="#7F8389"
         returnKeyType="search"
         value={searchQuery}
@@ -89,11 +89,10 @@ export const KakaoMapHeader = ({
         <Pressable
           accessibilityLabel="검색어 지우기"
           accessibilityRole="button"
-          className="h-7 w-7 items-center justify-center rounded-full bg-gray"
-          hitSlop={6}
+          className="h-11 w-11 items-center justify-center"
           onPress={onClearSearch}
         >
-          <Text className="text-body leading-4 text-white">×</Text>
+          <Text className="text-[24px] text-gray">×</Text>
         </Pressable>
       ) : null}
     </View>
@@ -107,13 +106,14 @@ export const KakaoMapHeader = ({
             key={filter.key}
             accessibilityLabel={`${filter.label} 장소만 보기`}
             accessibilityRole="button"
-            className={`mr-2 flex-row items-center rounded-full border px-3 py-1.5 ${
-              isSelected ? 'border-red bg-red' : 'border-memoLine bg-white'
+            accessibilityState={{ selected: isSelected }}
+            className={`mr-2 min-h-[44px] flex-row items-center rounded-full border px-4 py-2 shadow-sm ${
+              isSelected ? 'border-gray bg-gray' : 'border-authInputBorder bg-white'
             }`}
             onPress={() => onFilterChange(filter.key)}
           >
             <Text
-              className={`text-coment font-suitBold ${
+              className={`text-[14px] font-suitBold ${
                 isSelected ? 'text-white' : 'text-gray'
               }`}
             >
