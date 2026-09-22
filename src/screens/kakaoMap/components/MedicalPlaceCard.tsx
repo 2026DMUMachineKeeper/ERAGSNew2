@@ -33,6 +33,14 @@ const formatEquipmentAvailability = (
 ): string =>
   isRealTimeAvailable ? (isAvailable ? '가능' : '불가') : '정보 없음';
 
+const formatBedOccupancy = (beds: number | null): string => {
+  if (beds === null) {
+    return '정보 없음';
+  }
+
+  return beds < 0 ? `${Math.abs(beds)}명 대기 중` : String(beds);
+};
+
 type MedicalPlaceCardProps = {
   isSelected: boolean;
   location: MedicalLocationListItem;
@@ -99,13 +107,13 @@ export const MedicalPlaceCard = ({
             <View className="flex-row py-1.5">
               <Text className="w-24 text-coment font-suitMedium text-gray">가용 병상</Text>
               <Text className="flex-1 text-coment font-suitMedium text-memoText">
-                {location.hospitalDetails.availableBeds ?? '정보 없음'}
+                {formatBedOccupancy(location.hospitalDetails.availableBeds)}
               </Text>
             </View>
             <View className="flex-row py-1.5">
               <Text className="w-24 text-coment font-suitMedium text-gray">수술실 병상</Text>
               <Text className="flex-1 text-coment font-suitMedium text-memoText">
-                {location.hospitalDetails.operatingRoomBeds ?? '정보 없음'}
+                {formatBedOccupancy(location.hospitalDetails.operatingRoomBeds)}
               </Text>
             </View>
             <View className="flex-row py-1.5">

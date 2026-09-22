@@ -509,4 +509,38 @@ describe('MedicalPlacesSheet 스냅', () => {
     expect(output.match(/정보 없음/g)).toHaveLength(4);
     act(() => renderer!.unmount());
   });
+
+  it('음수 병상 수는 대기 인원으로 표시한다', () => {
+    const location = {
+      id: 'hospital:A1100014',
+      name: '고려대학교의과대학부속구로병원',
+      type: 'hospital' as const,
+      typeLabel: '병원',
+      address: '서울특별시 구로구 구로동로 148',
+      distanceInMeters: 1750,
+      hospitalDetails: {
+        isRealTimeAvailable: true,
+        availableBeds: -2,
+        operatingRoomBeds: 4,
+        ctAvailable: true,
+        mriAvailable: true,
+      },
+    };
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <MedicalPlacesSheet
+          locations={[location]}
+          mapHeight={800}
+          onDirectionsPress={jest.fn()}
+          onLocationPress={jest.fn()}
+          searchQuery=""
+          selectedLocation={location}
+        />,
+      );
+    });
+
+    expect(JSON.stringify(renderer!.toJSON())).toContain('2명 대기 중');
+    act(() => renderer!.unmount());
+  });
 });

@@ -90,4 +90,31 @@ describe('fetchNearbyHospitals', () => {
       message: '위치를 확인해 주세요.',
     });
   });
+
+  it('음수 병상 수를 초과 수용 상태로 허용한다', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: [{
+          hpid: 'A1100014',
+          name: '고려대학교의과대학부속구로병원',
+          address: '서울특별시 구로구 구로동로 148',
+          distance: '1.75',
+          isRealTimeAvailable: true,
+          availableBeds: -2,
+          operatingRoomBeds: 4,
+          ctAvailable: true,
+          mriAvailable: true,
+        }],
+      }),
+    } as Response);
+
+    await expect(
+      fetchNearbyHospitals({ latitude: 37.5, longitude: 127 }),
+    ).resolves.toEqual([
+      expect.objectContaining({ availableBeds: -2 }),
+    ]);
+  });
 });
