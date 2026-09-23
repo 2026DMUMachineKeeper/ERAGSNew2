@@ -75,8 +75,11 @@ export const createKakaoMapHtml = (
         aed: createMarkerImage(markerAssetUris.aed),
         hospital: createMarkerImage(markerAssetUris.hospital),
       };
+      const CLUSTER_DISTANCE_PX = 28;
       const bounds = new kakao.maps.LatLngBounds();
       const markers = {};
+      const markerEntries = [];
+      let clusterMarkers = [];
       const failedHospitalIds = new Set();
       let markerCount = 0;
       let activeFilter = 'all';
@@ -99,17 +102,117 @@ export const createKakaoMapHtml = (
         (!activeQuery || (location.name + ' ' + location.address)
           .toLocaleLowerCase().includes(activeQuery));
 
+      const createClusterMarkerImage = additionalLocationCount => {
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="40" viewBox="0 0 64 40">' +
+          '<path d="M20 39C16 34 3 27 3 18a17 17 0 1 1 34 0c0 9-13 16-17 21Z" fill="#15803D" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>' +
+          '<text x="20" y="22" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF">AED</text>' +
+          '<circle cx="50" cy="11" r="11" fill="#FFFFFF" stroke="#15803D" stroke-width="2"/>' +
+          '<text x="50" y="15" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#15803D">+' +
+          additionalLocationCount + '</text></svg>';
+
+        return new kakao.maps.MarkerImage(
+          'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+          new kakao.maps.Size(64, 40),
+          { offset: new kakao.maps.Point(20, 40) },
+        );
+      };
+
+      const getMarkerClusters = visibleEntries => {
+        const projection = window.eragsMap.getProjection();
+        const points = new Map(visibleEntries.map(entry => [
+          entry,
+          projection.pointFromCoords(entry.position),
+        ]));
+        const remainingEntries = new Set(visibleEntries);
+        const clusters = [];
+
+        while (remainingEntries.size) {
+          const firstEntry = remainingEntries.values().next().value;
+          const group = [firstEntry];
+          const entriesToCheck = [firstEntry];
+          remainingEntries.delete(firstEntry);
+
+          while (entriesToCheck.length) {
+            const entry = entriesToCheck.pop();
+            const entryPoint = points.get(entry);
+
+            [...remainingEntries].forEach(candidate => {
+              const candidatePoint = points.get(candidate);
+              const distance = Math.hypot(
+                entryPoint.x - candidatePoint.x,
+                entryPoint.y - candidatePoint.y,
+              );
+
+              if (distance <= CLUSTER_DISTANCE_PX) {
+                remainingEntries.delete(candidate);
+                group.push(candidate);
+                entriesToCheck.push(candidate);
+              }
+            });
+          }
+
+          const hasAed = group.some(entry => entry.location.type === 'aed');
+          const hasHospital = group.some(
+            entry => entry.location.type === 'hospital',
+          );
+          if (group.length > 1 && hasAed && hasHospital) {
+            clusters.push(group);
+          }
+        }
+
+        return clusters;
+      };
+
+      const renderMedicalMarkers = () => {
+        clusterMarkers.forEach(marker => marker.setMap(null));
+        clusterMarkers = [];
+        markerEntries.forEach(entry => entry.marker.setMap(null));
+
+        const visibleEntries = markerEntries.filter(entry =>
+          matchesCurrentFilter(entry.location),
+        );
+        const clusters = getMarkerClusters(visibleEntries);
+        const clusteredEntries = new Set(clusters.flat());
+
+        visibleEntries.forEach(entry => {
+          if (!clusteredEntries.has(entry)) {
+            entry.marker.setMap(window.eragsMap);
+          }
+        });
+
+        clusters.forEach(cluster => {
+          const representative = cluster.find(
+            entry => entry.location.type === 'aed',
+          );
+          const additionalLocationCount = cluster.length - 1;
+          const marker = new kakao.maps.Marker({
+            image: createClusterMarkerImage(additionalLocationCount),
+            map: window.eragsMap,
+            position: representative.position,
+            title: representative.location.name + ' 외 ' + additionalLocationCount + '곳',
+          });
+
+          kakao.maps.event.addListener(marker, 'click', () => {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              locationId: representative.location.id,
+              type: 'medical-location-pressed',
+            }));
+          });
+          clusterMarkers.push(marker);
+        });
+      };
+
       const addMarker = (location, position) => {
         bounds.extend(position);
         markerCount += 1;
 
         const marker = new kakao.maps.Marker({
           image: markerImages[location.type],
-          map: matchesCurrentFilter(location) ? window.eragsMap : null,
           position,
           title: location.name,
         });
         markers[location.id] = marker;
+        markerEntries.push({ location, marker, position });
 
         kakao.maps.event.addListener(marker, 'click', () => {
           window.ReactNativeWebView?.postMessage(JSON.stringify({
@@ -162,6 +265,7 @@ export const createKakaoMapHtml = (
       });
 
       Promise.all(hospitalSearches).then(() => {
+        renderMedicalMarkers();
         if (hasFocusedLocation) {
           return;
         }
@@ -175,16 +279,16 @@ export const createKakaoMapHtml = (
       kakao.maps.event.addListener(window.eragsMap, 'click', () => {
         window.ReactNativeWebView?.postMessage('map-clicked');
       });
+      kakao.maps.event.addListener(
+        window.eragsMap,
+        'idle',
+        renderMedicalMarkers,
+      );
 
       window.eragsFilterMedicalLocations = function (filter, query) {
         activeFilter = filter;
         activeQuery = (query || '').trim().toLocaleLowerCase();
-
-        medicalLocations.forEach(location => {
-          const marker = markers[location.id];
-
-          marker?.setMap(matchesCurrentFilter(location) ? window.eragsMap : null);
-        });
+        renderMedicalMarkers();
       };
 
       window.eragsFocusMedicalLocation = function (locationId) {
