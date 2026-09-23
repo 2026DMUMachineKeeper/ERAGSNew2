@@ -328,6 +328,9 @@ describe('현재 위치 버튼', () => {
     );
     expect(html).not.toContain('</script><script>alert(1)</script>');
     expect(html).toContain('\\u003c/script>');
+    expect(html).toContain('const CLUSTER_DISTANCE_PX = 28;');
+    expect(html).toContain('projection.pointFromCoords(entry.position)');
+    expect(html).toContain("'idle',\n        renderMedicalMarkers");
   });
 
   it.each(['granted', 'denied'] as const)(
