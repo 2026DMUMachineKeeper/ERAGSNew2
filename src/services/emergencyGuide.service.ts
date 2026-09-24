@@ -5,6 +5,8 @@ import type {
   EmergencyGuideMediaFile,
   EmergencyGuideHandoverSnapshot,
   EmergencyGuideResponse,
+  EmergencyWasteGuideItem,
+  EmergencyWasteGuideResponse,
 } from '@/types';
 
 import {
@@ -88,6 +90,8 @@ const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
     '지원하지 않는 이미지 형식입니다. 다른 이미지 파일로 다시 요청해 주세요.',
   SESSION_NOT_FOUND:
     '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+  WASTE_GUIDE_HANDOVER_NOT_FOUND:
+    '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
   SM_BAD_GATEWAY:
     '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
   SM_UNAVAILABLE:
@@ -126,8 +130,8 @@ export const getEmergencyGuideErrorMessage = (error: unknown): string => {
   );
 };
 
-const logRequest = (requestUrl: string): void => {
-  console.warn('[EmergencyGuide API][Request]', { requestUrl, method: 'POST' });
+const logRequest = (requestUrl: string, method = 'POST'): void => {
+  console.warn('[EmergencyGuide API][Request]', { requestUrl, method });
 };
 
 const summarizeHandoverUrl = (value: unknown): Record<string, unknown> => {
@@ -549,4 +553,104 @@ export const createEmergencyGuideHandover = async (
   });
 
   return readEmergencyGuideHandoverResponse(response, requestUrl);
+};
+
+const isEmergencyWasteGuideItem = (
+  value: unknown,
+): value is EmergencyWasteGuideItem =>
+  isRecord(value) &&
+  typeof value.itemName === 'string' &&
+  typeof value.wasteCategory === 'string' &&
+  typeof value.disposalMethod === 'string' &&
+  (value.dangerLevel === 'HIGH' || value.dangerLevel === 'LOW');
+
+const readEmergencyWasteGuideResponse = async (
+  response: Response,
+  requestUrl: string,
+): Promise<EmergencyWasteGuideResponse> => {
+  let payload: unknown;
+
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    throw new EmergencyGuideRequestError(
+      '폐기물 안내 응답 형식이 올바르지 않습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  const failure = readFailure(payload);
+  const payloadRecord = isRecord(payload) ? payload : null;
+  const message =
+    failure?.message ??
+    (typeof payloadRecord?.message === 'string'
+      ? payloadRecord.message
+      : undefined);
+  const code =
+    failure?.code ??
+    (response.status === 404
+      ? 'WASTE_GUIDE_HANDOVER_NOT_FOUND'
+      : 'REQUEST_FAILED');
+
+  console.warn('[EmergencyGuide API][Response]', {
+    requestUrl,
+    status: response.status,
+    ok: response.ok,
+    errorCode: code,
+  });
+
+  if (!response.ok || !payloadRecord || payloadRecord.success !== true) {
+    throw new EmergencyGuideRequestError(
+      message ?? '폐기물 안내 요청에 실패했습니다.',
+      response.status,
+      code,
+      requestUrl,
+      failure?.details ?? [],
+    );
+  }
+
+  if (
+    !Array.isArray(payloadRecord.data) ||
+    !payloadRecord.data.every(isEmergencyWasteGuideItem)
+  ) {
+    throw new EmergencyGuideRequestError(
+      '폐기물 안내 응답이 DTO 계약과 일치하지 않습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
+  return {
+    success: true,
+    data: payloadRecord.data,
+    ...(typeof payloadRecord.message === 'string'
+      ? { message: payloadRecord.message }
+      : {}),
+  };
+};
+
+export const getEmergencyWasteGuide = async (
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<EmergencyWasteGuideResponse> => {
+  const normalizedSessionId = sessionId.trim();
+
+  if (!normalizedSessionId) {
+    throw new Error('응급 가이드 sessionId가 없습니다.');
+  }
+
+  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v2/emergency-guide-sessions/${encodeURIComponent(
+    normalizedSessionId,
+  )}/waste-guide`;
+  logRequest(requestUrl, 'GET');
+  const response = await fetchWithTimeout(requestUrl, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    signal,
+  });
+
+  return readEmergencyWasteGuideResponse(response, requestUrl);
 };

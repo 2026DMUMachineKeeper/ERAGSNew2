@@ -4,6 +4,7 @@ import { SvgXml } from 'react-native-svg';
 
 interface Props {
   isIssuingQr: boolean;
+  isHandoverUnavailable: boolean;
   qrSvg: string | null;
   handoverError: string | null;
   onRenderError: (error: Error) => void;
@@ -11,6 +12,7 @@ interface Props {
 
 export function HandoverQrCard({
   isIssuingQr,
+  isHandoverUnavailable,
   qrSvg,
   handoverError,
   onRenderError,
@@ -24,6 +26,11 @@ export function HandoverQrCard({
             QR을 발급하고 있습니다.
           </Text>
         </>
+      ) : isHandoverUnavailable ? (
+        <Text className="text-center text-sm leading-6 text-textDim">
+          완료한 처치가 없어 QR 인계를 발급하지 않았습니다.
+          {'\n'}인계 요약을 직접 보여주세요.
+        </Text>
       ) : qrSvg ? (
         <>
           <Text className="mb-3 text-sm text-black">

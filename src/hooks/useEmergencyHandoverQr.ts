@@ -69,6 +69,8 @@ export function useEmergencyHandoverQr({
   const [qrSvg, setQrSvg] = React.useState<string | null>(null);
   const [handoverError, setHandoverError] = React.useState<string | null>(null);
   const [isIssuingQr, setIsIssuingQr] = React.useState(true);
+  const [isHandoverUnavailable, setIsHandoverUnavailable] =
+    React.useState(false);
 
   React.useEffect(() => {
     let isActive = true;
@@ -92,6 +94,14 @@ export function useEmergencyHandoverQr({
         setIsIssuingQr(false);
         return;
       }
+
+      if (completedStepIds.length === 0) {
+        setIsHandoverUnavailable(true);
+        setIsIssuingQr(false);
+        return;
+      }
+
+      setIsHandoverUnavailable(false);
 
       try {
         const response = await createEmergencyGuideHandover(sessionId, {
@@ -176,5 +186,12 @@ export function useEmergencyHandoverQr({
     });
   };
 
-  return { handover, qrSvg, handoverError, isIssuingQr, handleQrRenderError };
+  return {
+    handover,
+    qrSvg,
+    handoverError,
+    isIssuingQr,
+    isHandoverUnavailable,
+    handleQrRenderError,
+  };
 }

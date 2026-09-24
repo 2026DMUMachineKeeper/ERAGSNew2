@@ -13,6 +13,7 @@ import { MedicineManualInputScreen } from '@/screens/MedicineManualInputScreen';
 import { KakaoMapScreen } from '@/screens/KakaoMapScreen';
 import { PasswordResetScreen } from '@/screens/PasswordResetScreen';
 import { QRCodeScreen } from '@/screens/QRCodeScreen';
+import { WasteGuideScreen } from '@/screens/WasteGuideScreen';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
 import { useAuthStore } from '@/store';
@@ -31,6 +32,7 @@ export type RootStackParamList = {
   FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
   EmergencyGuide: undefined;
   QRCode: undefined;
+  WasteGuide: undefined;
   KakaoMap: undefined;
 };
 
@@ -87,6 +89,7 @@ export const RootNavigator = (): React.JSX.Element => {
       <Stack.Screen name="FirstAidDetail" component={FirstAidDetail} />
       <Stack.Screen name="EmergencyGuide" component={EmergencyGuideScreen} />
       <Stack.Screen name="QRCode" component={QRCodeScreen} />
+      <Stack.Screen name="WasteGuide" component={WasteGuideScreen} />
       <Stack.Screen name="KakaoMap" component={KakaoMapScreen} />
     </Stack.Navigator>
   );

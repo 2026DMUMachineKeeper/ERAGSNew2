@@ -104,6 +104,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const setHandoverStatus = useEmergencyGuideStore(
     state => state.setHandoverStatus,
   );
+  const resetGuide = useEmergencyGuideStore(state => state.resetGuide);
   const guide = storedGuide;
   const mainLabel = storedMainLabel;
   const subtypeLabel = storedSubtypeLabel;
@@ -127,7 +128,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const progress = steps.length ? (currentStepIndex + 1) / steps.length : 0;
   const isLastStep = currentStepIndex >= steps.length - 1;
   const isCurrentStepCompleted =
-    currentStep?.stepId != null && completedStepIds.includes(currentStep.stepId);
+    currentStep?.stepId != null &&
+    completedStepIds.includes(currentStep.stepId);
   const currentInstruction = currentStep?.instruction?.trim() ?? '';
 
   React.useEffect(() => {
@@ -159,6 +161,15 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   }, [currentInstruction]);
 
   const handleStopPress = (hasCompletedCurrentStep: boolean): void => {
+    if (!hasCompletedCurrentStep && completedStepIds.length === 0) {
+      resetGuide();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+      return;
+    }
+
     if (hasCompletedCurrentStep) {
       markStepCompleted(currentStep?.stepId ?? null);
     }
