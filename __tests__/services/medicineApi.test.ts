@@ -2,7 +2,10 @@ import {
   deleteMedicine,
   fetchMedicineById,
   fetchMedicines,
+  fetchMedicineAlerts,
   postMedicineVision,
+  postMedicineManual,
+  updateMedicine,
 } from '@/services/medicineApi';
 import { ApiRequestError } from '@/services/apiError.service';
 
@@ -135,6 +138,61 @@ describe('deleteMedicine', () => {
       await expect(fetchMedicines()).resolves.toEqual([]);
     },
   );
+});
+
+describe('medicine expiry and alerts', () => {
+  beforeEach((): void => {
+    fetchMock.mockReset();
+  });
+
+  it('알림 API의 상태 플래그와 유통기한을 반환한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => ({
+        success: true,
+        data: [{
+          id: 1,
+          name: '멸균 거즈',
+          quantity: 2,
+          threshold: 3,
+          expire_date: '2026-10-15',
+          isLowStock: true,
+          isExpiringSoon: true,
+          isExpired: false,
+        }],
+      }),
+    } as Response);
+
+    await expect(fetchMedicineAlerts()).resolves.toMatchObject([{
+      id: '1',
+      expireDate: '2026-10-15',
+      isLowStock: true,
+      isExpiringSoon: true,
+      isExpired: false,
+    }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/medicines/alerts'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('수동 등록과 수정 요청에 유통기한을 담는다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 204,
+      text: jest.fn(),
+    } as unknown as Response);
+
+    await postMedicineManual({ name: '거즈', expire_date: '2026-10-15' });
+    await updateMedicine('1', { expire_date: null });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      name: '거즈',
+      expire_date: '2026-10-15',
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ expire_date: null });
+  });
 });
 
 describe('postMedicineVision', () => {

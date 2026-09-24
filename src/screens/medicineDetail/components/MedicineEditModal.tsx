@@ -49,6 +49,13 @@ export const MedicineEditModal = ({ editor }: MedicineEditModalProps): React.JSX
               />
 
               <MedicineFormField
+                config={MEDICINE_EDIT_FIELDS.expireDate}
+                value={values.expireDate}
+                error={errors.expireDate}
+                onChangeText={(nextText: string): void => onChange('expireDate', nextText)}
+              />
+
+              <MedicineFormField
                 config={MEDICINE_EDIT_FIELDS.efficacy}
                 value={values.efficacy}
                 error={errors.efficacy}

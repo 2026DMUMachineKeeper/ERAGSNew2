@@ -4,12 +4,16 @@ import {
   Linking,
   PermissionsAndroid,
   Platform,
+  Text,
+  TextInput,
   TouchableOpacity,
 } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { MedicineAddScreen } from '@/screens/MedicineAddScreen';
+import { launchCamera } from 'react-native-image-picker';
+import { postMedicineVision, updateMedicine } from '@/services/medicineApi';
 
 jest.mock('@/assets', () => ({
   CameraRedIcon: (): null => null,
@@ -21,6 +25,11 @@ jest.mock('@/query', () => ({
 
 jest.mock('@/services/medicineApi', () => ({
   postMedicineVision: jest.fn(),
+  updateMedicine: jest.fn(),
+}));
+
+jest.mock('react-native-image-picker', () => ({
+  launchCamera: jest.fn(),
 }));
 
 jest.mock('@/services/auth.service', () => ({
@@ -105,6 +114,76 @@ describe('MedicineAddScreen 카메라 오류 처리', () => {
     expect(Alert.alert).toHaveBeenCalledWith(
       '설정 열기 실패',
       '기기 설정을 열지 못했습니다. 설정 앱에서 카메라 권한을 확인해 주세요.',
+    );
+  });
+
+  it('사진 등록 후 선택한 유통기한을 저장한다', async (): Promise<void> => {
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [{ base64: 'encoded-photo' }],
+    });
+    jest.mocked(postMedicineVision).mockResolvedValue({
+      isRegistered: true,
+      id: 7,
+      name: '거즈',
+      efficacy: '보호',
+      usage: '부착',
+      step: null,
+    });
+    jest.mocked(updateMedicine).mockResolvedValue({});
+
+    await pressCamera();
+    const input = renderer?.root.findByType(TextInput);
+    await act(async (): Promise<void> => input?.props.onChangeText('20261015'));
+    expect(renderer?.root.findByType(TextInput).props.value).toBe('2026-10-15');
+    const saveButton = renderer?.root
+      .findAllByType(TouchableOpacity)
+      .find(button =>
+        button
+          .findAllByType(Text)
+          .some(label => label.props.children === '등록 완료'),
+      );
+    await act(async (): Promise<void> => saveButton?.props.onPress());
+
+    expect(updateMedicine).toHaveBeenCalledWith('7', {
+      expire_date: '2026-10-15',
+    });
+    expect(Alert.alert).toHaveBeenCalledWith(
+      '등록 완료',
+      '약품 정보가 자동으로 등록되었습니다.',
+      expect.any(Array),
+    );
+  });
+
+  it('유통기한 없이 약품을 등록할 수 있다', async (): Promise<void> => {
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [{ base64: 'encoded-photo' }],
+    });
+    jest.mocked(postMedicineVision).mockResolvedValue({
+      isRegistered: true,
+      id: 7,
+      name: '거즈',
+      efficacy: '보호',
+      usage: '부착',
+      step: null,
+    });
+
+    await pressCamera();
+    const skipButton = renderer?.root
+      .findAllByType(TouchableOpacity)
+      .find(button =>
+        button
+          .findAllByType(Text)
+          .some(label => label.props.children === '유통기한 없이 등록하기'),
+      );
+    await act(async (): Promise<void> => skipButton?.props.onPress());
+
+    expect(updateMedicine).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      '등록 완료',
+      '약품 정보가 자동으로 등록되었습니다.',
+      expect.any(Array),
     );
   });
 });

@@ -28,6 +28,7 @@ export const useMedicineManualInput = (
     name: '',
     efficacy: '',
     usage: '',
+    expireDate: '',
   });
   const [quantity, setQuantity] = React.useState(1);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -65,13 +66,13 @@ export const useMedicineManualInput = (
   }, []);
 
   const handleSave = async (): Promise<void> => {
-    const { name, efficacy, usage } = inputValues;
+    const { name, efficacy, usage, expireDate } = inputValues;
     const trimmedName = name.trim();
     const trimmedEfficacy = efficacy.trim();
     const trimmedUsage = usage.trim();
     const nextInputErrors = getMedicineManualInputErrors(inputValues);
     const hasInputError = Boolean(
-      nextInputErrors.name || nextInputErrors.efficacy || nextInputErrors.usage,
+      nextInputErrors.name || nextInputErrors.efficacy || nextInputErrors.usage || nextInputErrors.expireDate,
     );
 
     setInputErrors(nextInputErrors);
@@ -92,6 +93,7 @@ export const useMedicineManualInput = (
         efficacy: trimmedEfficacy,
         usage: trimmedUsage,
         quantityToAdd: quantity,
+        ...(expireDate.trim() ? { expire_date: expireDate.trim() } : {}),
       });
       invalidateMedicines();
 
