@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type {
   EmergencyGuideHandoverStatus,
   EmergencyGuideResponse,
+  EmergencyWasteGuideItem,
 } from '@/types';
 
 export type EmergencyGuideSource = 'manual' | 'machine' | 'voice' | 'image';
@@ -20,9 +21,12 @@ interface EmergencyGuideState {
   elapsedSeconds: number;
   guide: EmergencyGuideResponse | null;
   handoverStatus: EmergencyGuideHandoverStatus | null;
+  isWasteGuideLoading: boolean;
   mainLabel: string;
   source: EmergencyGuideSource | null;
   subtypeLabel: string;
+  wasteGuide: EmergencyWasteGuideItem[] | null;
+  wasteGuideError: string | null;
   incrementElapsedSeconds: () => void;
   markStepCompleted: (stepId: number | null) => void;
   moveToNextStep: (stepCount: number) => void;
@@ -30,6 +34,9 @@ interface EmergencyGuideState {
   resetGuide: () => void;
   setGuide: (guide: EmergencyGuideResponse) => void;
   setHandoverStatus: (status: EmergencyGuideHandoverStatus) => void;
+  setWasteGuide: (items: EmergencyWasteGuideItem[]) => void;
+  setWasteGuideError: (message: string) => void;
+  setWasteGuideLoading: () => void;
   startGuide: (params: StartEmergencyGuideParams) => void;
 }
 
@@ -39,9 +46,12 @@ const INITIAL_EMERGENCY_GUIDE_STATE = {
   elapsedSeconds: 0,
   guide: null,
   handoverStatus: null,
+  isWasteGuideLoading: false,
   mainLabel: '응급',
   source: null,
   subtypeLabel: '',
+  wasteGuide: null,
+  wasteGuideError: null,
 } as const;
 
 export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
@@ -89,11 +99,37 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
       currentStepIndex: 0,
       completedStepIds: [],
       handoverStatus: null,
+      isWasteGuideLoading: false,
+      wasteGuide: null,
+      wasteGuideError: null,
     });
   },
 
   setHandoverStatus: (status: EmergencyGuideHandoverStatus): void => {
     set({ handoverStatus: status });
+  },
+
+  setWasteGuide: (items: EmergencyWasteGuideItem[]): void => {
+    set({
+      isWasteGuideLoading: false,
+      wasteGuide: items,
+      wasteGuideError: null,
+    });
+  },
+
+  setWasteGuideError: (message: string): void => {
+    set({
+      isWasteGuideLoading: false,
+      wasteGuideError: message,
+    });
+  },
+
+  setWasteGuideLoading: (): void => {
+    set({
+      isWasteGuideLoading: true,
+      wasteGuide: null,
+      wasteGuideError: null,
+    });
   },
 
   startGuide: ({
@@ -108,9 +144,12 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
       elapsedSeconds: 0,
       guide,
       handoverStatus: null,
+      isWasteGuideLoading: false,
       mainLabel,
       source,
       subtypeLabel,
+      wasteGuide: null,
+      wasteGuideError: null,
     });
   },
 }));

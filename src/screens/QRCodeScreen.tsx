@@ -44,12 +44,18 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
   );
   const handoverStatus = useEmergencyGuideStore(state => state.handoverStatus);
   const resetGuide = useEmergencyGuideStore(state => state.resetGuide);
-  const { handover, qrSvg, handoverError, isIssuingQr, handleQrRenderError } =
-    useEmergencyHandoverQr({
-      sessionId: guide?.sessionId,
-      completedStepIds,
-      handoverStatus,
-    });
+  const {
+    handover,
+    qrSvg,
+    handoverError,
+    isIssuingQr,
+    isHandoverUnavailable,
+    handleQrRenderError,
+  } = useEmergencyHandoverQr({
+    sessionId: guide?.sessionId,
+    completedStepIds,
+    handoverStatus,
+  });
   const completedStepIdSet = React.useMemo(
     () => new Set(completedStepIds),
     [completedStepIds],
@@ -106,10 +112,19 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
           />
           <HandoverQrCard
             isIssuingQr={isIssuingQr}
+            isHandoverUnavailable={isHandoverUnavailable}
             qrSvg={qrSvg}
             handoverError={handoverError}
             onRenderError={handleQrRenderError}
           />
+          <Pressable
+            onPress={() => navigation.navigate('WasteGuide')}
+            className="mt-4 h-14 items-center justify-center rounded-2xl border border-red bg-white"
+          >
+            <Text className="font-suitBold text-red">
+              폐기물 배출 안내 보기
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
 
