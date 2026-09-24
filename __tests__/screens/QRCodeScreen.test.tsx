@@ -4,6 +4,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import {
   createEmergencyGuideHandover,
   getEmergencyGuideErrorMessage,
+  getEmergencyWasteGuide,
 } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type { EmergencyGuideResponse } from '@/types';
@@ -16,6 +17,7 @@ jest.mock('qrcode', () => ({
 }));
 jest.mock('@/services', () => ({
   createEmergencyGuideHandover: jest.fn(),
+  getEmergencyWasteGuide: jest.fn(),
   getEmergencyGuideErrorMessage: jest.fn(
     () => '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
   ),
@@ -23,6 +25,7 @@ jest.mock('@/services', () => ({
 
 const createHandoverMock = jest.mocked(createEmergencyGuideHandover);
 const getErrorMessageMock = jest.mocked(getEmergencyGuideErrorMessage);
+const getWasteGuideMock = jest.mocked(getEmergencyWasteGuide);
 
 const GUIDE: EmergencyGuideResponse = {
   sessionId: 'session-1',
@@ -156,6 +159,17 @@ describe('QRCodeScreen', () => {
         usedSupplies: [{ name: '서버 응답 약품명', quantity: 3 }],
       },
     });
+    getWasteGuideMock.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          itemName: '거즈',
+          wasteCategory: 'GENERAL',
+          disposalMethod: '일반 쓰레기로 배출하세요.',
+          dangerLevel: 'LOW',
+        },
+      ],
+    });
     const store = useEmergencyGuideStore.getState();
     store.startGuide({ guide: GUIDE, source: 'manual', mainLabel: '출혈' });
     store.markStepCompleted(7);
@@ -179,5 +193,6 @@ describe('QRCodeScreen', () => {
     expect(rendered).toContain('emergency-handover-qr');
     expect(rendered).toContain('30분 동안 조회');
     expect(rendered).not.toContain('handover.html#token=');
+    expect(getWasteGuideMock).toHaveBeenCalledWith('session-1');
   });
 });

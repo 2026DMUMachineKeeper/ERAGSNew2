@@ -4,12 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackIcon } from '@/assets';
-import {
-  getEmergencyGuideErrorMessage,
-  getEmergencyWasteGuide,
-} from '@/services';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyWasteGuideItem } from '@/types';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 import { WasteGuideCard } from './wasteGuide/components/WasteGuideCard';
@@ -18,56 +13,12 @@ type Props = NativeStackScreenProps<RootStackParamList, 'WasteGuide'>;
 
 export function WasteGuideScreen({ navigation }: Props): React.JSX.Element {
   const sessionId = useEmergencyGuideStore(state => state.guide?.sessionId);
-  const hasCompletedTreatment = useEmergencyGuideStore(
-    state => state.completedStepIds.length > 0,
-  );
-  const [items, setItems] = React.useState<EmergencyWasteGuideItem[] | null>(
-    null,
-  );
-  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    let isActive = true;
-
-    const loadWasteGuide = async (): Promise<void> => {
-      if (!sessionId) {
-        setErrorMessage(
-          '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      if (!hasCompletedTreatment) {
-        setItems([]);
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const response = await getEmergencyWasteGuide(sessionId);
-
-        if (isActive) {
-          setItems(response.data);
-        }
-      } catch (error: unknown) {
-        if (isActive) {
-          setErrorMessage(getEmergencyGuideErrorMessage(error));
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadWasteGuide();
-
-    return () => {
-      isActive = false;
-    };
-  }, [hasCompletedTreatment, sessionId]);
+  const items = useEmergencyGuideStore(state => state.wasteGuide);
+  const errorMessage = useEmergencyGuideStore(state => state.wasteGuideError);
+  const isLoading = useEmergencyGuideStore(state => state.isWasteGuideLoading);
+  const resolvedErrorMessage = sessionId
+    ? errorMessage
+    : '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.';
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -89,7 +40,7 @@ export function WasteGuideScreen({ navigation }: Props): React.JSX.Element {
       <ScrollView className="flex-1 px-4">
         <WasteGuideCard
           items={items}
-          errorMessage={errorMessage}
+          errorMessage={resolvedErrorMessage}
           isLoading={isLoading}
         />
       </ScrollView>
