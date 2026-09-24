@@ -6,6 +6,7 @@ import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
+  getEmergencyWasteGuide,
   retryEmergencyGuide,
 } from '@/services/emergencyGuide.service';
 
@@ -252,6 +253,50 @@ describe('emergencyGuide.service', () => {
         }),
       }),
     );
+  });
+
+  it('폐기물 안내를 v2 세션 API에서 조회한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: [
+          {
+            itemName: '거즈',
+            wasteCategory: 'GENERAL',
+            disposalMethod: '일반 쓰레기로 배출하세요.',
+            dangerLevel: 'LOW',
+          },
+        ],
+      }),
+    );
+
+    const response = await getEmergencyWasteGuide('session/1');
+
+    expect(response.data[0]?.itemName).toBe('거즈');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'test-api-base-url/api/v2/emergency-guide-sessions/session%2F1/waste-guide',
+      expect.objectContaining({
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      }),
+    );
+  });
+
+  it('인계장이 없는 폐기물 안내 404 메시지를 보존한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(404, {
+        success: false,
+        message: '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
+      }),
+    );
+
+    await expect(
+      getEmergencyWasteGuide('missing-session'),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'WASTE_GUIDE_HANDOVER_NOT_FOUND',
+      message: '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
+    });
   });
 
   it.each(['<html>Forbidden</html>', ''])(

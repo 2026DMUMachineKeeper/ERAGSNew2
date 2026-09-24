@@ -107,6 +107,28 @@ describe('QRCodeScreen', () => {
     expect(getErrorMessageMock).toHaveBeenCalledWith(expect.any(Error));
   });
 
+  it('완료한 처치가 없으면 인계 API를 호출하지 않고 안내한다', async (): Promise<void> => {
+    const store = useEmergencyGuideStore.getState();
+    store.startGuide({ guide: GUIDE, source: 'manual', mainLabel: '출혈' });
+    store.setHandoverStatus('IN_PROGRESS');
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <QRCodeScreen
+          navigation={{ reset: jest.fn(), navigate: jest.fn() } as never}
+          route={{} as never}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const rendered = JSON.stringify(renderer?.toJSON());
+    expect(createHandoverMock).not.toHaveBeenCalled();
+    expect(rendered).toContain(
+      '완료한 처치가 없어 QR 인계를 발급하지 않았습니다.',
+    );
+  });
+
   it('성공 시 서버 snapshot과 토큰 QR을 표시하고 URL 문자열은 노출하지 않는다', async (): Promise<void> => {
     const tokenUrl = `https://handover.example/handover.html#token=${'A'.repeat(
       43,
