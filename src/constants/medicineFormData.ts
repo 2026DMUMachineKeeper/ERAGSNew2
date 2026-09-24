@@ -24,6 +24,19 @@ export const MEDICINE_EDIT_FIELDS = {
       keyboardType: 'number-pad',
     },
   },
+  expireDate: {
+    label: '유통기한',
+    containerClassName: 'mt-4',
+    labelClassName: 'text-sm font-suitBold text-memoText',
+    inputClassName: 'mt-2 h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText',
+    errorInputClassName: 'mt-2 h-12 rounded-xl border border-red px-4 text-sm text-memoText',
+    inputProps: {
+      placeholder: 'YYYY-MM-DD',
+      keyboardType: 'numbers-and-punctuation',
+      maxLength: 10,
+    },
+    isOptional: true,
+  },
   efficacy: {
     label: '효능',
     containerClassName: 'mt-4',
@@ -65,6 +78,20 @@ export const MEDICINE_MANUAL_FIELDS = {
       placeholder: '예: 타이레놀',
       placeholderTextColor: tailwindConfig.colors.memoSubText,
     },
+  },
+  expireDate: {
+    label: '유통기한',
+    containerClassName: 'mt-4',
+    labelClassName: 'mb-2 text-sm font-suitBold text-memoText',
+    inputClassName: 'h-12 rounded-xl border border-memoLine px-4 text-sm text-memoText',
+    errorInputClassName: 'h-12 rounded-xl border border-red px-4 text-sm text-memoText',
+    inputProps: {
+      placeholder: 'YYYY-MM-DD',
+      placeholderTextColor: tailwindConfig.colors.memoSubText,
+      keyboardType: 'numbers-and-punctuation',
+      maxLength: 10,
+    },
+    isOptional: true,
   },
   efficacy: {
     label: '효능',

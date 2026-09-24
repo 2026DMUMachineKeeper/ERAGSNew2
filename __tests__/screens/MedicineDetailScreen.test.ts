@@ -9,6 +9,7 @@ const VALID_MEDICINE_EDIT_VALUES = {
   efficacy: '해열 진통',
   usage: '식후 복용',
   quantity: '2',
+  expireDate: '',
 };
 
 describe('getMedicineEditValidationErrors', () => {
@@ -42,6 +43,7 @@ describe('getMedicineEditValidationErrors', () => {
       quantity: null,
       efficacy: null,
       usage: null,
+      expireDate: null,
     });
   });
 });

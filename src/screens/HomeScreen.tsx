@@ -1,16 +1,28 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { CompositeScreenProps } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {
+  useIsFocused,
+  type CompositeScreenProps,
+} from '@react-navigation/native';
+import type {
+  NativeStackNavigationProp,
+  NativeStackScreenProps,
+} from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
+import Svg, { Path } from 'react-native-svg';
 
 import { CameraIcon, MicIcon } from '@/assets/icons';
 import type { MainTabParamList } from '@/navigation/MainTabNavigator';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyGuideResponse } from '@/types';
+import type { EmergencyGuideResponse, MedicineAlert } from '@/types';
+import { medicineAlertsQueryOptions } from '@/query';
+import { getApiErrorUserMessage } from '@/services/apiError.service';
+import { isAuthSessionExpiredError } from '@/services/auth.service';
+import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 
 import {
   EmergencySupportSection,
@@ -18,16 +30,48 @@ import {
   QuickActionCard,
 } from './home/components';
 import { useHomeEmergencyActions } from './home/useHomeEmergencyActions';
+import { MedicineAlertsModal } from './home/components/MedicineAlertsModal';
+
+import tailwindConfig from '../../tailwind.config';
 
 type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'HomeTab'>,
   NativeStackScreenProps<RootStackParamList>
 >;
 
+const { colors } = tailwindConfig;
+
 export const HomeScreen = ({
   navigation,
 }: HomeScreenProps): React.JSX.Element => {
+  const [isAlertsOpen, setIsAlertsOpen] = React.useState(false);
+  const isFocused = useIsFocused();
+  const {
+    data: alerts = [],
+    error: alertsQueryError,
+    isPending: isAlertsLoading,
+    refetch: refetchAlerts,
+  } = useQuery({ ...medicineAlertsQueryOptions, enabled: isFocused });
   const startGuide = useEmergencyGuideStore(state => state.startGuide);
+  const rootNavigation = React.useMemo(
+    () => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>(),
+    [navigation],
+  );
+
+  React.useEffect((): void => {
+    if (alertsQueryError && isAuthSessionExpiredError(alertsQueryError)) {
+      redirectToLoginForExpiredSession(rootNavigation);
+    }
+  }, [alertsQueryError, rootNavigation]);
+
+  const handleAlertMedicinePress = React.useCallback(
+    (medicine: MedicineAlert): void => {
+      setIsAlertsOpen(false);
+      navigation.navigate('MedicinesTab');
+      navigation.navigate('MedicineDetail', { medicineId: medicine.id });
+    },
+    [navigation],
+  );
   const handleGuideCreated = React.useCallback(
     (source: 'image' | 'voice', guide: EmergencyGuideResponse): void => {
       startGuide({ guide, source });
@@ -49,6 +93,32 @@ export const HomeScreen = ({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <HomeHeader />
+
+      <TouchableOpacity
+        accessibilityLabel={`약품 알림${
+          alerts.length > 0 ? ` ${alerts.length}개` : ''
+        }`}
+        accessibilityRole="button"
+        className="absolute right-4 top-6 z-20 h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm"
+        onPress={() => setIsAlertsOpen(true)}
+      >
+        <Svg width={23} height={23} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"
+            stroke={colors.appBg}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+        {alerts.length > 0 ? (
+          <View className="absolute -right-1 -top-1 min-w-[18px] items-center justify-center rounded-full bg-red px-1">
+            <Text className="text-[10px] font-suitBold text-white">
+              {alerts.length > 99 ? '99+' : alerts.length}
+            </Text>
+          </View>
+        ) : null}
+      </TouchableOpacity>
 
       <View className="mt-5 px-4">
         <Text className="mb-3 text-body font-suitSemiBold text-textDim">
@@ -82,6 +152,26 @@ export const HomeScreen = ({
           onReportPress={handleEmergencyReportPress}
         />
       </View>
+
+      <MedicineAlertsModal
+        isVisible={isAlertsOpen}
+        isLoading={isAlertsLoading}
+        errorMessage={
+          alertsQueryError && !isAuthSessionExpiredError(alertsQueryError)
+            ? getApiErrorUserMessage(alertsQueryError, {
+                fallbackMessage: '약품 알림을 불러오지 못했습니다.',
+              })
+            : null
+        }
+        alerts={alerts}
+        onClose={() => setIsAlertsOpen(false)}
+        onRetry={() => {
+          refetchAlerts().catch((error: unknown) => {
+            console.warn('[HomeScreen] 약품 알림 재조회 실패:', error);
+          });
+        }}
+        onPressMedicine={handleAlertMedicinePress}
+      />
     </SafeAreaView>
   );
 };

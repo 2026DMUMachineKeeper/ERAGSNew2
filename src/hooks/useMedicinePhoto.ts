@@ -12,24 +12,43 @@ import {
 import type { MedicinePhotoState } from '@/types';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { invalidateMedicines } from '@/query';
-import { postMedicineVision } from '@/services/medicineApi';
+import { postMedicineVision, updateMedicine } from '@/services/medicineApi';
 import { getApiErrorUserMessage } from '@/services/apiError.service';
 import { isAuthSessionExpiredError } from '@/services/auth.service';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 import { fileUriToBase64, requestCameraPermission } from '@/services/camera';
+import {
+  formatMedicineExpireDateInput,
+  getMedicineExpireDateError,
+} from '@/utils/medicine/medicineExpireDateValidation';
 
-const CAMERA_START_ERROR_MESSAGE = '카메라를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const CAMERA_START_ERROR_MESSAGE =
+  '카메라를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const CAMERA_PERMISSION_ERROR_MESSAGE =
   '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const MEDICINE_REGISTER_ERROR_MESSAGE = '약품을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
-const MEDICINE_IMAGE_TOO_LARGE_MESSAGE = '사진 용량이 너무 큽니다. 다시 촬영해 주세요.';
+const MEDICINE_REGISTER_ERROR_MESSAGE =
+  '약품을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+const MEDICINE_IMAGE_TOO_LARGE_MESSAGE =
+  '사진 용량이 너무 큽니다. 다시 촬영해 주세요.';
 const MEDICINE_IMAGE_UNSUPPORTED_MESSAGE =
   '지원하지 않는 이미지 형식입니다. 다른 사진으로 다시 시도해 주세요.';
 
 export const useMedicinePhoto = (
-  navigation: NativeStackScreenProps<RootStackParamList, 'MedicineAdd'>['navigation'],
+  navigation: NativeStackScreenProps<
+    RootStackParamList,
+    'MedicineAdd'
+  >['navigation'],
 ): MedicinePhotoState => {
   const [isUploading, setIsUploading] = React.useState(false);
+  const [isSavingExpiry, setIsSavingExpiry] = React.useState(false);
+  const [registeredMedicine, setRegisteredMedicine] = React.useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [expireDate, setExpireDate] = React.useState('');
+  const [expireDateError, setExpireDateError] = React.useState<string | null>(
+    null,
+  );
 
   const handleAuthSessionExpired = React.useCallback((): void => {
     redirectToLoginForExpiredSession(navigation);
@@ -55,6 +74,62 @@ export const useMedicinePhoto = (
     }
   };
 
+  const handleExpireDateChange = (nextText: string): void => {
+    setExpireDate(formatMedicineExpireDateInput(nextText));
+    setExpireDateError(null);
+  };
+
+  const handleConfirmRegistration = async (
+    shouldSkipExpiry = false,
+  ): Promise<void> => {
+    if (!registeredMedicine || isSavingExpiry) {
+      return;
+    }
+
+    const nextExpireDate = shouldSkipExpiry ? '' : expireDate;
+    const error = getMedicineExpireDateError(nextExpireDate);
+    setExpireDateError(error);
+    if (error) {
+      return;
+    }
+
+    if (nextExpireDate.trim()) {
+      try {
+        setIsSavingExpiry(true);
+        await updateMedicine(String(registeredMedicine.id), {
+          expire_date: nextExpireDate.trim(),
+        });
+        invalidateMedicines();
+      } catch (requestError) {
+        if (isAuthSessionExpiredError(requestError)) {
+          handleAuthSessionExpired();
+          return;
+        }
+
+        Alert.alert(
+          '유통기한 저장 실패',
+          getApiErrorUserMessage(requestError, {
+            fallbackMessage:
+              '유통기한을 저장하지 못했습니다. 다시 시도해 주세요.',
+          }),
+        );
+        return;
+      } finally {
+        setIsSavingExpiry(false);
+      }
+    }
+
+    setRegisteredMedicine(null);
+    setExpireDate('');
+    Alert.alert('등록 완료', '약품 정보가 자동으로 등록되었습니다.', [
+      { text: '확인', onPress: handleClose },
+    ]);
+  };
+
+  const handleRegisterWithoutExpiry = async (): Promise<void> => {
+    await handleConfirmRegistration(true);
+  };
+
   const uploadCapturedPhoto = async (imageBase64: string): Promise<void> => {
     setIsUploading(true);
 
@@ -65,7 +140,10 @@ export const useMedicinePhoto = (
       });
 
       if (registerResult.isRegistered !== true) {
-        console.warn('[MedicineAddScreen] medicine photo needs manual input:', registerResult);
+        console.warn(
+          '[MedicineAddScreen] medicine photo needs manual input:',
+          registerResult,
+        );
 
         Alert.alert(
           '추가 입력 필요',
@@ -73,7 +151,10 @@ export const useMedicinePhoto = (
           [
             {
               text: '직접 입력',
-              onPress: () => navigation.dispatch(StackActions.replace('MedicineManualInput')),
+              onPress: () =>
+                navigation.dispatch(
+                  StackActions.replace('MedicineManualInput'),
+                ),
             },
           ],
         );
@@ -81,6 +162,16 @@ export const useMedicinePhoto = (
       }
 
       invalidateMedicines();
+      if (registerResult.id !== undefined) {
+        setRegisteredMedicine({
+          id: registerResult.id,
+          name: registerResult.name,
+        });
+        setExpireDate('');
+        setExpireDateError(null);
+        return;
+      }
+
       Alert.alert('등록 완료', '약품 정보가 자동으로 등록되었습니다.', [
         {
           text: '확인',
@@ -187,5 +278,16 @@ export const useMedicinePhoto = (
     }
   };
 
-  return { isUploading, handleClose, handleOpenCamera };
+  return {
+    isUploading,
+    isSavingExpiry,
+    registeredMedicineName: registeredMedicine?.name ?? null,
+    expireDate,
+    expireDateError,
+    handleClose,
+    handleOpenCamera,
+    handleExpireDateChange,
+    handleConfirmRegistration,
+    handleRegisterWithoutExpiry,
+  };
 };
