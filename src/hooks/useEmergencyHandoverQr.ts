@@ -4,7 +4,9 @@ import type { QRCodeSegment } from 'qrcode';
 import {
   createEmergencyGuideHandover,
   getEmergencyGuideErrorMessage,
+  getEmergencyWasteGuide,
 } from '@/services';
+import { useEmergencyGuideStore } from '@/store';
 import type {
   CreateEmergencyGuideHandoverResponse,
   EmergencyGuideHandoverStatus,
@@ -69,6 +71,15 @@ export function useEmergencyHandoverQr({
   const [qrSvg, setQrSvg] = React.useState<string | null>(null);
   const [handoverError, setHandoverError] = React.useState<string | null>(null);
   const [isIssuingQr, setIsIssuingQr] = React.useState(true);
+  const [isHandoverUnavailable, setIsHandoverUnavailable] =
+    React.useState(false);
+  const setWasteGuide = useEmergencyGuideStore(state => state.setWasteGuide);
+  const setWasteGuideError = useEmergencyGuideStore(
+    state => state.setWasteGuideError,
+  );
+  const setWasteGuideLoading = useEmergencyGuideStore(
+    state => state.setWasteGuideLoading,
+  );
 
   React.useEffect(() => {
     let isActive = true;
@@ -89,9 +100,22 @@ export function useEmergencyHandoverQr({
         setHandoverError(
           '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
         );
+        setWasteGuideError(
+          '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+        );
         setIsIssuingQr(false);
         return;
       }
+
+      if (completedStepIds.length === 0) {
+        setWasteGuide([]);
+        setIsHandoverUnavailable(true);
+        setIsIssuingQr(false);
+        return;
+      }
+
+      setWasteGuideLoading();
+      setIsHandoverUnavailable(false);
 
       try {
         const response = await createEmergencyGuideHandover(sessionId, {
@@ -112,6 +136,22 @@ export function useEmergencyHandoverQr({
             response.snapshot.completedTreatments.length,
           usedSuppliesCount: response.snapshot.usedSupplies.length,
         });
+
+        const loadWasteGuide = async (): Promise<void> => {
+          try {
+            const wasteGuideResponse = await getEmergencyWasteGuide(sessionId);
+            setWasteGuide(wasteGuideResponse.data);
+          } catch (error: unknown) {
+            const errorMessage = getEmergencyGuideErrorMessage(error);
+            console.error('[EmergencyGuide QR][Waste Guide Error]', {
+              ...getQrErrorDetails(error),
+              userMessage: errorMessage,
+            });
+            setWasteGuideError(errorMessage);
+          }
+        };
+
+        loadWasteGuide();
 
         try {
           console.warn('[EmergencyGuide QR][Generate]', {
@@ -154,6 +194,7 @@ export function useEmergencyHandoverQr({
         });
         if (isActive) {
           setHandoverError(errorMessage);
+          setWasteGuideError(errorMessage);
         }
       } finally {
         if (isActive) {
@@ -167,7 +208,14 @@ export function useEmergencyHandoverQr({
     return () => {
       isActive = false;
     };
-  }, [completedStepIds, sessionId, handoverStatus]);
+  }, [
+    completedStepIds,
+    handoverStatus,
+    sessionId,
+    setWasteGuide,
+    setWasteGuideError,
+    setWasteGuideLoading,
+  ]);
 
   const handleQrRenderError = (error: Error): void => {
     console.error('[EmergencyGuide QR][Render Error]', {
@@ -176,5 +224,12 @@ export function useEmergencyHandoverQr({
     });
   };
 
-  return { handover, qrSvg, handoverError, isIssuingQr, handleQrRenderError };
+  return {
+    handover,
+    qrSvg,
+    handoverError,
+    isIssuingQr,
+    isHandoverUnavailable,
+    handleQrRenderError,
+  };
 }

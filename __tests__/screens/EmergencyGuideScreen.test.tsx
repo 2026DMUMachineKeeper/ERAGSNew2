@@ -46,7 +46,11 @@ const GUIDE: EmergencyGuideResponse = {
 
 describe('EmergencyGuideScreen 처치 완료 확인', () => {
   let renderer: ReactTestRenderer;
-  const navigation = { replace: jest.fn(), goBack: jest.fn() };
+  const navigation = {
+    replace: jest.fn(),
+    reset: jest.fn(),
+    goBack: jest.fn(),
+  };
 
   const pressNext = async (): Promise<void> => {
     await act(async () => {
@@ -129,19 +133,38 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
   it.each([
     ['완료했어요 · 중단', [7, 19]],
     ['아직 안 했어요 · 중단', [7]],
-  ])('중단 시 %s 선택에 따라 현재 처치 기록을 반영한다', async (label, completedStepIds): Promise<void> => {
-    await pressNext();
-    await answerCompletion('완료했어요');
-    await pressButton('응급처치 중단');
-    expect(navigation.replace).not.toHaveBeenCalled();
+  ])(
+    '중단 시 %s 선택에 따라 현재 처치 기록을 반영한다',
+    async (label, completedStepIds): Promise<void> => {
+      await pressNext();
+      await answerCompletion('완료했어요');
+      await pressButton('응급처치 중단');
+      expect(navigation.replace).not.toHaveBeenCalled();
 
-    await pressButton(label);
+      await pressButton(label);
+      expect(useEmergencyGuideStore.getState()).toMatchObject({
+        completedStepIds,
+        currentStepIndex: 1,
+        handoverStatus: 'IN_PROGRESS',
+      });
+      expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    },
+  );
+
+  it('아무 처치 없이 중단하면 홈으로 이동한다', async (): Promise<void> => {
+    await pressButton('응급처치 중단');
+    await pressButton('아직 안 했어요 · 중단');
+
     expect(useEmergencyGuideStore.getState()).toMatchObject({
-      completedStepIds,
-      currentStepIndex: 1,
-      handoverStatus: 'IN_PROGRESS',
+      completedStepIds: [],
+      guide: null,
+      handoverStatus: null,
     });
-    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    expect(navigation.reset).toHaveBeenCalledWith({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 
   it('중단 취소와 모달 닫기는 처치 기록과 현재 단계를 변경하지 않는다', async (): Promise<void> => {
@@ -168,7 +191,9 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     await act(async () => {
       renderer.root.findByType(GuideHeader).props.onBackPress();
     });
-    expect(renderer.root.findByType(StepDetail).props.isStepCompleted).toBe(true);
+    expect(renderer.root.findByType(StepDetail).props.isStepCompleted).toBe(
+      true,
+    );
 
     await pressNext();
     expect(Alert.alert).toHaveBeenCalledTimes(1);

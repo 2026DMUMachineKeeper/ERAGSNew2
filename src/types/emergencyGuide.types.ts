@@ -36,7 +36,7 @@ export interface EmergencyGuideAssessment {
 }
 
 export interface EmergencyGuideTreatmentStep {
-  stepId: number | null;
+  stepId: number;
   stepNo: number;
   instruction: string;
   checkpointQuestion: string;
@@ -114,4 +114,19 @@ export interface EmergencyGuideHandoverSnapshot {
 export interface CreateEmergencyGuideHandoverResponse {
   publicHandoverUrl: string;
   snapshot: EmergencyGuideHandoverSnapshot;
+}
+
+export type EmergencyWasteGuideDangerLevel = 'HIGH' | 'LOW';
+
+export interface EmergencyWasteGuideItem {
+  itemName: string;
+  wasteCategory: string;
+  disposalMethod: string;
+  dangerLevel: EmergencyWasteGuideDangerLevel;
+}
+
+export interface EmergencyWasteGuideResponse {
+  success: true;
+  data: EmergencyWasteGuideItem[];
+  message?: string;
 }

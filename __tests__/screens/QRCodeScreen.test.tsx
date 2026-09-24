@@ -4,6 +4,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import {
   createEmergencyGuideHandover,
   getEmergencyGuideErrorMessage,
+  getEmergencyWasteGuide,
 } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type { EmergencyGuideResponse } from '@/types';
@@ -16,6 +17,7 @@ jest.mock('qrcode', () => ({
 }));
 jest.mock('@/services', () => ({
   createEmergencyGuideHandover: jest.fn(),
+  getEmergencyWasteGuide: jest.fn(),
   getEmergencyGuideErrorMessage: jest.fn(
     () => '응급 가이드 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
   ),
@@ -23,6 +25,7 @@ jest.mock('@/services', () => ({
 
 const createHandoverMock = jest.mocked(createEmergencyGuideHandover);
 const getErrorMessageMock = jest.mocked(getEmergencyGuideErrorMessage);
+const getWasteGuideMock = jest.mocked(getEmergencyWasteGuide);
 
 const GUIDE: EmergencyGuideResponse = {
   sessionId: 'session-1',
@@ -107,6 +110,28 @@ describe('QRCodeScreen', () => {
     expect(getErrorMessageMock).toHaveBeenCalledWith(expect.any(Error));
   });
 
+  it('완료한 처치가 없으면 인계 API를 호출하지 않고 안내한다', async (): Promise<void> => {
+    const store = useEmergencyGuideStore.getState();
+    store.startGuide({ guide: GUIDE, source: 'manual', mainLabel: '출혈' });
+    store.setHandoverStatus('IN_PROGRESS');
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <QRCodeScreen
+          navigation={{ reset: jest.fn(), navigate: jest.fn() } as never}
+          route={{} as never}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const rendered = JSON.stringify(renderer?.toJSON());
+    expect(createHandoverMock).not.toHaveBeenCalled();
+    expect(rendered).toContain(
+      '완료한 처치가 없어 QR 인계를 발급하지 않았습니다.',
+    );
+  });
+
   it('성공 시 서버 snapshot과 토큰 QR을 표시하고 URL 문자열은 노출하지 않는다', async (): Promise<void> => {
     const tokenUrl = `https://handover.example/handover.html#token=${'A'.repeat(
       43,
@@ -134,6 +159,17 @@ describe('QRCodeScreen', () => {
         usedSupplies: [{ name: '서버 응답 약품명', quantity: 3 }],
       },
     });
+    getWasteGuideMock.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          itemName: '거즈',
+          wasteCategory: 'GENERAL',
+          disposalMethod: '일반 쓰레기로 배출하세요.',
+          dangerLevel: 'LOW',
+        },
+      ],
+    });
     const store = useEmergencyGuideStore.getState();
     store.startGuide({ guide: GUIDE, source: 'manual', mainLabel: '출혈' });
     store.markStepCompleted(7);
@@ -157,5 +193,6 @@ describe('QRCodeScreen', () => {
     expect(rendered).toContain('emergency-handover-qr');
     expect(rendered).toContain('30분 동안 조회');
     expect(rendered).not.toContain('handover.html#token=');
+    expect(getWasteGuideMock).toHaveBeenCalledWith('session-1');
   });
 });

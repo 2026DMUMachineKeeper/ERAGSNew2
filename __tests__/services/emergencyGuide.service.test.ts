@@ -6,6 +6,7 @@ import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
+  getEmergencyWasteGuide,
   retryEmergencyGuide,
 } from '@/services/emergencyGuide.service';
 
@@ -254,6 +255,50 @@ describe('emergencyGuide.service', () => {
     );
   });
 
+  it('폐기물 안내를 v2 세션 API에서 조회한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: [
+          {
+            itemName: '거즈',
+            wasteCategory: 'GENERAL',
+            disposalMethod: '일반 쓰레기로 배출하세요.',
+            dangerLevel: 'LOW',
+          },
+        ],
+      }),
+    );
+
+    const response = await getEmergencyWasteGuide('session/1');
+
+    expect(response.data[0]?.itemName).toBe('거즈');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'test-api-base-url/api/v2/emergency-guide-sessions/session%2F1/waste-guide',
+      expect.objectContaining({
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      }),
+    );
+  });
+
+  it('인계장이 없는 폐기물 안내 404 메시지를 보존한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(404, {
+        success: false,
+        message: '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
+      }),
+    );
+
+    await expect(
+      getEmergencyWasteGuide('missing-session'),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: 'WASTE_GUIDE_HANDOVER_NOT_FOUND',
+      message: '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
+    });
+  });
+
   it.each(['<html>Forbidden</html>', ''])(
     'JSON이 아닌 403 응답은 상태만 기록하고 본문은 노출하지 않는다: %s',
     async (body): Promise<void> => {
@@ -297,6 +342,27 @@ describe('emergencyGuide.service', () => {
     const guide = await createEmergencyGuide(new FormData());
 
     expect(guide.sessionId).toBeNull();
+  });
+
+  it('처치 단계에 기록 가능한 stepId가 없으면 응답을 거부한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: {
+          ...createGuidePayload('invalid-step-session'),
+          treatment: {
+            routeCode: 'A',
+            modelVersion: null,
+            steps: [{ stepId: null }],
+          },
+        },
+      }),
+    );
+
+    await expect(createEmergencyGuide(new FormData())).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+      message: '응급 가이드 처치 단계 응답이 DTO 계약과 일치하지 않습니다.',
+    });
   });
 
   it('404 SESSION_NOT_FOUND 진단 정보를 보존한다', async (): Promise<void> => {
