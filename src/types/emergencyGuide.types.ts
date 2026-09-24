@@ -36,7 +36,7 @@ export interface EmergencyGuideAssessment {
 }
 
 export interface EmergencyGuideTreatmentStep {
-  stepId: number | null;
+  stepId: number;
   stepNo: number;
   instruction: string;
   checkpointQuestion: string;

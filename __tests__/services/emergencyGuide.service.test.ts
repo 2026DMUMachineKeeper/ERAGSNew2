@@ -344,6 +344,27 @@ describe('emergencyGuide.service', () => {
     expect(guide.sessionId).toBeNull();
   });
 
+  it('처치 단계에 기록 가능한 stepId가 없으면 응답을 거부한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: {
+          ...createGuidePayload('invalid-step-session'),
+          treatment: {
+            routeCode: 'A',
+            modelVersion: null,
+            steps: [{ stepId: null }],
+          },
+        },
+      }),
+    );
+
+    await expect(createEmergencyGuide(new FormData())).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+      message: '응급 가이드 처치 단계 응답이 DTO 계약과 일치하지 않습니다.',
+    });
+  });
+
   it('404 SESSION_NOT_FOUND 진단 정보를 보존한다', async (): Promise<void> => {
     fetchMock.mockResolvedValue(
       createMockResponse(404, {

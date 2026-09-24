@@ -260,8 +260,26 @@ const readEmergencyGuideResponse = async (
     );
   }
 
+  if (
+    !isRecord(payload.data.treatment) ||
+    !Array.isArray(payload.data.treatment.steps) ||
+    !payload.data.treatment.steps.every(isEmergencyGuideTreatmentStep)
+  ) {
+    throw new EmergencyGuideRequestError(
+      '응급 가이드 처치 단계 응답이 DTO 계약과 일치하지 않습니다.',
+      response.status,
+      'INVALID_RESPONSE',
+      requestUrl,
+    );
+  }
+
   return (payload as unknown as EmergencyGuideSuccessEnvelope).data;
 };
+
+const isEmergencyGuideTreatmentStep = (value: unknown): boolean =>
+  isRecord(value) &&
+  Number.isInteger(value.stepId) &&
+  (value.stepId as number) > 0;
 
 export const createEmergencyGuide = async (
   formData: FormData,
