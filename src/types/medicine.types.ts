@@ -5,6 +5,7 @@ export interface MedicineEditValidationErrors {
   efficacy: string | null;
   usage: string | null;
   quantity: string | null;
+  expireDate: string | null;
 }
 
 export interface MedicineEditValues {
@@ -12,18 +13,21 @@ export interface MedicineEditValues {
   efficacy: string;
   usage: string;
   quantity: string;
+  expireDate: string;
 }
 
 export interface MedicineManualInputErrors {
   name: string | null;
   efficacy: string | null;
   usage: string | null;
+  expireDate: string | null;
 }
 
 export interface MedicineManualInputValues {
   name: string;
   efficacy: string;
   usage: string;
+  expireDate: string;
 }
 
 export interface MedicineEditor {
@@ -64,8 +68,15 @@ export interface MedicineManualInputState {
 
 export interface MedicinePhotoState {
   isUploading: boolean;
+  isSavingExpiry: boolean;
+  registeredMedicineName: string | null;
+  expireDate: string;
+  expireDateError: string | null;
   handleClose: () => void;
   handleOpenCamera: () => Promise<void>;
+  handleExpireDateChange: (nextText: string) => void;
+  handleConfirmRegistration: () => Promise<void>;
+  handleRegisterWithoutExpiry: () => Promise<void>;
 }
 
 export interface MedicineFormFieldConfig {
@@ -77,6 +88,7 @@ export interface MedicineFormFieldConfig {
   errorInputClassName: string;
   inputProps?: Omit<TextInputProps, 'value' | 'onChangeText'>;
   hasCharacterCount?: boolean;
+  isOptional?: boolean;
 }
 
 export interface MedicineItem {
@@ -88,4 +100,11 @@ export interface MedicineItem {
   barcode: string | null;
   usage: string;
   efficacy: string;
+  expireDate?: string | null;
+}
+
+export interface MedicineAlert extends MedicineItem {
+  isLowStock: boolean;
+  isExpiringSoon: boolean;
+  isExpired: boolean;
 }

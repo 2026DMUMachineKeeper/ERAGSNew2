@@ -38,7 +38,12 @@ export const MedicineFormField = ({
   return (
     <View className={config.containerClassName}>
       <Text className={config.labelClassName}>
-        {config.label} <Text className="text-memoRed">*</Text>
+        {config.label}{' '}
+        {config.isOptional ? (
+          <Text className="text-memoSubText">(선택)</Text>
+        ) : (
+          <Text className="text-memoRed">*</Text>
+        )}
       </Text>
       {config.innerInputClassName ? (
         <View className={inputClassName}>
