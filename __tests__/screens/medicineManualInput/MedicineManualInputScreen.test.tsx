@@ -47,12 +47,13 @@ describe('약품 수동 입력 연결', () => {
     ).toBe(true);
 
     const inputs = renderer.root.findAllByType(TextInput);
-    expect(inputs[1].props.maxLength).toBe(200);
-    expect(inputs[2].props.maxLength).toBe(300);
+    expect(inputs[2].props.maxLength).toBe(200);
+    expect(inputs[3].props.maxLength).toBe(300);
     act((): void => {
       inputs[0].props.onChangeText(' 새 약품 ');
-      inputs[1].props.onChangeText('효능');
-      inputs[2].props.onChangeText('사용법');
+      inputs[1].props.onChangeText('2026-10-15');
+      inputs[2].props.onChangeText('효능');
+      inputs[3].props.onChangeText('사용법');
     });
     await pressButton('-');
     await pressButton('+');
@@ -62,6 +63,7 @@ describe('약품 수동 입력 연결', () => {
       efficacy: '효능',
       usage: '사용법',
       quantityToAdd: 2,
+      expire_date: '2026-10-15',
     });
     expect(invalidateMedicines).toHaveBeenCalledTimes(1);
   });

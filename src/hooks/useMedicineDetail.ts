@@ -41,6 +41,7 @@ export const useMedicineDetail = ({
     efficacy: '',
     usage: '',
     quantity: '0',
+    expireDate: '',
   });
   const [editErrors, setEditErrors] = React.useState<MedicineEditValidationErrors>(
     EMPTY_MEDICINE_EDIT_ERRORS,
@@ -65,6 +66,7 @@ export const useMedicineDetail = ({
             efficacy: nextMedicine.efficacy,
             usage: nextMedicine.usage,
             quantity: String(nextMedicine.qty),
+            expireDate: nextMedicine.expireDate ?? '',
           });
         }
       } catch (error: unknown) {
@@ -111,6 +113,7 @@ export const useMedicineDetail = ({
       efficacy: medicine.efficacy,
       usage: medicine.usage,
       quantity: String(medicine.qty),
+      expireDate: medicine.expireDate ?? '',
     });
     setEditErrors(EMPTY_MEDICINE_EDIT_ERRORS);
     setIsEditOpen(true);
@@ -134,7 +137,7 @@ export const useMedicineDetail = ({
       return;
     }
 
-    const { name, efficacy, usage, quantity } = editValues;
+    const { name, efficacy, usage, quantity, expireDate } = editValues;
     const trimmedName = name.trim();
     const trimmedEfficacy = efficacy.trim();
     const trimmedUsage = usage.trim();
@@ -143,7 +146,8 @@ export const useMedicineDetail = ({
       nextEditErrors.name ||
         nextEditErrors.quantity ||
         nextEditErrors.efficacy ||
-        nextEditErrors.usage,
+        nextEditErrors.usage ||
+        nextEditErrors.expireDate,
     );
 
     setEditErrors(nextEditErrors);
@@ -161,6 +165,11 @@ export const useMedicineDetail = ({
         efficacy: trimmedEfficacy,
         usage: trimmedUsage,
         quantity: parsedQuantity,
+        ...(expireDate.trim()
+          ? { expire_date: expireDate.trim() }
+          : medicine.expireDate
+            ? { expire_date: null }
+            : {}),
       });
       // 목록은 별도 조회 결과를 사용하므로 상세 수정과 함께 갱신을 요청합니다.
       invalidateMedicines();
@@ -173,6 +182,7 @@ export const useMedicineDetail = ({
               efficacy: trimmedEfficacy,
               usage: trimmedUsage,
               qty: parsedQuantity,
+              expireDate: expireDate.trim() || null,
             }
           : current,
       );

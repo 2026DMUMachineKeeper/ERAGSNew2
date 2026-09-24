@@ -67,6 +67,13 @@ export const MedicineManualForm = ({ form }: MedicineManualFormProps): React.JSX
         </View>
 
         <MedicineFormField
+          config={MEDICINE_MANUAL_FIELDS.expireDate}
+          value={values.expireDate}
+          error={errors.expireDate}
+          onChangeText={(nextText: string): void => onChange('expireDate', nextText)}
+        />
+
+        <MedicineFormField
           config={MEDICINE_MANUAL_FIELDS.efficacy}
           value={values.efficacy}
           error={errors.efficacy}

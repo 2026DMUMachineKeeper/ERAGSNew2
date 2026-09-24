@@ -1,4 +1,4 @@
-import type { MedicineItem } from '@/types';
+import type { MedicineAlert, MedicineItem } from '@/types';
 
 import {
   getAuthToken,
@@ -28,6 +28,7 @@ export type MedicineApiRecord = {
   count?: number | string;
   stock?: number | string;
   threshold?: number | string;
+  expire_date?: string | null;
   [key: string]: unknown;
 };
 
@@ -196,6 +197,7 @@ export const normalizeMedicine = (record: MedicineApiRecord): MedicineItem => ({
   barcode: readOptionalString(record, ['barcode']),
   usage: readString(record, ['usage'], '정보 없음'),
   efficacy: readString(record, ['efficacy'], '정보 없음'),
+  expireDate: readOptionalString(record, ['expire_date', 'expireDate']),
 });
 
 export async function fetchMedicines(): Promise<MedicineItem[]> {
@@ -209,6 +211,24 @@ export async function fetchMedicines(): Promise<MedicineItem[]> {
 
   const payload = (await response.json()) as unknown;
   return readMedicineRecords(payload).map(normalizeMedicine);
+}
+
+export async function fetchMedicineAlerts(): Promise<MedicineAlert[]> {
+  const response = await authenticatedMedicineFetch('/api/medicines/alerts', {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    throw await readApiRequestError(response, '약품 알림 조회에 실패했습니다.');
+  }
+
+  const payload = (await response.json()) as unknown;
+  return readMedicineRecords(payload).map(record => ({
+    ...normalizeMedicine(record),
+    isLowStock: record.isLowStock === true,
+    isExpiringSoon: record.isExpiringSoon === true,
+    isExpired: record.isExpired === true,
+  }));
 }
 
 export async function fetchMedicineById(id: string): Promise<MedicineItem> {
@@ -264,6 +284,7 @@ export type MedicineManualCreateParams = {
   efficacy?: string;
   usage?: string;
   quantityToAdd?: number;
+  expire_date?: string;
 };
 
 export type MedicineManualCreateResult = {
@@ -275,6 +296,7 @@ export type MedicineUpdateParams = {
   usage?: string;
   efficacy?: string;
   quantity?: number;
+  expire_date?: string | null;
 };
 
 export type MedicineUseParams = {
@@ -381,6 +403,7 @@ export async function postMedicineManual(
     efficacy: params.efficacy,
     usage: params.usage,
     quantityToAdd: params.quantityToAdd ?? 1,
+    ...(params.expire_date === undefined ? {} : { expire_date: params.expire_date }),
   };
 
   const response = await authenticatedMedicineFetch(
