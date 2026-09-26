@@ -7,7 +7,11 @@ import {
   getEmergencyWasteGuide,
 } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyGuideResponse } from '@/types';
+import type {
+  CreateEmergencyGuideHandoverResponse,
+  EmergencyGuideResponse,
+  EmergencyWasteGuideResponse,
+} from '@/types';
 
 import { QRCodeScreen } from '@/screens/QRCodeScreen';
 
@@ -194,5 +198,83 @@ describe('QRCodeScreen', () => {
     expect(rendered).toContain('30분 동안 조회');
     expect(rendered).not.toContain('handover.html#token=');
     expect(getWasteGuideMock).toHaveBeenCalledWith('session-1');
+  });
+
+  it('이전 화면의 폐기 안내 응답이 새 응급 세션을 덮어쓰지 않는다', async (): Promise<void> => {
+    const handoverResponse: CreateEmergencyGuideHandoverResponse = {
+      publicHandoverUrl: `https://handover.example/handover.html#token=${'A'.repeat(43)}`,
+      snapshot: {
+        version: 2,
+        generatedAt: '2026-09-03T00:00:00.000Z',
+        expiresAt: '2026-09-03T00:30:00.000Z',
+        status: 'COMPLETED',
+        assessment: {
+          categoryCode: 'BLEEDING',
+          subtypeCode: 'BLEEDING_MODERATE',
+          severityCode: 'MEDIUM',
+          consciousness: 'CONSCIOUS',
+          ageGroup: 'ADULT',
+          redFlags: [],
+          call119Required: true,
+          summary: '서버 판단 요약',
+        },
+        completedTreatments: [],
+        usedSupplies: [],
+      },
+    };
+    const currentWasteGuide: EmergencyWasteGuideResponse['data'] = [
+      {
+        itemName: '새 세션 물품',
+        wasteCategory: 'GENERAL',
+        disposalMethod: '새 세션 안내',
+        dangerLevel: 'LOW',
+      },
+    ];
+    let resolveOldWasteGuide!: (response: EmergencyWasteGuideResponse) => void;
+    createHandoverMock.mockResolvedValue(handoverResponse);
+    getWasteGuideMock.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveOldWasteGuide = resolve;
+        }),
+    );
+
+    const store = useEmergencyGuideStore.getState();
+    store.startGuide({ guide: GUIDE, source: 'manual' });
+    store.markStepCompleted(7);
+    store.setHandoverStatus('COMPLETED');
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <QRCodeScreen navigation={{ reset: jest.fn() } as never} route={{} as never} />,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getWasteGuideMock).toHaveBeenCalledWith('session-1');
+
+    await ReactTestRenderer.act(async () => {
+      renderer?.unmount();
+      renderer = undefined;
+      store.startGuide({
+        guide: { ...GUIDE, sessionId: 'session-2' },
+        source: 'manual',
+      });
+      store.setWasteGuide(currentWasteGuide);
+      resolveOldWasteGuide({
+        success: true,
+        data: [
+          {
+            itemName: '이전 세션 물품',
+            wasteCategory: 'GENERAL',
+            disposalMethod: '이전 세션 안내',
+            dangerLevel: 'LOW',
+          },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    expect(useEmergencyGuideStore.getState().wasteGuide).toEqual(currentWasteGuide);
   });
 });
