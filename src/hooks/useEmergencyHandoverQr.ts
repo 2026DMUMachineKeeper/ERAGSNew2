@@ -83,6 +83,12 @@ export function useEmergencyHandoverQr({
 
   React.useEffect(() => {
     let isActive = true;
+    const guideAtRequestStart = useEmergencyGuideStore.getState().guide;
+    // 이전 화면의 응답이 새 응급 가이드의 전역 상태를 덮어쓰지 않도록 요청 당시 가이드를 확인한다.
+    const isCurrentGuide = (): boolean =>
+      isActive &&
+      useEmergencyGuideStore.getState().guide === guideAtRequestStart &&
+      guideAtRequestStart?.sessionId === sessionId;
 
     const issueQr = async (): Promise<void> => {
       console.warn('[EmergencyGuide QR][Issue]', {
@@ -123,7 +129,7 @@ export function useEmergencyHandoverQr({
           completedStepIds,
         });
 
-        if (!isActive) {
+        if (!isCurrentGuide()) {
           return;
         }
 
@@ -140,8 +146,14 @@ export function useEmergencyHandoverQr({
         const loadWasteGuide = async (): Promise<void> => {
           try {
             const wasteGuideResponse = await getEmergencyWasteGuide(sessionId);
-            setWasteGuide(wasteGuideResponse.data);
+            if (isCurrentGuide()) {
+              setWasteGuide(wasteGuideResponse.data);
+            }
           } catch (error: unknown) {
+            if (!isCurrentGuide()) {
+              return;
+            }
+
             const errorMessage = getEmergencyGuideErrorMessage(error);
             console.error('[EmergencyGuide QR][Waste Guide Error]', {
               ...getQrErrorDetails(error),
@@ -192,7 +204,7 @@ export function useEmergencyHandoverQr({
           ...getQrErrorDetails(error),
           userMessage: errorMessage,
         });
-        if (isActive) {
+        if (isCurrentGuide()) {
           setHandoverError(errorMessage);
           setWasteGuideError(errorMessage);
         }
