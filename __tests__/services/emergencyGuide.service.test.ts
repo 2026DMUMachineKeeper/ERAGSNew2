@@ -3,6 +3,7 @@ import {
   createEmergencyGuide,
   createEmergencyGuideHandover,
   createImageEmergencyGuide,
+  createPhotoEmergencyGuide,
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
@@ -191,6 +192,85 @@ describe('emergencyGuide.service', () => {
 
     expect(getFieldNames(0)).toEqual(['request', 'audio']);
     expect(getFieldNames(1)).toEqual(['request', 'image']);
+  });
+
+  it('최대 5장의 사진과 텍스트 또는 음성을 한 요청으로 전송한다', async (): Promise<void> => {
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(200, {
+          success: true,
+          data: createGuidePayload('photo-text-session'),
+        }),
+      )
+      .mockResolvedValueOnce(
+        createMockResponse(200, {
+          success: true,
+          data: createGuidePayload('photo-audio-session'),
+        }),
+      );
+    const images = Array.from({ length: 5 }, (_, index) => ({
+      uri: `file:///injury-${index + 1}.jpg`,
+      name: `injury-${index + 1}.jpg`,
+      type: 'image/jpeg',
+    }));
+
+    await createPhotoEmergencyGuide({
+      images,
+      text: '넘어지고 나서 무릎에서 피가 납니다.',
+    });
+    await createPhotoEmergencyGuide({
+      images: images.slice(0, 2),
+      audio: {
+        uri: 'file:///description.m4a',
+        name: 'description.m4a',
+        type: 'audio/mp4',
+      },
+    });
+
+    const getFieldNames = (callIndex: number): string[] => {
+      const requestInit = fetchMock.mock.calls[callIndex]?.[1] as
+        | RequestInit
+        | undefined;
+      const formData = requestInit?.body as FormData | undefined;
+      if (!formData) {
+        throw new Error('사진 요청 FormData가 없습니다.');
+      }
+
+      const standardFormData = formData as unknown as {
+        entries: () => Iterable<readonly [string, unknown]>;
+      };
+
+      return Array.from(standardFormData.entries()).map(
+        ([fieldName]) => fieldName,
+      );
+    };
+
+    expect(getFieldNames(0)).toEqual([
+      'request',
+      'image',
+      'image',
+      'image',
+      'image',
+      'image',
+      'text',
+    ]);
+    expect(getFieldNames(1)).toEqual(['request', 'image', 'image', 'audio']);
+  });
+
+  it('사진이 없거나 5장을 초과하면 요청하지 않는다', async (): Promise<void> => {
+    const image = {
+      uri: 'file:///injury.jpg',
+      name: 'injury.jpg',
+      type: 'image/jpeg',
+    };
+
+    await expect(createPhotoEmergencyGuide({ images: [] })).rejects.toThrow(
+      '응급 사진은 1장 이상 5장 이하로 전송해야 합니다.',
+    );
+    await expect(
+      createPhotoEmergencyGuide({ images: Array(6).fill(image) }),
+    ).rejects.toThrow('응급 사진은 1장 이상 5장 이하로 전송해야 합니다.');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('빈 sessionId는 요청하지 않는다', async (): Promise<void> => {

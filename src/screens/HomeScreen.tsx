@@ -25,8 +25,10 @@ import { isAuthSessionExpiredError } from '@/services/auth.service';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 
 import {
+  EmergencyInputWaitingModal,
   EmergencySupportSection,
   HomeHeader,
+  PhotoSymptomInputModal,
   QuickActionCard,
 } from './home/components';
 import { useHomeEmergencyActions } from './home/useHomeEmergencyActions';
@@ -81,12 +83,29 @@ export const HomeScreen = ({
   );
   const {
     isListening,
+    isPhotoVoiceRecording,
+    isPhotoVoiceStarting,
     isVisionUploading,
     isVoiceProcessing,
+    photoAdditionalText,
+    photoCount,
+    photoInputStep,
+    photoUris,
     visionStatus,
     voiceStatus,
+    handleAddPhotoPress,
     handleEmergencyReportPress,
+    handlePhotoInputBack,
+    handlePhotoFlowCancel,
     handlePhotoPress,
+    handleRemovePhoto,
+    handlePhotoTextChange,
+    handlePhotoTextSubmit,
+    handlePhotoVoiceSubmit,
+    handleStartPhotoVoice,
+    handleSelectPhotoText,
+    handleSelectPhotoVoice,
+    handleSendPhotosOnly,
     handleVoicePress,
   } = useHomeEmergencyActions(handleGuideCreated);
 
@@ -171,6 +190,32 @@ export const HomeScreen = ({
           });
         }}
         onPressMedicine={handleAlertMedicinePress}
+      />
+
+      <PhotoSymptomInputModal
+        additionalText={photoAdditionalText}
+        isUploading={isVisionUploading}
+        isVoiceRecording={isPhotoVoiceRecording}
+        isVoiceStarting={isPhotoVoiceStarting}
+        photoCount={photoCount}
+        photoUris={photoUris}
+        step={photoInputStep}
+        onAddPhoto={handleAddPhotoPress}
+        onBack={handlePhotoInputBack}
+        onCancel={handlePhotoFlowCancel}
+        onChangeAdditionalText={handlePhotoTextChange}
+        onRemovePhoto={handleRemovePhoto}
+        onSelectText={handleSelectPhotoText}
+        onSelectVoice={handleSelectPhotoVoice}
+        onStartVoice={handleStartPhotoVoice}
+        onSendPhotosOnly={handleSendPhotosOnly}
+        onSubmitText={handlePhotoTextSubmit}
+        onSubmitVoice={handlePhotoVoiceSubmit}
+      />
+
+      <EmergencyInputWaitingModal
+        isVisible={isVoiceProcessing}
+        message="음성 입력을 전송하고 분석하고 있습니다."
       />
     </SafeAreaView>
   );

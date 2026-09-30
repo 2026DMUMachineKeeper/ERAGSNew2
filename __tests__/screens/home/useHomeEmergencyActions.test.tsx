@@ -4,9 +4,11 @@ import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { useIsFocused } from '@react-navigation/native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { launchCamera } from 'react-native-image-picker';
 
 import {
   createAudioEmergencyGuide,
+  createPhotoEmergencyGuide,
   getAddressFromCoordinates,
   hasLocationPermission,
   retryEmergencyGuide,
@@ -29,7 +31,7 @@ jest.mock('@react-native-community/geolocation', () => ({
 
 jest.mock('@/services', () => ({
   createAudioEmergencyGuide: jest.fn(),
-  createImageEmergencyGuide: jest.fn(),
+  createPhotoEmergencyGuide: jest.fn(),
   getAddressFromCoordinates: jest.fn(),
   hasLocationPermission: jest.fn(),
   retryEmergencyGuide: jest.fn(),
@@ -140,6 +142,203 @@ describe('홈 응급 작업 정리', () => {
       '권한 확인 실패',
       '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     );
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('사진을 최대 5장까지 모으고 텍스트와 함께 한 번에 전송한다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest.mocked(launchCamera).mockImplementation(async () => ({
+      assets: [
+        {
+          uri: `file:///injury-${
+            jest.mocked(launchCamera).mock.calls.length
+          }.jpg`,
+          fileName: `injury-${jest.mocked(launchCamera).mock.calls.length}.jpg`,
+          type: 'image/jpeg',
+        },
+      ],
+    }));
+    jest.mocked(createPhotoEmergencyGuide).mockResolvedValue(GUIDE);
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+    for (let index = 0; index < 4; index += 1) {
+      await act(
+        async (): Promise<void> => currentActions.handleAddPhotoPress(),
+      );
+    }
+    await act(async (): Promise<void> => currentActions.handleAddPhotoPress());
+
+    expect(currentActions.photoCount).toBe(5);
+    expect(launchCamera).toHaveBeenCalledTimes(5);
+
+    act((): void =>
+      currentActions.handlePhotoTextChange('넘어진 뒤 무릎에서 피가 납니다.'),
+    );
+    await act(
+      async (): Promise<void> => currentActions.handlePhotoTextSubmit(),
+    );
+
+    expect(createPhotoEmergencyGuide).toHaveBeenCalledWith(
+      {
+        images: expect.arrayContaining([
+          expect.objectContaining({ uri: 'file:///injury-1.jpg' }),
+        ]),
+        text: '넘어진 뒤 무릎에서 피가 납니다.',
+      },
+      expect.any(AbortSignal),
+    );
+    expect(
+      jest.mocked(createPhotoEmergencyGuide).mock.calls[0]?.[0].images,
+    ).toHaveLength(5);
+    expect(onGuideCreated).toHaveBeenCalledWith('image', GUIDE);
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('촬영한 사진을 개별 삭제하고 마지막 사진 삭제 시 입력을 종료한다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest
+      .mocked(launchCamera)
+      .mockResolvedValueOnce({
+        assets: [
+          {
+            uri: 'file:///injury-1.jpg',
+            fileName: 'injury-1.jpg',
+            type: 'image/jpeg',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        assets: [
+          {
+            uri: 'file:///injury-2.jpg',
+            fileName: 'injury-2.jpg',
+            type: 'image/jpeg',
+          },
+        ],
+      });
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+    await act(async (): Promise<void> => currentActions.handleAddPhotoPress());
+    act((): void => currentActions.handleRemovePhoto(0));
+
+    expect(currentActions.photoUris).toEqual(['file:///injury-2.jpg']);
+    expect(currentActions.photoCount).toBe(1);
+    expect(currentActions.photoInputStep).toBe('options');
+
+    act((): void => currentActions.handleRemovePhoto(0));
+    expect(currentActions.photoUris).toEqual([]);
+    expect(currentActions.photoCount).toBe(0);
+    expect(currentActions.photoInputStep).toBeNull();
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('사진 전송 전 녹음한 음성을 같은 요청에 추가한다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [
+        {
+          uri: 'file:///injury.jpg',
+          fileName: 'injury.jpg',
+          type: 'image/jpeg',
+        },
+      ],
+    });
+    jest.mocked(createPhotoEmergencyGuide).mockResolvedValue(GUIDE);
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+    await act(
+      async (): Promise<void> => currentActions.handleSelectPhotoVoice(),
+    );
+
+    expect(startAudioRecording).not.toHaveBeenCalled();
+    expect(currentActions.photoInputStep).toBe('voice');
+
+    await act(
+      async (): Promise<void> => currentActions.handleStartPhotoVoice(),
+    );
+
+    expect(startAudioRecording).toHaveBeenCalledTimes(1);
+    expect(currentActions.isPhotoVoiceRecording).toBe(true);
+
+    await act(
+      async (): Promise<void> => currentActions.handlePhotoVoiceSubmit(),
+    );
+
+    expect(createPhotoEmergencyGuide).toHaveBeenCalledWith(
+      {
+        images: [
+          {
+            uri: 'file:///injury.jpg',
+            name: 'injury.jpg',
+            type: 'image/jpeg',
+          },
+        ],
+        audio: AUDIO_FILE,
+      },
+      expect.any(AbortSignal),
+    );
+    expect(onGuideCreated).toHaveBeenCalledWith('image', GUIDE);
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('사진 추가 음성에서 뒤로 가면 사진을 유지하고 녹음만 종료한다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [
+        {
+          uri: 'file:///injury.jpg',
+          fileName: 'injury.jpg',
+          type: 'image/jpeg',
+        },
+      ],
+    });
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+    await act(
+      async (): Promise<void> => currentActions.handleSelectPhotoVoice(),
+    );
+    await act(
+      async (): Promise<void> => currentActions.handleStartPhotoVoice(),
+    );
+    await act(async (): Promise<void> => currentActions.handlePhotoInputBack());
+
+    expect(stopAudioRecording).toHaveBeenCalledTimes(1);
+    expect(currentActions.isPhotoVoiceRecording).toBe(false);
+    expect(currentActions.photoInputStep).toBe('options');
+    expect(currentActions.photoCount).toBe(1);
+    expect(onGuideCreated).not.toHaveBeenCalled();
     await act(async (): Promise<void> => renderer.unmount());
   });
 
