@@ -15,6 +15,12 @@ export interface EmergencyGuideMediaFile {
   type: string;
 }
 
+export interface EmergencyGuidePhotoRequest {
+  images: readonly EmergencyGuideMediaFile[];
+  text?: string;
+  audio?: EmergencyGuideMediaFile;
+}
+
 export interface EmergencyGuidePatientContext {
   consciousness: 'CONSCIOUS' | 'UNCONSCIOUS' | 'UNKNOWN';
   ageGroup: 'CHILD' | 'ADULT' | 'ELDERLY' | 'UNKNOWN';

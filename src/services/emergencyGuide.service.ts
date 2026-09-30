@@ -3,6 +3,7 @@ import type {
   CreateEmergencyGuideHandoverRequest,
   CreateEmergencyGuideHandoverResponse,
   EmergencyGuideMediaFile,
+  EmergencyGuidePhotoRequest,
   EmergencyGuideHandoverSnapshot,
   EmergencyGuideResponse,
   EmergencyWasteGuideItem,
@@ -333,6 +334,39 @@ export const createImageEmergencyGuide = (
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> =>
   createMediaEmergencyGuide('image', imageFile, signal);
+
+export const createPhotoEmergencyGuide = async (
+  input: EmergencyGuidePhotoRequest,
+  signal?: AbortSignal,
+): Promise<EmergencyGuideResponse> => {
+  if (input.images.length === 0 || input.images.length > 5) {
+    throw new Error('응급 사진은 1장 이상 5장 이하로 전송해야 합니다.');
+  }
+
+  const formData = new FormData();
+  formData.append(
+    'request',
+    JSON.stringify({
+      requestId: `image-${Date.now()}`,
+      language: 'ko-KR',
+    }),
+  );
+  input.images.forEach(imageFile => {
+    const reactNativeFile: ReactNativeFile = imageFile;
+    formData.append('image', reactNativeFile as unknown as Blob);
+  });
+
+  const normalizedText = input.text?.trim();
+  if (normalizedText) {
+    formData.append('text', normalizedText);
+  }
+  if (input.audio) {
+    const reactNativeFile: ReactNativeFile = input.audio;
+    formData.append('audio', reactNativeFile as unknown as Blob);
+  }
+
+  return createEmergencyGuide(formData, signal);
+};
 
 export const retryEmergencyGuide = async (
   sessionId: string,
