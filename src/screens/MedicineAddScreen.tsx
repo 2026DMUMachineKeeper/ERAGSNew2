@@ -39,7 +39,7 @@ export const MedicineAddScreen = ({
   } = useMedicinePhoto(navigation);
 
   return (
-    <SafeAreaView className="flex-1 bg-memoCard" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <View className="flex-1 px-5 pt-3">
         <View className="h-10 flex-row items-center justify-between">
           <TouchableOpacity
