@@ -463,11 +463,11 @@ export const KakaoMapScreen = ({
   return (
     <SafeAreaView
       edges={route?.name === 'MapTab' ? ['top'] : ['top', 'bottom']}
-      className="flex-1 bg-white"
+      className="flex-1 bg-background"
     >
       {appKey ? (
         <View
-          className="relative flex-1 overflow-hidden bg-white"
+          className="relative flex-1 overflow-hidden bg-background"
           onLayout={handleMapLayout}
         >
           <WebView
@@ -484,7 +484,7 @@ export const KakaoMapScreen = ({
             onLoadEnd={() => setIsMapReady(true)}
             ref={mapWebViewRef}
             renderLoading={() => (
-              <View className="flex-1 items-center justify-center bg-white">
+              <View className="flex-1 items-center justify-center bg-background">
                 <ActivityIndicator color="#FF3A3A" />
                 <Text className="mt-3 text-coment text-textDim">
                   지도를 불러오는 중입니다.

@@ -24,7 +24,7 @@ export const MedicineManualInputScreen = ({
   const { form, handleClose, handleSave, isSaving } = useMedicineManualInput(navigation);
 
   return (
-    <SafeAreaView className="flex-1 bg-memoCard" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View className="px-5 pt-3">
           <View className="h-10 flex-row items-center justify-between">
