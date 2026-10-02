@@ -44,6 +44,16 @@ export const createKakaoMapHtml = (
     <title>카카오맵</title>
     <style>
       html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
+      .hospital-bed-labels { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; }
+      .hospital-bed-label {
+        display: block; padding: 7px 10px; border: 1px solid #E4E6EA; border-radius: 10px;
+        background: #FFFFFF; color: #22252A; font: 12px/1.5 sans-serif;
+        white-space: nowrap; box-shadow: 0 2px 6px #0000001A; cursor: pointer;
+      }
+      .hospital-bed-label:focus-visible { outline: 2px solid #FF3A3A; outline-offset: 2px; }
+      .hospital-bed-label strong { color: #FF3A3A; }
+      .hospital-bed-name { display: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+      .hospital-bed-labels.is-cluster .hospital-bed-name { display: block; }
     </style>
     <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(
       appKey,
@@ -80,6 +90,7 @@ export const createKakaoMapHtml = (
       const markers = {};
       const markerEntries = [];
       let clusterMarkers = [];
+      let clusterBedOverlays = [];
       const failedHospitalIds = new Set();
       let markerCount = 0;
       let activeFilter = 'all';
@@ -101,6 +112,51 @@ export const createKakaoMapHtml = (
         (activeFilter === 'all' || location.type === activeFilter) &&
         (!activeQuery || (location.name + ' ' + location.address)
           .toLocaleLowerCase().includes(activeQuery));
+
+      const handleLocationPress = location => {
+        window.ReactNativeWebView?.postMessage(JSON.stringify({
+          locationId: location.id,
+          type: 'medical-location-pressed',
+        }));
+      };
+
+      const createHospitalBedLabel = location => {
+        if (location.type !== 'hospital') return null;
+        const details = location.hospitalDetails;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'hospital-bed-label';
+        const name = document.createElement('span');
+        name.className = 'hospital-bed-name';
+        name.textContent = location.name;
+        button.appendChild(name);
+        const summary = document.createElement('span');
+        if (details?.availableBeds == null && details?.operatingRoomBeds == null) {
+          summary.textContent = '병상 정보 없음';
+        } else {
+          const appendBeds = (label, beds) => {
+            summary.appendChild(document.createTextNode(label + ' '));
+            const value = document.createElement('strong');
+            value.textContent = beds == null ? '정보 없음'
+              : beds < 0 ? Math.abs(beds) + '명 대기 중' : String(beds);
+            summary.appendChild(value);
+          };
+          appendBeds('병상', details.availableBeds);
+          summary.appendChild(document.createTextNode(' · '));
+          appendBeds('수술실', details.operatingRoomBeds);
+        }
+        button.appendChild(summary);
+        button.setAttribute('aria-label', location.name + ': ' + summary.textContent);
+        button.addEventListener('click', event => {
+          event.stopPropagation();
+          handleLocationPress(location);
+        });
+        return button;
+      };
+
+      const createBedOverlay = (content, position) => new kakao.maps.CustomOverlay({
+        content, position, clickable: true, xAnchor: 0.5, yAnchor: 0, zIndex: 2,
+      });
 
       const createClusterMarkerImage = additionalLocationCount => {
         const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="40" viewBox="0 0 64 40">' +
@@ -166,7 +222,12 @@ export const createKakaoMapHtml = (
       const renderMedicalMarkers = () => {
         clusterMarkers.forEach(marker => marker.setMap(null));
         clusterMarkers = [];
-        markerEntries.forEach(entry => entry.marker.setMap(null));
+        clusterBedOverlays.forEach(overlay => overlay.setMap(null));
+        clusterBedOverlays = [];
+        markerEntries.forEach(entry => {
+          entry.marker.setMap(null);
+          entry.bedOverlay?.setMap(null);
+        });
 
         const visibleEntries = markerEntries.filter(entry =>
           matchesCurrentFilter(entry.location),
@@ -177,6 +238,10 @@ export const createKakaoMapHtml = (
         visibleEntries.forEach(entry => {
           if (!clusteredEntries.has(entry)) {
             entry.marker.setMap(window.eragsMap);
+            if (entry.bedOverlay) {
+              entry.bedContent.appendChild(entry.bedLabel);
+              entry.bedOverlay.setMap(window.eragsMap);
+            }
           }
         });
 
@@ -199,6 +264,14 @@ export const createKakaoMapHtml = (
             }));
           });
           clusterMarkers.push(marker);
+          const bedContent = document.createElement('div');
+          bedContent.className = 'hospital-bed-labels is-cluster';
+          cluster.forEach(entry => {
+            if (entry.bedLabel) bedContent.appendChild(entry.bedLabel);
+          });
+          const bedOverlay = createBedOverlay(bedContent, representative.position);
+          bedOverlay.setMap(window.eragsMap);
+          clusterBedOverlays.push(bedOverlay);
         });
       };
 
@@ -212,13 +285,17 @@ export const createKakaoMapHtml = (
           title: location.name,
         });
         markers[location.id] = marker;
-        markerEntries.push({ location, marker, position });
+        const bedLabel = createHospitalBedLabel(location);
+        const bedContent = bedLabel ? document.createElement('div') : null;
+        if (bedContent) {
+          bedContent.className = 'hospital-bed-labels';
+          bedContent.appendChild(bedLabel);
+        }
+        const bedOverlay = bedContent ? createBedOverlay(bedContent, position) : null;
+        markerEntries.push({ location, marker, position, bedLabel, bedContent, bedOverlay });
 
         kakao.maps.event.addListener(marker, 'click', () => {
-          window.ReactNativeWebView?.postMessage(JSON.stringify({
-            locationId: location.id,
-            type: 'medical-location-pressed',
-          }));
+          handleLocationPress(location);
         });
         if (pendingFocusId === location.id) {
           window.eragsMap.setCenter(position);
