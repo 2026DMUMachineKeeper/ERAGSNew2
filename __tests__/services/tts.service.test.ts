@@ -27,4 +27,16 @@ describe('tts.service', () => {
 
     expect(Tts.speak).toHaveBeenLastCalledWith('일일구에 신고해 주세요.');
   });
+
+  it('네이티브 재생 요청 실패를 원본 오류 그대로 전달한다', async (): Promise<void> => {
+    const error = Object.assign(new Error('음성 합성 실패'), {
+      code: 'synthesis_error',
+    });
+    // 라이브러리 타입은 동기 반환으로 선언되어 있지만 Android 구현은 Promise를 반환한다.
+    jest.mocked(Tts.speak).mockImplementationOnce(() => {
+      return Promise.reject(error) as unknown as string;
+    });
+
+    await expect(speakTts('응급처치 안내')).rejects.toBe(error);
+  });
 });
