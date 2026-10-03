@@ -1,0 +1,73 @@
+import React from 'react';
+import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import type { EmergencyGuideAssessment } from '../../../types/emergencyGuide.types';
+
+type Props = {
+  assessment: EmergencyGuideAssessment | null;
+  onClose: () => void;
+  onNewRequest: () => void;
+};
+
+export function AssessmentOnlyModal({
+  assessment,
+  onClose,
+  onNewRequest,
+}: Props): React.JSX.Element {
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        className="flex-1 items-center justify-center bg-black/50 px-6 py-6"
+      >
+        <View
+          accessibilityViewIsModal
+          className="w-full max-w-[400px] max-h-full rounded-3xl bg-white p-6"
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View className="mb-4 self-start rounded-full bg-background px-3 py-2">
+              <Text className="text-coment font-suitBold text-gray">추가 확인 필요</Text>
+            </View>
+            <Text accessibilityRole="header" className="text-title2 font-suitBold text-black">
+              증상 정보가 더 필요해요
+            </Text>
+            <Text className="mt-3 text-body font-suitRegular leading-6 text-gray">
+              현재 정보만으로는 처치 안내를 제공하기 어렵습니다. 증상 정보를 보완해 새 문진을 시작해 주세요.
+            </Text>
+            <View className="mt-5 rounded-2xl bg-background p-4">
+              <Text className="text-body font-suitBold text-black">판단 요약</Text>
+              <Text className="mt-2 text-body font-suitRegular leading-6 text-gray">
+                {assessment?.summary || '판단 요약이 없습니다.'}
+              </Text>
+              <Text
+                className={`mt-3 text-body font-suitBold ${
+                  assessment?.call119Required ? 'text-red' : 'text-textDim'
+                }`}
+              >
+                {assessment
+                  ? `119 신고 ${assessment.call119Required ? '필요' : '불필요'}`
+                  : '119 신고 필요 여부를 확인할 수 없습니다.'}
+              </Text>
+            </View>
+          </ScrollView>
+          <TouchableOpacity
+            accessibilityLabel="새 문진 시작"
+            accessibilityRole="button"
+            className="mt-6 h-12 items-center justify-center rounded-xl bg-red"
+            onPress={onNewRequest}
+          >
+            <Text className="text-body font-suitBold text-white">새 문진 시작</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityLabel="닫기"
+            accessibilityRole="button"
+            className="mt-2 h-12 items-center justify-center"
+            onPress={onClose}
+          >
+            <Text className="text-body font-suitMedium text-gray">닫기</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}

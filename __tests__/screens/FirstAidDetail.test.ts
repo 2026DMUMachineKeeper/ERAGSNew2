@@ -12,9 +12,11 @@ import {
 import type { EmergencyGuideResponse } from '@/types';
 import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
-import { toEmergencyGuideQuestionnaire } from '@/utils/emergencyQuestionnaire';
+import { SERVER_SYMPTOM_ID_BY_CATEGORY, toEmergencyGuideQuestionnaire } from '@/utils/emergencyQuestionnaire';
+import { EmergencyQuestionOption } from '@/components/EmergencyGuide';
 
 import { FirstAidDetail } from '@/screens/FirstAidDetail';
+import { FIRST_AID_CATEGORIES, getEmergencyQuestions } from '@/constants';
 
 jest.mock('@/assets', () => ({
   BackIcon: (): null => null,
@@ -31,7 +33,25 @@ jest.mock('@/services', () => ({
 }));
 
 describe('toEmergencyGuideQuestionnaire', () => {
-  it('출혈 유형을 Q2 답변으로 자동 추가한다', (): void => {
+  it('발진 모양을 R2로 변환하고 연령 질문 앞에 전송한다', () => {
+    expect(toEmergencyGuideQuestionnaire({
+      allergyRisk: ['LOCAL_RASH'],
+      rashAppearance: ['RASH_FLAT_SPOTS', 'RASH_BLISTERS'],
+      ageGroup: ['ADULT'],
+    })).toEqual([
+      { questionId: 'R1_ALLERGY_RISK', answerIds: ['LOCAL_RASH'] },
+      { questionId: 'R2_RASH_APPEARANCE', answerIds: ['RASH_FLAT_SPOTS', 'RASH_BLISTERS'] },
+      { questionId: 'C1_AGE_GROUP', answerIds: ['ADULT'] },
+    ]);
+  });
+
+  it.each(['TEMP_UNDER_38', 'TEMP_38_TO_38_9', 'TEMP_39_OR_HIGHER', 'TEMP_UNKNOWN'])(
+    '발열 답변 %s를 변경 없이 전송한다', answerId => {
+      expect(toEmergencyGuideQuestionnaire({ feverSymptoms: [answerId, 'SEIZURE'] }))
+        .toEqual([{ questionId: 'T1_FEVER_NEUROLOGIC', answerIds: [answerId, 'SEIZURE'] }]);
+    },
+  );
+  it('직접 선택한 출혈 답변을 Q2로 변환한다', (): void => {
     expect(
       toEmergencyGuideQuestionnaire({
         immediateDanger: ['NONE'],
@@ -52,7 +72,7 @@ describe('toEmergencyGuideQuestionnaire', () => {
     ]);
   });
 
-  it('화상 유형을 Q2 답변으로 자동 추가한다', (): void => {
+  it('직접 선택한 화상 답변을 Q2로 변환한다', (): void => {
     expect(
       toEmergencyGuideQuestionnaire({
         immediateDanger: ['NONE'],
@@ -179,6 +199,7 @@ const prepareLastQuestion = async (renderer: ReactTestRenderer): Promise<void> =
 
   await pressOption();
   await pressAction('다음 질문');
+  await pressOption();
   await pressAction('다음 질문');
   await pressOption();
   await pressAction('다음 질문');
@@ -216,6 +237,28 @@ const startSubmission = (renderer: ReactTestRenderer): Promise<void> => {
 };
 
 describe('FirstAidDetail 응급 평가 보존', () => {
+  it('새 문진 제출은 기존 세션 재시도 없이 새 requestId로 생성한다', async () => {
+    jest.mocked(createEmergencyGuide).mockResolvedValue(PENDING_GUIDE);
+    const requestIds: string[] = [];
+    const nowSpy = jest.spyOn(Date, 'now');
+    try {
+      for (const timestamp of [1000, 2000]) {
+        nowSpy.mockReturnValue(timestamp);
+        const renderer = await renderFirstAidDetail(createNavigation());
+        await act(async () => findAction(renderer, '응급처치 가이드 시작').props.onPress());
+        const formData = jest.mocked(createEmergencyGuide).mock.calls.at(-1)?.[0];
+        const fields = formData as unknown as { entries: () => Iterable<readonly [string, unknown]> };
+        const request = Array.from(fields.entries()).find(([name]) => name === 'request')?.[1];
+        const payload = JSON.parse(request as string) as { requestId: string };
+        requestIds.push(payload.requestId);
+        await act(async () => renderer.unmount());
+      }
+      expect(requestIds).toEqual(['manual-1000', 'manual-2000']);
+      expect(retryEmergencyGuide).not.toHaveBeenCalled();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
   beforeEach((): void => {
     jest.mocked(useIsFocused).mockReturnValue(true);
   });
@@ -223,6 +266,42 @@ describe('FirstAidDetail 응급 평가 보존', () => {
   afterEach((): void => {
     useEmergencyGuideStore.getState().resetGuide();
     jest.clearAllMocks();
+  });
+
+  it.each(FIRST_AID_CATEGORIES)('$label 문진은 자동 선택 없이 시작하고 유형 답변도 해제할 수 있다', async category => {
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(React.createElement(FirstAidDetail, {
+        navigation: createNavigation() as never,
+        route: { params: { mainId: category.id } } as never,
+      }));
+    });
+    try {
+      const questions = getEmergencyQuestions(category.id);
+      for (const [index, question] of questions.entries()) {
+        const options = renderer.root.findAllByType(EmergencyQuestionOption);
+        expect(options.every(option => option.props.isSelected === false)).toBe(true);
+        const actionLabel = index === questions.length - 1 ? '응급처치 가이드 시작' : '다음 질문';
+        expect(findAction(renderer, actionLabel).props.disabled).toBe(true);
+        const optionIndex = question.id === 'visibleSymptoms'
+          ? question.options.findIndex(option => option.id === SERVER_SYMPTOM_ID_BY_CATEGORY[category.id])
+          : 0;
+        await act(async () => options[optionIndex].props.onPress());
+        expect(findAction(renderer, actionLabel).props.disabled).toBe(false);
+        if (question.id === 'visibleSymptoms') {
+          await act(async () => renderer.root.findAllByType(EmergencyQuestionOption)[optionIndex].props.onPress());
+          expect(findAction(renderer, actionLabel).props.disabled).toBe(true);
+          expect(renderer.root.findAllByType(EmergencyQuestionOption).every(option => !option.props.isSelected)).toBe(true);
+          await act(async () => renderer.root.findAllByType(EmergencyQuestionOption)[optionIndex].props.onPress());
+        }
+        if (index < questions.length - 1) {
+          await act(async () => findAction(renderer, actionLabel).props.onPress());
+        }
+      }
+      expect(createEmergencyGuide).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => renderer.unmount());
+    }
   });
 
   it('가이드 단계가 없어도 최초 평가를 저장하고 결과 화면으로 이동한다', async (): Promise<void> => {

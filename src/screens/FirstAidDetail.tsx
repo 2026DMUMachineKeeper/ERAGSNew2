@@ -15,10 +15,7 @@ import {
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { createEmergencyGuide, getEmergencyGuideErrorMessage } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
-import {
-  SERVER_SYMPTOM_ID_BY_CATEGORY,
-  toEmergencyGuideQuestionnaire,
-} from '@/utils/emergencyQuestionnaire';
+import { toEmergencyGuideQuestionnaire } from '@/utils/emergencyQuestionnaire';
 
 import { EmergencyQuestionHeader } from './firstAidDetail/components';
 
@@ -33,17 +30,7 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
     [category],
   );
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
-  const [questionAnswers, setQuestionAnswers] = React.useState<QuestionAnswers>(
-    (): QuestionAnswers => {
-      if (!category) {
-        return {};
-      }
-
-      return {
-        visibleSymptoms: [SERVER_SYMPTOM_ID_BY_CATEGORY[category.id]],
-      };
-    },
-  );
+  const [questionAnswers, setQuestionAnswers] = React.useState<QuestionAnswers>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const activeSubmissionRef = React.useRef<AbortController | null>(null);
   const isFocusedRef = React.useRef(isFocused);
@@ -111,14 +98,6 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
   const handleOptionPress = (answerId: string): void => {
     setQuestionAnswers(currentAnswers => {
       const previousAnswerIds = currentAnswers[currentQuestion.id] ?? [];
-
-      if (
-        currentQuestion.id === 'visibleSymptoms' &&
-        answerId === SERVER_SYMPTOM_ID_BY_CATEGORY[category.id] &&
-        previousAnswerIds.includes(answerId)
-      ) {
-        return currentAnswers;
-      }
 
       const nextAnswerIds = getNextEmergencyAnswerIds(currentQuestion, previousAnswerIds, answerId);
 
