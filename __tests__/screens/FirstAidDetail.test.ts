@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, TouchableOpacity } from 'react-native';
+import { Alert, Linking, Modal, Text, TouchableOpacity } from 'react-native';
 
 import { useIsFocused } from '@react-navigation/native';
 import {
@@ -17,6 +17,7 @@ import { EmergencyQuestionOption } from '@/components/EmergencyGuide';
 
 import { FirstAidDetail } from '@/screens/FirstAidDetail';
 import { FIRST_AID_CATEGORIES, getEmergencyQuestions } from '@/constants';
+import { EmergencyQuestionHeader } from '@/screens/firstAidDetail/components';
 
 jest.mock('@/assets', () => ({
   BackIcon: (): null => null,
@@ -131,6 +132,7 @@ interface NavigationMock {
   addListener: jest.Mock;
   goBack: jest.Mock;
   replace: jest.Mock;
+  popTo: jest.Mock;
   triggerBeforeRemove: () => void;
 }
 
@@ -149,6 +151,7 @@ const createNavigation = (): NavigationMock => {
       return jest.fn();
     }),
     goBack: jest.fn(),
+    popTo: jest.fn(),
     replace: jest.fn(),
     triggerBeforeRemove: (): void => handleBeforeRemove?.(),
   };
@@ -199,6 +202,7 @@ const prepareLastQuestion = async (renderer: ReactTestRenderer): Promise<void> =
 
   await pressOption();
   await pressAction('다음 질문');
+  await confirmUrgentNotice();
   await pressOption();
   await pressAction('다음 질문');
   await pressOption();
@@ -236,6 +240,13 @@ const startSubmission = (renderer: ReactTestRenderer): Promise<void> => {
   return submission;
 };
 
+const confirmUrgentNotice = async (): Promise<void> => {
+  const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+  const continueButton = buttons?.find(button => button.text === '문진 계속');
+  expect(continueButton).toBeDefined();
+  await act(async () => continueButton?.onPress?.());
+};
+
 describe('FirstAidDetail 응급 평가 보존', () => {
   it('새 문진 제출은 기존 세션 재시도 없이 새 requestId로 생성한다', async () => {
     jest.mocked(createEmergencyGuide).mockResolvedValue(PENDING_GUIDE);
@@ -261,11 +272,13 @@ describe('FirstAidDetail 응급 평가 보존', () => {
   });
   beforeEach((): void => {
     jest.mocked(useIsFocused).mockReturnValue(true);
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
   afterEach((): void => {
     useEmergencyGuideStore.getState().resetGuide();
     jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   it.each(FIRST_AID_CATEGORIES)('$label 문진은 자동 선택 없이 시작하고 유형 답변도 해제할 수 있다', async category => {
@@ -296,6 +309,9 @@ describe('FirstAidDetail 응급 평가 보존', () => {
         }
         if (index < questions.length - 1) {
           await act(async () => findAction(renderer, actionLabel).props.onPress());
+          if (question.id === 'immediateDanger') {
+            await confirmUrgentNotice();
+          }
         }
       }
       expect(createEmergencyGuide).not.toHaveBeenCalled();
@@ -370,6 +386,7 @@ describe('FirstAidDetail 응급 평가 보존', () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((): void => {});
     const navigation = createNavigation();
     const renderer = await renderFirstAidDetail(navigation);
+    alertSpy.mockClear();
 
     const submission = startSubmission(renderer);
     jest.mocked(useIsFocused).mockReturnValue(false);
@@ -464,3 +481,263 @@ describe('FirstAidDetail 응급 평가 보존', () => {
     await act(async (): Promise<void> => renderer.unmount());
   });
 });
+
+describe('FirstAidDetail 출혈 유형 확인과 119 우선 안내', () => {
+  let renderer: ReactTestRenderer;
+  let navigation: NavigationMock;
+
+  const getQuestionId = (): string => {
+    const { questions, currentQuestionIndex } = renderer.root.findByType(EmergencyQuestionHeader).props;
+    return questions[currentQuestionIndex].id;
+  };
+  const selectAnswer = async (answerId: string): Promise<void> => {
+    const questions = getEmergencyQuestions('bleeding');
+    const question = questions.find(item => item.id === getQuestionId());
+    const label = question?.options.find(item => item.id === answerId)?.label;
+    const option = renderer.root.findAllByType(EmergencyQuestionOption).find(item => item.props.label === label);
+    expect(option).toBeDefined();
+    await act(async () => option?.props.onPress());
+  };
+  const press = async (label: string): Promise<void> => {
+    await act(async () => findAction(renderer, label).props.onPress());
+  };
+  const reachSymptoms = async (): Promise<void> => {
+    await selectAnswer('NONE');
+    await press('다음 질문');
+  };
+  const openMismatch = async (): Promise<void> => {
+    await reachSymptoms();
+    await selectAnswer('BURN');
+    await press('다음 질문');
+    expect(getQuestionId()).toBe('visibleSymptoms');
+    expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+    expect(createEmergencyGuide).not.toHaveBeenCalled();
+  };
+
+  beforeEach(async () => {
+    jest.mocked(useIsFocused).mockReturnValue(true);
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    navigation = createNavigation();
+    await act(async () => {
+      renderer = create(React.createElement(FirstAidDetail, {
+        navigation: navigation as never,
+        route: { params: { mainId: 'bleeding' } } as never,
+      }));
+    });
+  });
+  afterEach(async () => {
+    await act(async () => renderer.unmount());
+    useEmergencyGuideStore.getState().resetGuide();
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  it('사고 유형 다시 선택은 기존 유형 화면으로 돌아간다', async () => {
+    await openMismatch();
+    await press('사고 유형 다시 선택');
+    expect(navigation.popTo).toHaveBeenCalledWith('FirstAid');
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('증상 수정과 시스템 뒤로가기는 답변을 보존하고 증상 질문에 머문다', async () => {
+    await openMismatch();
+    await press('증상 수정');
+    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    expect(getQuestionId()).toBe('visibleSymptoms');
+    expect(renderer.root.findAllByType(EmergencyQuestionOption).find(item => item.props.label === '데었거나 피부가 화상을 입음')?.props.isSelected).toBe(true);
+    await press('다음 질문');
+    await act(async () => renderer.root.findByType(Modal).props.onRequestClose());
+    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    expect(getQuestionId()).toBe('visibleSymptoms');
+    await selectAnswer('BLEEDING');
+    await press('다음 질문');
+    expect(getQuestionId()).toBe('bleedingPattern');
+    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+  });
+
+  it('그대로 진행은 출혈 상세 문진을 이어가고 실제 답변을 그대로 전송한다', async () => {
+    jest.mocked(createEmergencyGuide).mockResolvedValue(PENDING_GUIDE);
+    await openMismatch();
+    await press('그대로 진행');
+    expect(getQuestionId()).toBe('bleedingPattern');
+    await selectAnswer('BLEEDING_UNKNOWN');
+    await press('다음 질문');
+    await selectAnswer('NONE');
+    await press('다음 질문');
+    expect(getQuestionId()).toBe('ageGroup');
+    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    await selectAnswer('ADULT');
+    await press('응급처치 가이드 시작');
+    const formData = jest.mocked(createEmergencyGuide).mock.calls[0][0];
+    const fields = formData as unknown as { entries: () => Iterable<readonly [string, unknown]> };
+    const questionnaire = Array.from(fields.entries()).find(([name]) => name === 'questionnaire')?.[1];
+    expect(JSON.parse(questionnaire as string)).toEqual([
+      { questionId: 'Q1_IMMEDIATE_DANGER', answerIds: ['NONE'] },
+      { questionId: 'Q2_VISIBLE_SYMPTOMS', answerIds: ['BURN'] },
+      { questionId: 'B1_BLEEDING_PATTERN', answerIds: ['BLEEDING_UNKNOWN'] },
+      { questionId: 'B2_BLEEDING_RISKS', answerIds: ['NONE'] },
+      { questionId: 'C1_AGE_GROUP', answerIds: ['ADULT'] },
+    ]);
+  });
+
+  it('출혈 증상이 있으면 확인 없이 진행하고 상처 위험 해당 없음도 허용한다', async () => {
+    await reachSymptoms();
+    await selectAnswer('BLEEDING');
+    await press('다음 질문');
+    expect(getQuestionId()).toBe('bleedingPattern');
+    await selectAnswer('BLEEDING_OOZING');
+    await press('다음 질문');
+    await selectAnswer('NONE');
+    await press('다음 질문');
+    expect(getQuestionId()).toBe('ageGroup');
+    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it.each(['UNCONSCIOUS', 'BREATHING_DIFFICULTY'])('위험 신호 %s는 119 안내가 우선이며 불일치 모달을 건너뛴다', async answerId => {
+    const openUrlSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    await selectAnswer(answerId);
+    await press('다음 질문');
+    expect(Alert.alert).toHaveBeenLastCalledWith('119 신고가 필요해요', expect.any(String), expect.any(Array), { cancelable: false });
+    expect(getQuestionId()).toBe('immediateDanger');
+    expect(openUrlSpy).not.toHaveBeenCalled();
+    const callButton = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2]?.find(button => button.text === '119 전화');
+    await act(async () => callButton?.onPress?.());
+    expect(openUrlSpy).toHaveBeenCalledWith('tel:119');
+    await confirmUrgentNotice();
+    await selectAnswer('BURN');
+    await press('다음 질문');
+    expect(getQuestionId()).toBe('bleedingPattern');
+    expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+    expect(createEmergencyGuide).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(FIRST_AID_CATEGORIES)(
+  'FirstAidDetail $label 유형 확인',
+  category => {
+    let renderer: ReactTestRenderer;
+    let navigation: NavigationMock;
+    const questions = getEmergencyQuestions(category.id);
+    const symptomId = SERVER_SYMPTOM_ID_BY_CATEGORY[category.id];
+    const mismatchedSymptomId = category.id === 'bleeding' ? 'BURN' : 'BLEEDING';
+    const mismatchedSymptomLabel = questions[1].options.find(option => option.id === mismatchedSymptomId)?.label;
+    const getQuestionIndex = (): number => renderer.root.findByType(EmergencyQuestionHeader).props.currentQuestionIndex;
+    const selectAnswer = async (answerId: string): Promise<void> => {
+      const label = questions[getQuestionIndex()].options.find(option => option.id === answerId)?.label;
+      const option = renderer.root.findAllByType(EmergencyQuestionOption).find(item => item.props.label === label);
+      expect(option).toBeDefined();
+      await act(async () => option?.props.onPress());
+    };
+    const press = async (label: string): Promise<void> => {
+      await act(async () => findAction(renderer, label).props.onPress());
+    };
+    beforeEach(async () => {
+      jest.mocked(useIsFocused).mockReturnValue(true);
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      navigation = createNavigation();
+      await act(async () => {
+        renderer = create(React.createElement(FirstAidDetail, {
+          navigation: navigation as never,
+          route: { params: { mainId: category.id } } as never,
+        }));
+      });
+    });
+    afterEach(async () => {
+      await act(async () => renderer.unmount());
+      useEmergencyGuideStore.getState().resetGuide();
+      jest.clearAllMocks();
+      jest.restoreAllMocks();
+    });
+
+    it('불일치 안내에 유형명을 표시하고 수정·유형 재선택·그대로 진행을 제공한다', async () => {
+      await selectAnswer('NONE');
+      await press('다음 질문');
+      await selectAnswer(mismatchedSymptomId);
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(1);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+      const texts = renderer.root.findAllByType(Text).map(item => item.props.children).flat();
+      expect(texts).toContain(category.label);
+      await press('증상 수정');
+      expect(getQuestionIndex()).toBe(1);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+      expect(renderer.root.findAllByType(EmergencyQuestionOption).find(item => item.props.label === mismatchedSymptomLabel)?.props.isSelected).toBe(true);
+      await press('다음 질문');
+      await press('사고 유형 다시 선택');
+      expect(navigation.popTo).toHaveBeenCalledWith('FirstAid');
+      await press('다음 질문');
+      await press('그대로 진행');
+      expect(getQuestionIndex()).toBe(2);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+      expect(renderer.root.findAllByType(EmergencyQuestionOption).every(item => !item.props.isSelected)).toBe(true);
+      expect(createEmergencyGuide).not.toHaveBeenCalled();
+    });
+
+    it('유형에 해당하는 증상이 포함되면 여러 증상을 선택해도 바로 상세 문진으로 진행한다', async () => {
+      await selectAnswer('NONE');
+      await press('다음 질문');
+      await selectAnswer(mismatchedSymptomId);
+      await selectAnswer(symptomId);
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(2);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+      expect(Alert.alert).not.toHaveBeenCalled();
+    });
+
+    it('위험 신호의 119 안내가 우선이며 증상 불일치 확인을 생략한다', async () => {
+      await selectAnswer('BREATHING_DIFFICULTY');
+      await press('다음 질문');
+      expect(Alert.alert).toHaveBeenLastCalledWith('119 신고가 필요해요', expect.any(String), expect.any(Array), { cancelable: false });
+      expect(getQuestionIndex()).toBe(0);
+      await confirmUrgentNotice();
+      await selectAnswer(mismatchedSymptomId);
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(2);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+      expect(createEmergencyGuide).not.toHaveBeenCalled();
+    });
+
+    it('증상 수정 후 답변을 바꾸지 않고 다음을 누르면 다시 확인한다', async () => {
+      await selectAnswer('NONE');
+      await press('다음 질문');
+      await selectAnswer(mismatchedSymptomId);
+      await press('다음 질문');
+      await press('증상 수정');
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(1);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+    });
+
+    it('그대로 진행 확인은 뒤로가도 유지하고 증상을 바꾸면 다시 확인한다', async () => {
+      await selectAnswer('NONE');
+      await press('다음 질문');
+      await selectAnswer(mismatchedSymptomId);
+      await press('다음 질문');
+      await press('그대로 진행');
+      await press('이전 질문');
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(2);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+      await press('이전 질문');
+      await selectAnswer('OTHER_UNKNOWN');
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(1);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+    });
+
+    it('미선택은 다음을 막고 잘 모르겠음은 불일치 확인을 표시한다', async () => {
+      await selectAnswer('NONE');
+      await press('다음 질문');
+      expect(findAction(renderer, '다음 질문').props.disabled).toBe(true);
+      await press('다음 질문');
+      expect(getQuestionIndex()).toBe(1);
+      expect(renderer.root.findByType(Modal).props.visible).toBe(false);
+      await selectAnswer('OTHER_UNKNOWN');
+      expect(findAction(renderer, '다음 질문').props.disabled).toBe(false);
+      await press('다음 질문');
+      expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+      expect(createEmergencyGuide).not.toHaveBeenCalled();
+    });
+  },
+);

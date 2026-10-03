@@ -424,6 +424,65 @@ describe('emergencyGuide.service', () => {
     expect(guide.sessionId).toBeNull();
   });
 
+  it.each(['COMPLETE', 'ASSESSMENT_ONLY'])(
+    '선택 유형 증상이 없는 답변을 그대로 전송하고 %s 응답을 보존한다',
+    async status => {
+      const questionnaire = [
+        { questionId: 'Q1_IMMEDIATE_DANGER', answerIds: ['NONE'] },
+        { questionId: 'Q2_VISIBLE_SYMPTOMS', answerIds: ['OTHER_UNKNOWN'] },
+        { questionId: 'B1_BLEEDING_PATTERN', answerIds: ['BLEEDING_UNKNOWN'] },
+        { questionId: 'B2_BLEEDING_RISKS', answerIds: ['NONE'] },
+        { questionId: 'C1_AGE_GROUP', answerIds: ['ADULT'] },
+      ];
+      const formData = new FormData();
+      formData.append('request', JSON.stringify({ requestId: 'manual-mismatch', language: 'ko-KR' }));
+      formData.append('questionnaire', JSON.stringify(questionnaire));
+      const payload = {
+        ...createGuidePayload('mismatch-session'),
+        status,
+        assessment: {
+          assessmentId: 'assessment-mismatch',
+          categoryCode: status === 'COMPLETE' ? 'BLEEDING' : 'UNKNOWN',
+          subtypeCode: 'UNKNOWN',
+          severityCode: 'UNKNOWN',
+          confidence: null,
+          redFlags: [],
+          call119Required: false,
+          summary: '서버의 판단 요약',
+          reasons: [],
+          missingInputs: status === 'COMPLETE' ? [] : ['category'],
+          decisionSource: 'SM_LEGACY',
+          modelVersion: null,
+        },
+        treatment: {
+          routeCode: status === 'COMPLETE' ? 'A' : null,
+          modelVersion: null,
+          steps: status === 'COMPLETE' ? [{
+            stepId: 1,
+            stepNo: 1,
+            instruction: '서버의 처치 안내',
+            checkpointQuestion: '상태를 확인해 주세요.',
+            requiredItemId: null,
+            requiredItemName: null,
+            requiredQuantity: 0,
+            requiredSlotId: null,
+            imageResource: null,
+            imageUrl: null,
+          }] : [],
+        },
+      };
+      fetchMock.mockResolvedValue(createMockResponse(200, { success: true, data: payload }));
+      await expect(createEmergencyGuide(formData)).resolves.toEqual(payload);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'test-api-base-url/api/v1/emergency-guide-sessions',
+        expect.objectContaining({ method: 'POST', body: formData }),
+      );
+      const fields = formData as unknown as { entries: () => Iterable<readonly [string, unknown]> };
+      const submittedQuestionnaire = Array.from(fields.entries()).find(([name]) => name === 'questionnaire')?.[1];
+      expect(JSON.parse(submittedQuestionnaire as string)).toEqual(questionnaire);
+    },
+  );
+
   it('처치 단계에 기록 가능한 stepId가 없으면 응답을 거부한다', async (): Promise<void> => {
     fetchMock.mockResolvedValue(
       createMockResponse(200, {

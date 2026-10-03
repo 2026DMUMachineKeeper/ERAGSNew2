@@ -22,3 +22,7 @@ export const speakTts = async (message: string): Promise<void> => {
 };
 
 export const stopTts = (): Promise<boolean> => Tts.stop();
+
+export const requestTtsVoiceDataInstallation = async (): Promise<void> => {
+  await Tts.requestInstallData();
+};

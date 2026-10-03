@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert, Modal, Text, TouchableOpacity } from 'react-native';
+import { Alert, AppState, Modal, Text, TouchableOpacity } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { CommonActions, StackActions, StackRouter } from '@react-navigation/routers';
 
@@ -7,7 +8,7 @@ import { GuideHeader } from '@/components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '@/components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '@/components/EmergencyGuide/StepDetail';
 import { useEmergencyGuideStore } from '@/store';
-import { retryEmergencyGuide, speakTts } from '@/services';
+import { requestTtsVoiceDataInstallation, retryEmergencyGuide, speakTts } from '@/services';
 import type { EmergencyGuideResponse } from '@/types';
 
 import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
@@ -17,6 +18,7 @@ jest.mock('@/services', () => ({
   getEmergencyGuideImageUrl: jest.fn(() => ''),
   speakTts: jest.fn(async () => {}),
   stopTts: jest.fn(async () => {}),
+  requestTtsVoiceDataInstallation: jest.fn(async () => {}),
   retryEmergencyGuide: jest.fn(),
 }));
 
@@ -155,6 +157,51 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(texts).toContain('판단 요약이 없습니다.');
     expect(texts).toContain('119 신고 필요 여부를 확인할 수 없습니다.');
     expect(texts).not.toContain('119 신고 불필요');
+  });
+
+  it('한국어 데이터 누락 시 설치를 안내하고 복귀 시 현재 안내를 다시 재생한다', async () => {
+    let handleAppStateChange: ((state: AppStateStatus) => void) | undefined;
+    const removeListener = jest.fn();
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      handleAppStateChange = listener;
+      return { remove: removeListener };
+    });
+    await act(async () => {
+      renderer.unmount();
+      renderer = create(
+        <EmergencyGuideScreen navigation={navigation as never} route={{} as never} />,
+      );
+    });
+    jest.mocked(speakTts).mockRejectedValueOnce(
+      Object.assign(new Error('Language data is missing'), { code: 'lang_missing_data' }),
+    );
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      '한국어 음성 데이터가 필요해요',
+      expect.any(String),
+      expect.any(Array),
+    );
+    await answerCompletion('음성 데이터 설치');
+    expect(requestTtsVoiceDataInstallation).toHaveBeenCalledTimes(1);
+    const spokenCount = jest.mocked(speakTts).mock.calls.length;
+    await act(async () => handleAppStateChange?.('background'));
+    expect(speakTts).toHaveBeenCalledTimes(spokenCount);
+    await act(async () => handleAppStateChange?.('active'));
+    expect(speakTts).toHaveBeenCalledTimes(spokenCount + 1);
+    expect(speakTts).toHaveBeenLastCalledWith('테스트 처치 2');
+    await act(async () => handleAppStateChange?.('active'));
+    expect(speakTts).toHaveBeenCalledTimes(spokenCount + 1);
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('한국어 데이터 설치 화면을 열지 못하면 설정에서 설치하도록 안내한다', async () => {
+    jest.mocked(speakTts).mockRejectedValueOnce(
+      Object.assign(new Error('Language data is missing'), { code: 'lang_missing_data' }),
+    );
+    jest.mocked(requestTtsVoiceDataInstallation).mockRejectedValueOnce(new Error('설치 화면 없음'));
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+    await answerCompletion('음성 데이터 설치');
+    expect(Alert.alert).toHaveBeenLastCalledWith('음성 데이터 설치 안내', expect.any(String));
   });
 
   it.each([
