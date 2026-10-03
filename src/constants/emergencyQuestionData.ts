@@ -224,6 +224,20 @@ const CATEGORY_QUESTIONS: Record<
         { id: 'UNKNOWN', label: '확인하기 어려움' },
       ],
     },
+    {
+      id: 'rashAppearance',
+      title: '발진 모양',
+      prompt: '발진의 모양에 해당하는 항목을 모두 선택해 주세요.',
+      isMultiple: true,
+      exclusiveAnswerIds: ['UNKNOWN'],
+      options: [
+        { id: 'RASH_FLAT_SPOTS', label: '평평한 붉은 반점' },
+        { id: 'RASH_BLISTERS', label: '물집이 잡혀 있음' },
+        { id: 'RASH_RED_WARM', label: '넓게 붉고 화끈거림' },
+        { id: 'RASH_RAISED_WHEALS', label: '부풀어 오른 두드러기 자국' },
+        { id: 'UNKNOWN', label: '잘 모르겠음' },
+      ],
+    },
   ],
   fever: [
     {
@@ -232,10 +246,11 @@ const CATEGORY_QUESTIONS: Record<
       prompt: '체온과 함께 나타나는 증상을 선택해 주세요.',
       isMultiple: true,
       mutuallyExclusiveGroups: [
-        ['TEMP_UNDER_39', 'TEMP_39_OR_HIGHER', 'TEMP_UNKNOWN'],
+        ['TEMP_UNDER_38', 'TEMP_38_TO_38_9', 'TEMP_39_OR_HIGHER', 'TEMP_UNKNOWN'],
       ],
       options: [
-        { id: 'TEMP_UNDER_39', label: '측정 체온이 39도 미만' },
+        { id: 'TEMP_UNDER_38', label: '측정 체온이 38도 미만' },
+        { id: 'TEMP_38_TO_38_9', label: '측정 체온이 38도 이상 39도 미만' },
         { id: 'TEMP_39_OR_HIGHER', label: '측정 체온이 39도 이상' },
         { id: 'TEMP_UNKNOWN', label: '체온을 측정하지 못함' },
         {

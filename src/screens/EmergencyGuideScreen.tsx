@@ -17,6 +17,7 @@ import {
 import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
+import { AssessmentOnlyModal } from './emergencyGuide/components/AssessmentOnlyModal';
 import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
@@ -109,13 +110,16 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const mainLabel = storedMainLabel;
   const subtypeLabel = storedSubtypeLabel;
   const lastSpokenMessageRef = React.useRef('');
+  const isStartingNewRequestRef = React.useRef(false);
   const [isRetrying, setIsRetrying] = React.useState(false);
   const visibleStepCount = getVisibleStepCount(subtypeLabel);
   const fallbackSteps = emergencyGuideSteps
     .slice(0, visibleStepCount)
     .map(toGuideRuntimeStep);
   const serverSteps =
-    guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
+    guide?.status === 'ASSESSMENT_ONLY'
+      ? []
+      : guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
   const steps = guide ? serverSteps : fallbackSteps;
 
   React.useEffect(() => {
@@ -134,6 +138,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
 
   React.useEffect(() => {
     if (
+      isStartingNewRequestRef.current ||
       !currentInstruction ||
       lastSpokenMessageRef.current === currentInstruction
     ) {
@@ -241,6 +246,24 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
       setIsRetrying(false);
     }
   };
+
+  const handleNewRequestPress = (): void => {
+    isStartingNewRequestRef.current = true;
+    resetGuide();
+    navigation.popTo('FirstAid');
+  };
+
+  if (guide?.status === 'ASSESSMENT_ONLY') {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
+        <AssessmentOnlyModal
+          assessment={guide.assessment}
+          onClose={() => navigation.goBack()}
+          onNewRequest={handleNewRequestPress}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (guide && steps.length === 0) {
     return (

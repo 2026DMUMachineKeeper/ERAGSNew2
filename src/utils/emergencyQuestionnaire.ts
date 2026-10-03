@@ -12,6 +12,7 @@ const SERVER_QUESTION_ID_BY_SCREEN_ID: Record<string, string> = {
   distalCondition: 'F2_DISTAL_STATE',
   speakOrCough: 'A1_SPEAK_COUGH',
   allergyRisk: 'R1_ALLERGY_RISK',
+  rashAppearance: 'R2_RASH_APPEARANCE',
   feverSymptoms: 'T1_FEVER_NEUROLOGIC',
   ageGroup: 'C1_AGE_GROUP',
 };
@@ -27,6 +28,7 @@ const SCREEN_QUESTION_IDS_IN_ORDER = [
   'distalCondition',
   'speakOrCough',
   'allergyRisk',
+  'rashAppearance',
   'feverSymptoms',
   'ageGroup',
 ] as const;
