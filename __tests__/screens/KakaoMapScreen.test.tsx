@@ -10,13 +10,21 @@ import {
   requestLocationPermission,
 } from '@/services';
 import type { MedicalLocationListItem } from '@/screens/kakaoMap/components';
-import { createKakaoMapHtml } from '@/screens/kakaoMap/mapHtml';
+import {
+  createKakaoMapHtml,
+  createSetMedicalLocationsScript,
+} from '@/screens/kakaoMap/mapHtml';
 import { KakaoMapScreen } from '@/screens/KakaoMapScreen';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
 import type { NearbyAed } from '@/types';
 import { ApiRequestError } from '@/services/apiError.service';
 
 const mockInjectJavaScript = jest.fn();
+const getLastMedicalLocationsScript = (): string | undefined =>
+  mockInjectJavaScript.mock.calls
+    .map(([script]) => script as string)
+    .filter(script => script.includes('eragsSetMedicalLocations'))
+    .at(-1);
 const mockDismiss = jest.fn();
 const mockExpand = jest.fn();
 const mockMedicalPlacesSheet = jest.fn();
@@ -200,14 +208,18 @@ describe('주변 병원·AED 조회 상태', () => {
     const renderer = await renderAtCurrentLocation();
     expect(getSheet().locations).toHaveLength(1);
     act(() => renderer.root.findByProps({ testID: 'map' }).props.onLoadEnd());
+    expect(getLastMedicalLocationsScript()).toContain('테스트 AED');
+    const initialSource = renderer.root.findByProps({ testID: 'map' }).props.source;
     await act(async () => {
       await renderer.root.findByProps({ accessibilityLabel: '현재 위치로 이동' })
         .props.onPress();
     });
     expect(getSheet().locations).toHaveLength(0);
     expect(getSheet().aedStatus.isLoading).toBe(true);
-    expect(renderer.root.findByProps({ testID: 'map' }).props.source.html)
-      .not.toContain('테스트 AED');
+    expect(getLastMedicalLocationsScript()).not.toContain('테스트 AED');
+    // 장소 데이터가 바뀌어도 WebView를 다시 로드하지 않습니다.
+    expect(renderer.root.findByProps({ testID: 'map' }).props.source)
+      .toBe(initialSource);
     await act(async () => resolveNext([]));
     expect(getSheet().hasLoaded).toBe(true);
     act(() => renderer.unmount());
@@ -310,24 +322,24 @@ describe('현재 위치 버튼', () => {
     ).toBe(false);
     act(() => renderer!.unmount());
 
-    const html = createKakaoMapHtml(
-      'test-key',
-      { aed: 'aed.png', hospital: 'hospital.png' },
-      [
-        {
-          address: '서울',
-          distanceInMeters: 100,
-          id: 'test',
-          name: '</script><script>alert(1)</script>',
-          type: 'aed',
-          typeLabel: 'AED',
-          latitude: 37.5,
-          longitude: 127,
-        },
-      ],
-    );
-    expect(html).not.toContain('</script><script>alert(1)</script>');
-    expect(html).toContain('\\u003c/script>');
+    const locationsScript = createSetMedicalLocationsScript([
+      {
+        address: '서울',
+        distanceInMeters: 100,
+        id: 'test',
+        name: '</script><script>alert(1)</script>',
+        type: 'aed',
+        typeLabel: 'AED',
+        latitude: 37.5,
+        longitude: 127,
+      },
+    ]);
+    expect(locationsScript).not.toContain('</script><script>alert(1)</script>');
+    expect(locationsScript).toContain('\\u003c/script>');
+    const html = createKakaoMapHtml('test-key', {
+      aed: 'aed.png',
+      hospital: 'hospital.png',
+    });
     expect(html).toContain('const CLUSTER_DISTANCE_PX = 28;');
     expect(html).toContain('projection.pointFromCoords(entry.position)');
     expect(html).toContain("'idle',\n        renderMedicalMarkers");
@@ -378,9 +390,7 @@ describe('현재 위치 버튼', () => {
           expect.objectContaining({ maximumAge: 0 }),
         );
         expect(mockInjectJavaScript).toHaveBeenCalledWith(
-          expect.stringContaining(
-            'setCenter(new kakao.maps.LatLng(37.5, 127))',
-          ),
+          expect.stringContaining('eragsCenterOnCurrentLocation?.(37.5, 127)'),
         );
         expect(mockDismiss).toHaveBeenCalledTimes(1);
       } else {
@@ -607,15 +617,11 @@ describe('현재 위치 버튼', () => {
         '길찾기 불가',
         '장소 위치를 찾지 못했습니다.',
       );
+      expect(getLastMedicalLocationsScript()).toContain('계산1동주민센터');
+      expect(getLastMedicalLocationsScript()).toContain('인천더드림병원');
       expect(
         renderer!.root.findByProps({ testID: 'map' }).props.source.html,
-      ).toContain('계산1동주민센터');
-      expect(
-        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
-      ).toContain('인천더드림병원');
-      expect(
-        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
-      ).toContain('geocoder.addressSearch(searchAddress');
+      ).toContain('geocoder.addressSearch(address');
       expect(
         renderer!.root.findByProps({ testID: 'map' }).props.source.html,
       ).toContain('window.eragsRequestMedicalDirections =');
@@ -624,9 +630,7 @@ describe('현재 위치 버튼', () => {
       const mapScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
       expect(mapScript).toBeDefined();
       expect(() => new Script(mapScript ?? '')).not.toThrow();
-      expect(
-        renderer!.root.findByProps({ testID: 'map' }).props.source.html,
-      ).not.toContain('임시 AED 위치');
+      expect(getLastMedicalLocationsScript()).not.toContain('임시 AED 위치');
       act(() => renderer!.unmount());
     } finally {
       jest.useRealTimers();

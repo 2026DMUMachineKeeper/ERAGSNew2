@@ -31,10 +31,13 @@ const KAKAO_MAP_CENTER = {
   latitude: 37.4999957879,
   longitude: 126.8681696567,
 };
+const toInlineJson = (value: unknown): string =>
+  JSON.stringify(value).replace(/</g, '\\u003c');
+
+// 장소 데이터는 eragsSetMedicalLocations로 주입해 데이터가 바뀌어도 WebView를 다시 로드하지 않습니다.
 export const createKakaoMapHtml = (
   appKey: string,
   markerAssetUris: MarkerAssetUris,
-  medicalLocations: readonly MedicalMapLocation[],
 ): string => `
 <!doctype html>
 <html lang="ko">
@@ -71,10 +74,6 @@ export const createKakaoMapHtml = (
       };
       window.eragsMap = new kakao.maps.Map(mapContainer, mapOption);
 
-      const medicalLocations = ${JSON.stringify(medicalLocations).replace(
-        /</g,
-        '\\u003c',
-      )};
       const markerAssetUris = ${JSON.stringify(markerAssetUris)};
       const createMarkerImage = (assetUri) => new kakao.maps.MarkerImage(
         assetUri,
@@ -86,18 +85,19 @@ export const createKakaoMapHtml = (
         hospital: createMarkerImage(markerAssetUris.hospital),
       };
       const CLUSTER_DISTANCE_PX = 28;
-      const bounds = new kakao.maps.LatLngBounds();
-      const markers = {};
-      const markerEntries = [];
+      let bounds = new kakao.maps.LatLngBounds();
+      let markers = {};
+      let markerEntries = [];
       let clusterMarkers = [];
       let clusterBedOverlays = [];
-      const failedHospitalIds = new Set();
-      let markerCount = 0;
+      let failedHospitalIds = new Set();
       let activeFilter = 'all';
       let activeQuery = '';
       let pendingFocusId = null;
       let pendingDirectionsId = null;
-      let hasFocusedLocation = false;
+      let hasUserMovedMap = false;
+      let medicalLocationsVersion = 0;
+      const geocodeCache = new Map();
 
       const sendDirectionsPosition = (locationId, position) => {
         window.ReactNativeWebView?.postMessage(JSON.stringify({
@@ -219,7 +219,7 @@ export const createKakaoMapHtml = (
         return clusters;
       };
 
-      const renderMedicalMarkers = () => {
+      const hideMedicalMarkers = () => {
         clusterMarkers.forEach(marker => marker.setMap(null));
         clusterMarkers = [];
         clusterBedOverlays.forEach(overlay => overlay.setMap(null));
@@ -228,6 +228,10 @@ export const createKakaoMapHtml = (
           entry.marker.setMap(null);
           entry.bedOverlay?.setMap(null);
         });
+      };
+
+      const renderMedicalMarkers = () => {
+        hideMedicalMarkers();
 
         const visibleEntries = markerEntries.filter(entry =>
           matchesCurrentFilter(entry.location),
@@ -277,7 +281,6 @@ export const createKakaoMapHtml = (
 
       const addMarker = (location, position) => {
         bounds.extend(position);
-        markerCount += 1;
 
         const marker = new kakao.maps.Marker({
           image: markerImages[location.type],
@@ -301,7 +304,7 @@ export const createKakaoMapHtml = (
           window.eragsMap.setCenter(position);
           window.eragsMap.setLevel(3);
           pendingFocusId = null;
-          hasFocusedLocation = true;
+          hasUserMovedMap = true;
         }
         if (pendingDirectionsId === location.id) {
           sendDirectionsPosition(location.id, position);
@@ -310,48 +313,87 @@ export const createKakaoMapHtml = (
       };
 
       const geocoder = new kakao.maps.services.Geocoder();
-      const hospitalSearches = [];
-      medicalLocations.forEach(location => {
-        if (location.type === 'aed') {
-          addMarker(location, new kakao.maps.LatLng(
-            location.latitude,
-            location.longitude,
-          ));
+      // 위치가 갱신될 때마다 같은 주소를 다시 지오코딩하지 않도록 결과를 보관합니다.
+      // 일시적인 오류는 다음 갱신 때 다시 시도하도록 보관하지 않습니다.
+      const geocodeAddress = (address, callback) => {
+        if (geocodeCache.has(address)) {
+          callback(geocodeCache.get(address));
           return;
         }
 
-        hospitalSearches.push(new Promise(resolve => {
-          const searchAddress = location.address.split(',')[0]
-            .replace(/\\s*\\(.*$/, '').trim();
-          geocoder.addressSearch(searchAddress, (results, status) => {
-            if (status === kakao.maps.services.Status.OK && results.length) {
-              addMarker(location, new kakao.maps.LatLng(results[0].y, results[0].x));
-            } else {
-              failedHospitalIds.add(location.id);
-              if (pendingDirectionsId === location.id) {
-                window.ReactNativeWebView?.postMessage(JSON.stringify({
-                  type: 'medical-directions-unavailable',
-                  locationId: location.id,
-                }));
-                pendingDirectionsId = null;
+        geocoder.addressSearch(address, (results, status) => {
+          const { Status } = kakao.maps.services;
+          const position = status === Status.OK && results.length
+            ? new kakao.maps.LatLng(results[0].y, results[0].x)
+            : null;
+          if (position || status === Status.ZERO_RESULT) {
+            geocodeCache.set(address, position);
+          }
+          callback(position);
+        });
+      };
+
+      window.eragsSetMedicalLocations = function (medicalLocations) {
+        medicalLocationsVersion += 1;
+        const version = medicalLocationsVersion;
+        hideMedicalMarkers();
+        bounds = new kakao.maps.LatLngBounds();
+        markers = {};
+        markerEntries = [];
+        failedHospitalIds = new Set();
+
+        const hospitalSearches = [];
+        medicalLocations.forEach(location => {
+          if (location.type === 'aed') {
+            addMarker(location, new kakao.maps.LatLng(
+              location.latitude,
+              location.longitude,
+            ));
+            return;
+          }
+
+          hospitalSearches.push(new Promise(resolve => {
+            const searchAddress = location.address.split(',')[0]
+              .replace(/\\s*\\(.*$/, '').trim();
+            geocodeAddress(searchAddress, position => {
+              // 이전 데이터의 늦은 지오코딩 결과가 새 마커 목록을 오염시키지 않게 합니다.
+              if (version !== medicalLocationsVersion) {
+                resolve();
+                return;
               }
-            }
-            resolve();
-          });
-        }));
-      });
+              if (position) {
+                addMarker(location, position);
+              } else {
+                failedHospitalIds.add(location.id);
+                if (pendingDirectionsId === location.id) {
+                  window.ReactNativeWebView?.postMessage(JSON.stringify({
+                    type: 'medical-directions-unavailable',
+                    locationId: location.id,
+                  }));
+                  pendingDirectionsId = null;
+                }
+              }
+              resolve();
+            });
+          }));
+        });
 
-      Promise.all(hospitalSearches).then(() => {
-        renderMedicalMarkers();
-        if (hasFocusedLocation) {
-          return;
-        }
-        if (markerCount === 1) {
-          window.eragsMap.setCenter(bounds.getSouthWest());
-        } else if (markerCount > 1) {
-          window.eragsMap.setBounds(bounds, 56, 56, 56, 56);
-        }
-      });
+        Promise.all(hospitalSearches).then(() => {
+          if (version !== medicalLocationsVersion) {
+            return;
+          }
+          renderMedicalMarkers();
+          // 사용자가 지도를 옮긴 뒤에는 데이터가 갱신되어도 시점을 바꾸지 않습니다.
+          if (hasUserMovedMap) {
+            return;
+          }
+          if (markerEntries.length === 1) {
+            window.eragsMap.setCenter(markerEntries[0].position);
+          } else if (markerEntries.length > 1) {
+            window.eragsMap.setBounds(bounds, 56, 56, 56, 56);
+          }
+        });
+      };
 
       kakao.maps.event.addListener(window.eragsMap, 'click', () => {
         window.ReactNativeWebView?.postMessage('map-clicked');
@@ -361,6 +403,9 @@ export const createKakaoMapHtml = (
         'idle',
         renderMedicalMarkers,
       );
+      kakao.maps.event.addListener(window.eragsMap, 'dragstart', () => {
+        hasUserMovedMap = true;
+      });
 
       window.eragsFilterMedicalLocations = function (filter, query) {
         activeFilter = filter;
@@ -376,7 +421,7 @@ export const createKakaoMapHtml = (
           return;
         }
 
-        hasFocusedLocation = true;
+        hasUserMovedMap = true;
         window.eragsMap.setCenter(marker.getPosition());
         window.eragsMap.setLevel(3);
       };
@@ -408,6 +453,13 @@ export const createKakaoMapHtml = (
 
         window.eragsCurrentLocationMarker.setMap(window.eragsMap);
       };
+
+      window.eragsCenterOnCurrentLocation = function (latitude, longitude) {
+        window.eragsUpdateCurrentLocation(latitude, longitude);
+        hasUserMovedMap = true;
+        window.eragsMap.setCenter(new kakao.maps.LatLng(latitude, longitude));
+        window.eragsMap.setLevel(3);
+      };
     </script>
   </body>
 </html>
@@ -418,6 +470,21 @@ export const createCurrentLocationScript = ({
   longitude,
 }: MapCoordinates): string => `
   window.eragsUpdateCurrentLocation?.(${latitude}, ${longitude});
+  true;
+`;
+
+export const createCenterOnCurrentLocationScript = ({
+  latitude,
+  longitude,
+}: MapCoordinates): string => `
+  window.eragsCenterOnCurrentLocation?.(${latitude}, ${longitude});
+  true;
+`;
+
+export const createSetMedicalLocationsScript = (
+  medicalLocations: readonly MedicalMapLocation[],
+): string => `
+  window.eragsSetMedicalLocations?.(${toInlineJson(medicalLocations)});
   true;
 `;
 
