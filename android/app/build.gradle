@@ -59,7 +59,25 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
+
+/**
+ * release 서명 정보는 저장소에 커밋하지 않고 ~/.gradle/gradle.properties에 둡니다.
+ *
+ *   ERAGS_UPLOAD_STORE_FILE=/절대경로/erags-upload.keystore
+ *   ERAGS_UPLOAD_STORE_PASSWORD=...
+ *   ERAGS_UPLOAD_KEY_ALIAS=...
+ *   ERAGS_UPLOAD_KEY_PASSWORD=...
+ *
+ * 값이 없으면 로컬 확인용으로 debug 키로 서명하며, 이 APK/AAB는 배포에 사용할 수 없습니다.
+ */
+def releaseSigningProperties = [
+    'ERAGS_UPLOAD_STORE_FILE',
+    'ERAGS_UPLOAD_STORE_PASSWORD',
+    'ERAGS_UPLOAD_KEY_ALIAS',
+    'ERAGS_UPLOAD_KEY_PASSWORD',
+]
+def hasReleaseSigning = releaseSigningProperties.every { project.hasProperty(it) }
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -94,15 +112,28 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(ERAGS_UPLOAD_STORE_FILE)
+                storePassword ERAGS_UPLOAD_STORE_PASSWORD
+                keyAlias ERAGS_UPLOAD_KEY_ALIAS
+                keyPassword ERAGS_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            } else {
+                if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+                    logger.warn('[ERAGS] release 서명 정보가 없어 debug 키로 서명합니다. 이 빌드는 배포에 사용할 수 없습니다.')
+                }
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
