@@ -90,8 +90,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     state => state.currentStepIndex,
   );
   const elapsedSeconds = useEmergencyGuideStore(state => state.elapsedSeconds);
-  const incrementElapsedSeconds = useEmergencyGuideStore(
-    state => state.incrementElapsedSeconds,
+  const syncElapsedSeconds = useEmergencyGuideStore(
+    state => state.syncElapsedSeconds,
   );
   const markStepCompleted = useEmergencyGuideStore(
     state => state.markStepCompleted,
@@ -138,9 +138,19 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const steps = guide ? serverSteps : fallbackSteps;
 
   React.useEffect(() => {
-    const timer = setInterval(incrementElapsedSeconds, 1000);
-    return () => clearInterval(timer);
-  }, [incrementElapsedSeconds]);
+    syncElapsedSeconds();
+    const timer = setInterval(syncElapsedSeconds, 1000);
+    // 백그라운드에서는 타이머가 멈추므로 앱으로 돌아오면 바로 실제 경과 시간을 반영합니다.
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        syncElapsedSeconds();
+      }
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [syncElapsedSeconds]);
 
   const currentStep = steps[currentStepIndex] ?? steps[0];
   const elapsedLabel = formatElapsed(elapsedSeconds);

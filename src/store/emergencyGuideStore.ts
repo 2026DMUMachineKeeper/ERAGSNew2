@@ -19,6 +19,8 @@ interface EmergencyGuideState {
   completedStepIds: number[];
   currentStepIndex: number;
   elapsedSeconds: number;
+  // 경과 시간 계산 기준 시각(ms)입니다.
+  elapsedStartedAt: number | null;
   guide: EmergencyGuideResponse | null;
   handoverStatus: EmergencyGuideHandoverStatus | null;
   isWasteGuideLoading: boolean;
@@ -27,7 +29,7 @@ interface EmergencyGuideState {
   subtypeLabel: string;
   wasteGuide: EmergencyWasteGuideItem[] | null;
   wasteGuideError: string | null;
-  incrementElapsedSeconds: () => void;
+  syncElapsedSeconds: () => void;
   markStepCompleted: (stepId: number | null) => void;
   moveToNextStep: (stepCount: number) => void;
   moveToPreviousStep: () => void;
@@ -44,6 +46,7 @@ const INITIAL_EMERGENCY_GUIDE_STATE = {
   completedStepIds: [] as number[],
   currentStepIndex: 0,
   elapsedSeconds: 0,
+  elapsedStartedAt: null,
   guide: null,
   handoverStatus: null,
   isWasteGuideLoading: false,
@@ -57,8 +60,20 @@ const INITIAL_EMERGENCY_GUIDE_STATE = {
 export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
   ...INITIAL_EMERGENCY_GUIDE_STATE,
 
-  incrementElapsedSeconds: (): void => {
-    set(state => ({ elapsedSeconds: state.elapsedSeconds + 1 }));
+  // 1초씩 더하면 앱이 백그라운드에 있는 동안(119 통화 등) 멈추므로 시작 시각 기준으로 계산합니다.
+  syncElapsedSeconds: (): void => {
+    set(state => {
+      const now = Date.now();
+      const elapsedStartedAt = state.elapsedStartedAt ?? now;
+
+      return {
+        elapsedStartedAt,
+        elapsedSeconds: Math.max(
+          0,
+          Math.floor((now - elapsedStartedAt) / 1000),
+        ),
+      };
+    });
   },
 
   markStepCompleted: (stepId: number | null): void => {
@@ -142,6 +157,7 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
       completedStepIds: [],
       currentStepIndex: 0,
       elapsedSeconds: 0,
+      elapsedStartedAt: Date.now(),
       guide,
       handoverStatus: null,
       isWasteGuideLoading: false,
