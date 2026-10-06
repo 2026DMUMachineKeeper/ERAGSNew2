@@ -151,6 +151,8 @@ export const useHomeEmergencyActions = (
   const isPhotoVoiceStartingRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const voiceRequestInFlightRef = React.useRef(false);
+  // state는 다음 렌더 전까지 반영되지 않아 빠른 연속 탭을 막지 못하므로 ref로 즉시 잠급니다.
+  const visionUploadInFlightRef = React.useRef(false);
   const [isListening, setIsListening] = React.useState(false);
   const [isPhotoVoiceRecording, setIsPhotoVoiceRecording] =
     React.useState(false);
@@ -304,10 +306,11 @@ export const useHomeEmergencyActions = (
       text?: string;
       audio?: EmergencyGuideMediaFile;
     }): Promise<void> => {
-      if (photoAssets.length === 0 || isVisionUploading) {
+      if (photoAssets.length === 0 || visionUploadInFlightRef.current) {
         return;
       }
 
+      visionUploadInFlightRef.current = true;
       setIsVisionUploading(true);
       setVisionStatus(`사진 ${photoAssets.length}장을 전송하고 있습니다.`);
       let requestController: AbortController | null = null;
@@ -340,6 +343,7 @@ export const useHomeEmergencyActions = (
         Alert.alert('사진 전송 실패', errorMessage);
         setPhotoInputStep('options');
       } finally {
+        visionUploadInFlightRef.current = false;
         if (requestController) {
           activeRequestControllersRef.current.delete(requestController);
         }
@@ -348,7 +352,7 @@ export const useHomeEmergencyActions = (
         }
       }
     },
-    [isVisionUploading, onGuideCreated, photoAssets],
+    [onGuideCreated, photoAssets],
   );
 
   const handlePhotoPress = React.useCallback(async (): Promise<void> => {

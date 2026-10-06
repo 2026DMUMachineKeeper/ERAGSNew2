@@ -202,6 +202,49 @@ describe('홈 응급 작업 정리', () => {
     await act(async (): Promise<void> => renderer.unmount());
   });
 
+  it('사진 전송을 빠르게 두 번 눌러도 요청은 하나만 보낸다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [
+        { uri: 'file:///injury.jpg', fileName: 'injury.jpg', type: 'image/jpeg' },
+      ],
+    });
+    let resolveGuide: (guide: typeof GUIDE) => void = (): void => {};
+    jest.mocked(createPhotoEmergencyGuide).mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveGuide = resolve;
+        }),
+    );
+    const onGuideCreated = jest.fn();
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+
+    // 다시 렌더되기 전의 같은 핸들러로 두 번 누른 상황을 재현합니다.
+    const { handleSendPhotosOnly } = currentActions;
+    let firstSend!: Promise<void>;
+    let secondSend!: Promise<void>;
+    act((): void => {
+      firstSend = handleSendPhotosOnly();
+      secondSend = handleSendPhotosOnly();
+    });
+    await act(async (): Promise<void> => {
+      resolveGuide(GUIDE);
+      await Promise.all([firstSend, secondSend]);
+    });
+
+    expect(createPhotoEmergencyGuide).toHaveBeenCalledTimes(1);
+    expect(onGuideCreated).toHaveBeenCalledTimes(1);
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
   it('촬영한 사진을 개별 삭제하고 마지막 사진 삭제 시 입력을 종료한다', async (): Promise<void> => {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
