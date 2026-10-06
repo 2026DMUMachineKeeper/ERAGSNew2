@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  release 빌드용 네트워크 보안 설정입니다. 평문 HTTP는 기본적으로 차단합니다.
+  debug 빌드는 src/debug/res/xml/network_security_config.xml이 이 파일을 대체합니다.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <!--
+      TODO: 백엔드가 HTTPS로 전환되면 이 IP 항목을 삭제하세요.
+      .env의 API_BASE_URL 호스트가 바뀌면 함께 수정해야 release 앱이 서버에 접속할 수 있습니다.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">13.125.213.48</domain>
+    </domain-config>
+
+    <!--
+      카카오맵 WebView는 http://localhost를 baseUrl로 쓰기 때문에
+      SDK가 지도 스크립트와 타일을 HTTP로 불러올 수 있습니다.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">daumcdn.net</domain>
+        <domain includeSubdomains="true">kakao.com</domain>
+    </domain-config>
+</network-security-config>
