@@ -143,7 +143,10 @@ describe('MedicineAddScreen 카메라 오류 처리', () => {
           .findAllByType(Text)
           .some(label => label.props.children === '등록 완료'),
       );
-    await act(async (): Promise<void> => saveButton?.props.onPress());
+    // 실제 TouchableOpacity처럼 press 이벤트 객체를 인자로 넘깁니다.
+    await act(async (): Promise<void> =>
+      saveButton?.props.onPress({ nativeEvent: {} }),
+    );
 
     expect(updateMedicine).toHaveBeenCalledWith('7', {
       expire_date: '2026-10-15',
