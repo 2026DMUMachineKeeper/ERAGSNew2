@@ -342,7 +342,7 @@ describe('현재 위치 버튼', () => {
     });
     expect(html).toContain('const CLUSTER_DISTANCE_PX = 28;');
     expect(html).toContain('projection.pointFromCoords(entry.position)');
-    expect(html).toContain("'idle',\n        renderMedicalMarkers");
+    expect(html).toContain("addListener(window.eragsMap, 'idle'");
   });
 
   it.each(['granted', 'denied'] as const)(
