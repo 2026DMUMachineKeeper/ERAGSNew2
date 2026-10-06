@@ -51,6 +51,13 @@ const hospital = (
   },
 });
 
+// 실제 SDK처럼 지오코딩 콜백이 비동기로 오고 Promise.all 뒤 처리까지 끝나도록 여러 틱을 기다립니다.
+const flushMapTasks = async (): Promise<void> => {
+  for (let tick = 0; tick < 10; tick += 1) {
+    await Promise.resolve();
+  }
+};
+
 const renderMap = async (locations: MedicalMapLocation[]) => {
   const overlays: { content: TestNode; setMap: jest.Mock }[] = [];
   const postMessage = jest.fn();
@@ -59,6 +66,7 @@ const renderMap = async (locations: MedicalMapLocation[]) => {
     ReactNativeWebView: { postMessage },
     eragsFilterMedicalLocations: (_filter: string, _query: string): void => {},
     eragsSetMedicalLocations: (_locations: MedicalMapLocation[]): void => {},
+    eragsRequestMedicalDirections: (_locationId: string): void => {},
   };
   const document = {
     getElementById: (): TestNode => new TestNode(),
@@ -102,7 +110,8 @@ const renderMap = async (locations: MedicalMapLocation[]) => {
       Geocoder: class {
         addressSearch(address: string, callback: (results: { x: number; y: number }[], status: string) => void): void {
           addressSearch(address);
-          callback([{ x: 127, y: 37.5 }], 'OK');
+          // 실제 SDK처럼 지오코딩 결과는 비동기로 돌려줍니다.
+          Promise.resolve().then(() => callback([{ x: 127, y: 37.5 }], 'OK'));
         }
       },
     },
@@ -112,7 +121,7 @@ const renderMap = async (locations: MedicalMapLocation[]) => {
   expect(source).toBeDefined();
   new Script(source ?? '').runInNewContext({ window, document, kakao });
   window.eragsSetMedicalLocations(locations);
-  await Promise.resolve();
+  await flushMapTasks();
   const map = (window as unknown as { eragsMap: { setBounds: jest.Mock } })
     .eragsMap;
   const emitMapEvent = (name: string): void => {
@@ -140,6 +149,43 @@ describe('병원 지도 병상 표시', () => {
     expect(overlays[1].setMap).toHaveBeenLastCalledWith(null);
   });
 
+  it('핀치 줌 뒤에는 데이터가 갱신되어도 지도 범위를 다시 맞추지 않는다', async () => {
+    const { window, map, emitMapEvent } = await renderMap([
+      hospital('가온', 3, 1), hospital('나래', 0, 0),
+    ]);
+    expect(map.setBounds).toHaveBeenCalledTimes(1);
+
+    // 코드가 지도를 옮기면서 발생한 zoom 이벤트는 사용자 조작으로 보지 않습니다.
+    emitMapEvent('zoom_start');
+    window.eragsSetMedicalLocations([hospital('가온', 3, 1), hospital('나래', 0, 0)]);
+    await flushMapTasks();
+    expect(map.setBounds).toHaveBeenCalledTimes(2);
+
+    emitMapEvent('idle');
+    emitMapEvent('zoom_start');
+    window.eragsSetMedicalLocations([hospital('가온', 5, 2), hospital('나래', 0, 0)]);
+    await flushMapTasks();
+    expect(map.setBounds).toHaveBeenCalledTimes(2);
+  });
+
+  it('목록에서 사라진 장소의 길찾기 대기는 불가 메시지로 알리고 정리한다', async () => {
+    const { window, postMessage } = await renderMap([hospital('가온', 3, 1)]);
+    window.eragsRequestMedicalDirections('hospital:미등록');
+    expect(postMessage).not.toHaveBeenCalled();
+
+    window.eragsSetMedicalLocations([hospital('가온', 3, 1)]);
+    await flushMapTasks();
+    expect(JSON.parse(postMessage.mock.lastCall?.[0])).toEqual({
+      type: 'medical-directions-unavailable', locationId: 'hospital:미등록',
+    });
+
+    // 정리된 뒤 해당 장소가 다시 나타나도 카카오맵이 갑자기 열리지 않습니다.
+    postMessage.mockClear();
+    window.eragsSetMedicalLocations([hospital('hospital:미등록', 1, 1)]);
+    await flushMapTasks();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   it('장소를 다시 주입하면 이전 마커를 지우고 같은 주소는 다시 지오코딩하지 않는다', async () => {
     const { overlays, window, addressSearch, map, emitMapEvent } =
       await renderMap([hospital('가온', 3, 1), hospital('나래', 0, 0)]);
@@ -148,7 +194,7 @@ describe('병원 지도 병상 표시', () => {
 
     emitMapEvent('dragstart');
     window.eragsSetMedicalLocations([hospital('가온', 5, 2)]);
-    await Promise.resolve();
+    await flushMapTasks();
 
     expect(addressSearch).toHaveBeenCalledTimes(1);
     expect(overlays.slice(0, 2).map(overlay => overlay.setMap.mock.lastCall?.[0]))

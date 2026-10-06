@@ -96,8 +96,15 @@ export const createKakaoMapHtml = (
       let pendingFocusId = null;
       let pendingDirectionsId = null;
       let hasUserMovedMap = false;
+      // 코드가 지도를 옮기는 동안 발생하는 zoom/drag 이벤트를 사용자 조작으로 오인하지 않기 위한 플래그입니다.
+      let isProgrammaticMove = false;
       let medicalLocationsVersion = 0;
       const geocodeCache = new Map();
+
+      const moveMapProgrammatically = move => {
+        isProgrammaticMove = true;
+        move();
+      };
 
       const sendDirectionsPosition = (locationId, position) => {
         window.ReactNativeWebView?.postMessage(JSON.stringify({
@@ -315,12 +322,20 @@ export const createKakaoMapHtml = (
       const geocoder = new kakao.maps.services.Geocoder();
       // 위치가 갱신될 때마다 같은 주소를 다시 지오코딩하지 않도록 결과를 보관합니다.
       // 일시적인 오류는 다음 갱신 때 다시 시도하도록 보관하지 않습니다.
+      // 같은 주소의 동시 요청(같은 건물의 병원 등)은 진행 중인 조회 하나를 함께 기다립니다.
+      const geocodeInFlight = new Map();
       const geocodeAddress = (address, callback) => {
         if (geocodeCache.has(address)) {
           callback(geocodeCache.get(address));
           return;
         }
+        const waitingCallbacks = geocodeInFlight.get(address);
+        if (waitingCallbacks) {
+          waitingCallbacks.push(callback);
+          return;
+        }
 
+        geocodeInFlight.set(address, [callback]);
         geocoder.addressSearch(address, (results, status) => {
           const { Status } = kakao.maps.services;
           const position = status === Status.OK && results.length
@@ -329,7 +344,9 @@ export const createKakaoMapHtml = (
           if (position || status === Status.ZERO_RESULT) {
             geocodeCache.set(address, position);
           }
-          callback(position);
+          const callbacks = geocodeInFlight.get(address) || [];
+          geocodeInFlight.delete(address);
+          callbacks.forEach(waitingCallback => waitingCallback(position));
         });
       };
 
@@ -378,19 +395,40 @@ export const createKakaoMapHtml = (
           }));
         });
 
+        // 병원 지오코딩이 끝나기 전에도 AED 마커는 바로 보이게 합니다.
+        renderMedicalMarkers();
+
         Promise.all(hospitalSearches).then(() => {
           if (version !== medicalLocationsVersion) {
             return;
           }
           renderMedicalMarkers();
+
+          // 새 목록에 없는 장소의 대기 중 포커스·길찾기 요청은 나중에 엉뚱하게 실행되지 않도록 정리합니다.
+          const locationIds = new Set(medicalLocations.map(location => location.id));
+          if (pendingFocusId !== null && !locationIds.has(pendingFocusId)) {
+            pendingFocusId = null;
+          }
+          if (pendingDirectionsId !== null && !locationIds.has(pendingDirectionsId)) {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              type: 'medical-directions-unavailable',
+              locationId: pendingDirectionsId,
+            }));
+            pendingDirectionsId = null;
+          }
+
           // 사용자가 지도를 옮긴 뒤에는 데이터가 갱신되어도 시점을 바꾸지 않습니다.
           if (hasUserMovedMap) {
             return;
           }
           if (markerEntries.length === 1) {
-            window.eragsMap.setCenter(markerEntries[0].position);
+            moveMapProgrammatically(() =>
+              window.eragsMap.setCenter(markerEntries[0].position),
+            );
           } else if (markerEntries.length > 1) {
-            window.eragsMap.setBounds(bounds, 56, 56, 56, 56);
+            moveMapProgrammatically(() =>
+              window.eragsMap.setBounds(bounds, 56, 56, 56, 56),
+            );
           }
         });
       };
@@ -398,14 +436,18 @@ export const createKakaoMapHtml = (
       kakao.maps.event.addListener(window.eragsMap, 'click', () => {
         window.ReactNativeWebView?.postMessage('map-clicked');
       });
-      kakao.maps.event.addListener(
-        window.eragsMap,
-        'idle',
-        renderMedicalMarkers,
-      );
-      kakao.maps.event.addListener(window.eragsMap, 'dragstart', () => {
-        hasUserMovedMap = true;
+      kakao.maps.event.addListener(window.eragsMap, 'idle', () => {
+        isProgrammaticMove = false;
+        renderMedicalMarkers();
       });
+      // 드래그뿐 아니라 핀치·더블탭 줌도 사용자 조작으로 봅니다.
+      const markUserMovedMap = () => {
+        if (!isProgrammaticMove) {
+          hasUserMovedMap = true;
+        }
+      };
+      kakao.maps.event.addListener(window.eragsMap, 'dragstart', markUserMovedMap);
+      kakao.maps.event.addListener(window.eragsMap, 'zoom_start', markUserMovedMap);
 
       window.eragsFilterMedicalLocations = function (filter, query) {
         activeFilter = filter;
@@ -417,10 +459,12 @@ export const createKakaoMapHtml = (
         const marker = markers[locationId];
 
         if (!marker) {
-          pendingFocusId = locationId;
+          // 지오코딩에 실패한 장소는 기다려도 마커가 생기지 않으므로 대기시키지 않습니다.
+          pendingFocusId = failedHospitalIds.has(locationId) ? null : locationId;
           return;
         }
 
+        pendingFocusId = null;
         hasUserMovedMap = true;
         window.eragsMap.setCenter(marker.getPosition());
         window.eragsMap.setLevel(3);
@@ -429,8 +473,10 @@ export const createKakaoMapHtml = (
       window.eragsRequestMedicalDirections = function (locationId) {
         const marker = markers[locationId];
         if (marker) {
+          pendingDirectionsId = null;
           sendDirectionsPosition(locationId, marker.getPosition());
         } else if (failedHospitalIds.has(locationId)) {
+          pendingDirectionsId = null;
           window.ReactNativeWebView?.postMessage(JSON.stringify({
             type: 'medical-directions-unavailable',
             locationId,
