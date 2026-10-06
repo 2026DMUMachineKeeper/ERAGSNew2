@@ -14,8 +14,7 @@ import { useAuthStore } from '@/store/authStore';
 jest.mock('@/services/auth.service', () => ({
   clearAuthSession: jest.fn(),
   getStoredAuthUser: jest.fn(),
-  isAuthSessionExpiredError: (error: unknown): boolean =>
-    error instanceof Error && error.name === 'AuthSessionExpiredError',
+  isTransientAuthError: (error: unknown): boolean => error instanceof TypeError,
   login: jest.fn(),
   logout: jest.fn(),
   restoreAuthSession: jest.fn(),
