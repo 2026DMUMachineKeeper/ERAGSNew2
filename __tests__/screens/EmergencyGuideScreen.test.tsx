@@ -226,6 +226,77 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     });
   });
 
+  describe('처치 단계 재시도', () => {
+    const PENDING_GUIDE = {
+      ...GUIDE,
+      treatment: { ...GUIDE.treatment, steps: [] },
+    };
+
+    const getRetryHandler = (): (() => Promise<void>) => {
+      const button = renderer.root
+        .findAllByType(TouchableOpacity)
+        .find(item =>
+          item.findAllByType(Text).some(text => text.props.children === '다시 시도'),
+        );
+      expect(button).toBeDefined();
+      return button?.props.onPress;
+    };
+    const pressRetry = (): void => {
+      getRetryHandler()();
+    };
+
+    const holdRetryResponse = (): ((guide: typeof GUIDE) => void) => {
+      let resolveRetry: (guide: typeof GUIDE) => void = (): void => {};
+      jest.mocked(retryEmergencyGuide).mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolveRetry = resolve;
+          }),
+      );
+      return guide => resolveRetry(guide);
+    };
+
+    beforeEach(async (): Promise<void> => {
+      await act(async () => useEmergencyGuideStore.getState().setGuide(PENDING_GUIDE));
+    });
+
+    it('응답 전에 새 가이드가 시작되면 늦은 재시도 응답으로 덮어쓰지 않는다', async () => {
+      const respondRetry = holdRetryResponse();
+      // 다시 렌더되기 전의 같은 핸들러로 두 번 누른 상황을 재현합니다.
+      const handleRetry = getRetryHandler();
+      await act(async () => {
+        handleRetry();
+        handleRetry();
+      });
+      expect(retryEmergencyGuide).toHaveBeenCalledTimes(1);
+
+      await act(async () =>
+        useEmergencyGuideStore.getState().startGuide({
+          guide: { ...GUIDE, sessionId: 'session-2' },
+          source: 'manual',
+        }),
+      );
+      await act(async () => respondRetry(GUIDE));
+
+      expect(useEmergencyGuideStore.getState().guide?.sessionId).toBe('session-2');
+    });
+
+    it('화면을 떠나면 진행 중인 재시도를 취소한다', async () => {
+      holdRetryResponse();
+      await act(async () => pressRetry());
+      const signal = jest.mocked(retryEmergencyGuide).mock.calls[0]?.[1];
+      expect(signal?.aborted).toBe(false);
+
+      await act(async () => renderer.unmount());
+      expect(signal?.aborted).toBe(true);
+      await act(async () => {
+        renderer = create(
+          <EmergencyGuideScreen navigation={navigation as never} route={{} as never} />,
+        );
+      });
+    });
+  });
+
   it('한국어 데이터 설치 화면을 열지 못하면 설정에서 설치하도록 안내한다', async () => {
     jest.mocked(speakTts).mockRejectedValueOnce(
       Object.assign(new Error('Language data is missing'), { code: 'lang_missing_data' }),

@@ -118,6 +118,15 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const isTtsUnavailableRef = React.useRef(false);
   const [ttsRetryCount, setTtsRetryCount] = React.useState(0);
   const [isRetrying, setIsRetrying] = React.useState(false);
+  // 진행 중인 재시도 요청입니다. 연타를 막고 화면을 떠날 때 취소하는 데 씁니다.
+  const retryControllerRef = React.useRef<AbortController | null>(null);
+
+  React.useEffect(
+    () => () => {
+      retryControllerRef.current?.abort();
+    },
+    [],
+  );
   const visibleStepCount = getVisibleStepCount(subtypeLabel);
   const fallbackSteps = emergencyGuideSteps
     .slice(0, visibleStepCount)
@@ -279,15 +288,32 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleRetryPress = async (): Promise<void> => {
-    if (!guide?.sessionId) {
+    const sessionId = guide?.sessionId;
+    if (!sessionId || retryControllerRef.current) {
       return;
     }
 
+    const retryController = new AbortController();
+    retryControllerRef.current = retryController;
     setIsRetrying(true);
 
     try {
-      setGuide(await retryEmergencyGuide(guide.sessionId));
+      const retriedGuide = await retryEmergencyGuide(
+        sessionId,
+        retryController.signal,
+      );
+      // 응답 전에 화면을 떠났거나 새 가이드가 시작됐다면 늦은 응답으로 덮어쓰지 않습니다.
+      if (
+        retryController.signal.aborted ||
+        useEmergencyGuideStore.getState().guide?.sessionId !== sessionId
+      ) {
+        return;
+      }
+      setGuide(retriedGuide);
     } catch (error) {
+      if (retryController.signal.aborted) {
+        return;
+      }
       const errorMessage = getEmergencyGuideErrorMessage(error);
 
       if (error instanceof EmergencyGuideRequestError && error.status === 404) {
@@ -299,7 +325,12 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
 
       Alert.alert('응급 가이드 재시도 실패', errorMessage);
     } finally {
-      setIsRetrying(false);
+      if (retryControllerRef.current === retryController) {
+        retryControllerRef.current = null;
+      }
+      if (!retryController.signal.aborted) {
+        setIsRetrying(false);
+      }
     }
   };
 
