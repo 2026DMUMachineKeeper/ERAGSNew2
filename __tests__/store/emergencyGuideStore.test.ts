@@ -26,7 +26,7 @@ describe('useEmergencyGuideStore', () => {
   it('새 가이드를 시작하면 이전 진행 상태를 초기화한다', (): void => {
     const store = useEmergencyGuideStore.getState();
 
-    store.incrementElapsedSeconds();
+    useEmergencyGuideStore.setState({ elapsedSeconds: 42 });
     store.moveToNextStep(3);
     store.startGuide({
       guide: TEST_GUIDE,
@@ -41,6 +41,24 @@ describe('useEmergencyGuideStore', () => {
       mainLabel: '출혈',
       source: 'manual',
     });
+  });
+
+  it('경과 시간은 시작 시각 기준으로 계산해 백그라운드 시간도 포함한다', (): void => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      useEmergencyGuideStore.getState().startGuide({
+        guide: TEST_GUIDE,
+        source: 'manual',
+      });
+
+      // 타이머가 멈춰 있던 2분(119 통화 등) 뒤에 한 번만 동기화해도 실제 경과 시간을 반영합니다.
+      nowSpy.mockReturnValue(1_000_000 + 125_400);
+      useEmergencyGuideStore.getState().syncElapsedSeconds();
+
+      expect(useEmergencyGuideStore.getState().elapsedSeconds).toBe(125);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('실제 서버 단계 ID만 중복 없이 완료 처리한다', (): void => {
