@@ -28,6 +28,27 @@ describe('tts.service', () => {
     expect(Tts.speak).toHaveBeenCalledWith('응급처치 안내');
   });
 
+  it('이전 안내를 비운 뒤 현재 안내만 재생한다', async (): Promise<void> => {
+    jest.mocked(Tts.stop).mockClear();
+    jest.mocked(Tts.speak).mockClear();
+    await speakTts('2단계 안내');
+
+    expect(Tts.stop).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(Tts.stop).mock.invocationCallOrder[0]).toBeLessThan(
+      jest.mocked(Tts.speak).mock.invocationCallOrder[0],
+    );
+  });
+
+  it('초기화가 끝나기 전에 취소된 안내는 재생하지 않는다', async (): Promise<void> => {
+    jest.mocked(Tts.speak).mockClear();
+    const controller = new AbortController();
+    const speaking = speakTts('1단계 안내', controller.signal);
+    controller.abort();
+    await speaking;
+
+    expect(Tts.speak).not.toHaveBeenCalled();
+  });
+
   it('119는 숫자 대신 일일구로 읽도록 변환한다', async (): Promise<void> => {
     await speakTts('119에 신고해 주세요.');
 

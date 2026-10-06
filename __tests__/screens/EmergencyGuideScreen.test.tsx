@@ -188,10 +188,42 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(speakTts).toHaveBeenCalledTimes(spokenCount);
     await act(async () => handleAppStateChange?.('active'));
     expect(speakTts).toHaveBeenCalledTimes(spokenCount + 1);
-    expect(speakTts).toHaveBeenLastCalledWith('테스트 처치 2');
+    expect(speakTts).toHaveBeenLastCalledWith('테스트 처치 2', expect.anything());
     await act(async () => handleAppStateChange?.('active'));
     expect(speakTts).toHaveBeenCalledTimes(spokenCount + 1);
     expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('음성 재생에 실패하면 안내 창을 한 번만 띄우고 다음 단계부터 자동 재생하지 않는다', async () => {
+    jest.mocked(speakTts).mockRejectedValueOnce(new Error('음성 합성 실패'));
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenLastCalledWith('음성 재생 실패', expect.any(String));
+    const spokenCount = jest.mocked(speakTts).mock.calls.length;
+
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+
+    expect(speakTts).toHaveBeenCalledTimes(spokenCount);
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('화면을 떠나거나 단계를 바꾸면 이전 안내 재생을 취소한다', async () => {
+    const signals = jest.mocked(speakTts).mock.calls.map(([, signal]) => signal);
+    const currentSignal = signals.at(-1);
+    expect(currentSignal?.aborted).toBe(false);
+
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+    expect(currentSignal?.aborted).toBe(true);
+    const nextSignal = jest.mocked(speakTts).mock.calls.at(-1)?.[1];
+    expect(nextSignal?.aborted).toBe(false);
+
+    await act(async () => renderer.unmount());
+    expect(nextSignal?.aborted).toBe(true);
+    await act(async () => {
+      renderer = create(
+        <EmergencyGuideScreen navigation={navigation as never} route={{} as never} />,
+      );
+    });
   });
 
   it('한국어 데이터 설치 화면을 열지 못하면 설정에서 설치하도록 안내한다', async () => {

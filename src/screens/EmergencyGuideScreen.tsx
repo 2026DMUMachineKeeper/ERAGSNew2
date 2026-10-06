@@ -114,6 +114,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const lastSpokenMessageRef = React.useRef('');
   const isStartingNewRequestRef = React.useRef(false);
   const shouldRetryTtsAfterInstallationRef = React.useRef(false);
+  // 음성 재생에 한 번 실패하면 단계마다 같은 안내 창이 뜨지 않도록 자동 재생을 멈춥니다.
+  const isTtsUnavailableRef = React.useRef(false);
   const [ttsRetryCount, setTtsRetryCount] = React.useState(0);
   const [isRetrying, setIsRetrying] = React.useState(false);
   const visibleStepCount = getVisibleStepCount(subtypeLabel);
@@ -144,6 +146,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active' && shouldRetryTtsAfterInstallationRef.current) {
         shouldRetryTtsAfterInstallationRef.current = false;
+        isTtsUnavailableRef.current = false;
         lastSpokenMessageRef.current = '';
         setTtsRetryCount(count => count + 1);
       }
@@ -154,6 +157,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   React.useEffect(() => {
     if (
       isStartingNewRequestRef.current ||
+      isTtsUnavailableRef.current ||
       !currentInstruction ||
       lastSpokenMessageRef.current === currentInstruction
     ) {
@@ -161,11 +165,16 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     }
 
     lastSpokenMessageRef.current = currentInstruction;
+    const speechController = new AbortController();
 
     const speakCurrentStep = async (): Promise<void> => {
       try {
-        await speakTts(currentInstruction);
+        await speakTts(currentInstruction, speechController.signal);
       } catch (error) {
+        if (speechController.signal.aborted) {
+          return;
+        }
+        isTtsUnavailableRef.current = true;
         console.error('[EmergencyGuideScreen] TTS 자동 재생 실패:', error);
         if (
           typeof error === 'object' &&
@@ -205,6 +214,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     speakCurrentStep();
 
     return () => {
+      speechController.abort();
       stopTts().catch(error => {
         console.warn('[EmergencyGuideScreen] TTS 정지 실패:', error);
       });
