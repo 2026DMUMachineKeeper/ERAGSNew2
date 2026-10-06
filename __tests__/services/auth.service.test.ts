@@ -64,7 +64,7 @@ describe('restoreAuthSession', () => {
   });
 
   it.each(['오프라인', '서버 오류', '응답 형식 오류'] as const)(
-    '%s 후 인증 정보를 유지하고 다음 복원에 성공한다',
+    '%s 시 저장된 세션으로 진입하고 다음 복원에서 토큰을 갱신한다',
     async (
       failureKind: '오프라인' | '서버 오류' | '응답 형식 오류',
     ): Promise<void> => {
@@ -83,12 +83,17 @@ describe('restoreAuthSession', () => {
         } as Response);
       }
 
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       await expect(useAuthStore.getState().restoreSession()).resolves.toBe(
-        false,
+        true,
       );
+      warn.mockRestore();
       expect(Keychain.resetGenericPassword).not.toHaveBeenCalled();
       expect(Keychain.setGenericPassword).not.toHaveBeenCalled();
-      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState()).toMatchObject({
+        isAuthenticated: true,
+        user: { id: 1, email: 'user@example.com' },
+      });
 
       fetchMock.mockResolvedValueOnce({
         ok: true,
