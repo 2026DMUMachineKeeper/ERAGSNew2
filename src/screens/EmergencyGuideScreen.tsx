@@ -116,6 +116,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const shouldRetryTtsAfterInstallationRef = React.useRef(false);
   // 음성 재생에 한 번 실패하면 단계마다 같은 안내 창이 뜨지 않도록 자동 재생을 멈춥니다.
   const isTtsUnavailableRef = React.useRef(false);
+  const hasShownTtsErrorAlertRef = React.useRef(false);
   const [ttsRetryCount, setTtsRetryCount] = React.useState(0);
   const [isRetrying, setIsRetrying] = React.useState(false);
   // 진행 중인 재시도 요청입니다. 연타를 막고 화면을 떠날 때 취소하는 데 씁니다.
@@ -193,7 +194,6 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         if (speechController.signal.aborted) {
           return;
         }
-        isTtsUnavailableRef.current = true;
         console.error('[EmergencyGuideScreen] TTS 자동 재생 실패:', error);
         if (
           typeof error === 'object' &&
@@ -201,6 +201,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
           'code' in error &&
           error.code === 'lang_missing_data'
         ) {
+          // 음성 데이터가 없으면 설치 전까지는 실패가 반복되므로 자동 재생을 멈춥니다.
+          isTtsUnavailableRef.current = true;
           Alert.alert(
             '한국어 음성 데이터가 필요해요',
             '한국어 음성 데이터를 설치한 뒤 돌아오면 음성 안내를 다시 시도합니다. 설치 전에도 화면의 처치 안내를 계속 확인할 수 있습니다.',
@@ -226,7 +228,11 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
           );
           return;
         }
-        Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
+        // 일시적 오류(오디오 포커스 등)는 다음 단계에서 다시 시도하되, 안내 창은 한 번만 띄웁니다.
+        if (!hasShownTtsErrorAlertRef.current) {
+          hasShownTtsErrorAlertRef.current = true;
+          Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
+        }
       }
     };
 

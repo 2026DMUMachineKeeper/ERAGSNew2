@@ -194,11 +194,27 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it('음성 재생에 실패하면 안내 창을 한 번만 띄우고 다음 단계부터 자동 재생하지 않는다', async () => {
+  it('일시적인 재생 실패는 안내 창을 한 번만 띄우고 다음 단계에서 다시 재생을 시도한다', async () => {
     jest.mocked(speakTts).mockRejectedValueOnce(new Error('음성 합성 실패'));
     await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     expect(Alert.alert).toHaveBeenLastCalledWith('음성 재생 실패', expect.any(String));
+    const spokenCount = jest.mocked(speakTts).mock.calls.length;
+
+    jest.mocked(speakTts).mockRejectedValueOnce(new Error('음성 합성 실패'));
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+
+    expect(speakTts).toHaveBeenCalledTimes(spokenCount + 1);
+    expect(speakTts).toHaveBeenLastCalledWith('테스트 처치 3', expect.anything());
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('한국어 음성 데이터가 없으면 설치 전까지 다음 단계를 자동 재생하지 않는다', async () => {
+    jest.mocked(speakTts).mockRejectedValueOnce(
+      Object.assign(new Error('Language data is missing'), { code: 'lang_missing_data' }),
+    );
+    await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
+    await answerCompletion('텍스트로 계속');
     const spokenCount = jest.mocked(speakTts).mock.calls.length;
 
     await act(async () => useEmergencyGuideStore.getState().moveToNextStep(3));
