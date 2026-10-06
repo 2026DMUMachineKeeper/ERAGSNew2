@@ -14,6 +14,8 @@ import { useAuthStore } from '@/store/authStore';
 jest.mock('@/services/auth.service', () => ({
   clearAuthSession: jest.fn(),
   getStoredAuthUser: jest.fn(),
+  isAuthSessionExpiredError: (error: unknown): boolean =>
+    error instanceof Error && error.name === 'AuthSessionExpiredError',
   login: jest.fn(),
   logout: jest.fn(),
   restoreAuthSession: jest.fn(),
@@ -71,6 +73,34 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState()).toMatchObject({
       user: TEST_USER,
       isAuthenticated: true,
+    });
+  });
+
+  it('오프라인으로 토큰 갱신에 실패해도 저장된 세션으로 진입한다', async (): Promise<void> => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest
+      .mocked(restoreAuthSession)
+      .mockRejectedValue(new TypeError('Network request failed'));
+    jest.mocked(getStoredAuthUser).mockResolvedValue(TEST_USER);
+
+    await expect(useAuthStore.getState().restoreSession()).resolves.toBe(true);
+    expect(clearAuthSession).not.toHaveBeenCalled();
+    expect(useAuthStore.getState()).toMatchObject({
+      user: TEST_USER,
+      isAuthenticated: true,
+    });
+  });
+
+  it('세션이 만료되면 로그인 화면으로 보낸다', async (): Promise<void> => {
+    const expiredError = new Error();
+    expiredError.name = 'AuthSessionExpiredError';
+    jest.mocked(restoreAuthSession).mockRejectedValue(expiredError);
+    jest.mocked(getStoredAuthUser).mockResolvedValue(TEST_USER);
+
+    await expect(useAuthStore.getState().restoreSession()).resolves.toBe(false);
+    expect(useAuthStore.getState()).toMatchObject({
+      user: null,
+      isAuthenticated: false,
     });
   });
 

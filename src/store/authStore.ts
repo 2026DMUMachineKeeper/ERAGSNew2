@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import {
   clearAuthSession,
   getStoredAuthUser,
+  isAuthSessionExpiredError,
   login,
   logout,
   restoreAuthSession,
@@ -41,7 +42,16 @@ export const useAuthStore = create<AuthState>()(set => ({
 
   restoreSession: async (): Promise<boolean> => {
     try {
-      await restoreAuthSession();
+      try {
+        await restoreAuthSession();
+      } catch (error: unknown) {
+        if (isAuthSessionExpiredError(error)) {
+          throw error;
+        }
+        // 오프라인·서버 오류처럼 일시적인 갱신 실패로 응급 앱 진입을 막지 않습니다.
+        // 저장된 세션으로 진행하고, 이후 API 호출에서 토큰 갱신을 다시 시도합니다.
+        console.warn('[authStore] 세션 갱신 실패, 저장된 세션으로 진행:', error);
+      }
       const user = (await getStoredAuthUser()) ?? null;
 
       set({ user, isAuthenticated: true });
