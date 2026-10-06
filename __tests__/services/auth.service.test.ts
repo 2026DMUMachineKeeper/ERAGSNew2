@@ -120,6 +120,21 @@ describe('restoreAuthSession', () => {
     },
   );
 
+  it('갱신이 401이 아닌 4xx로 거부되면 저장 세션은 유지하되 로그인 화면으로 보낸다', async (): Promise<void> => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async (): Promise<string> =>
+        JSON.stringify({ message: 'invalid_grant' }),
+    } as Response);
+
+    await expect(useAuthStore.getState().restoreSession()).resolves.toBe(
+      false,
+    );
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(Keychain.resetGenericPassword).not.toHaveBeenCalled();
+  });
+
   it('저장소 읽기 실패는 토큰 갱신이나 삭제로 처리하지 않는다', async (): Promise<void> => {
     const storageError = new Error('저장소 접근 실패');
     jest
@@ -304,6 +319,74 @@ describe('토큰 갱신과 세션 변경 경쟁', () => {
       refreshToken: 'renewed-refresh-token',
       user: { id: 1, name: '새 이름' },
     });
+  });
+
+  it('로그아웃 요청 중에 시작된 갱신은 서버로 보내지 않는다', async (): Promise<void> => {
+    let resolveLogout: (response: Response) => void = (): void => {};
+    fetchMock.mockImplementationOnce(
+      (): Promise<Response> =>
+        new Promise<Response>((resolve): void => {
+          resolveLogout = resolve;
+        }),
+    );
+
+    const logoutRequest = logout();
+    await waitForRefreshRequest();
+    const refresh = refreshAuthTokens();
+
+    await expect(refresh).rejects.toBeInstanceOf(AuthSessionChangedError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/auth/logout');
+
+    resolveLogout({
+      ok: true,
+      status: 200,
+      text: async (): Promise<string> => JSON.stringify({ success: true }),
+    } as Response);
+    await logoutRequest;
+    expect(storedCredentials).toBeNull();
+  });
+
+  it('로그인 저장이 끝나기 전에 시작된 갱신은 이전 계정 토큰을 읽지 않는다', async (): Promise<void> => {
+    let finishWrite: () => void = (): void => {};
+    jest
+      .mocked(Keychain.setGenericPassword)
+      .mockImplementationOnce(
+        (username: string, password: string) =>
+          new Promise(resolve => {
+            finishWrite = (): void => {
+              storedCredentials = { username, password };
+              resolve(false);
+            };
+          }),
+      );
+
+    const save = saveAuthTokens('other@example.com', {
+      accessToken: 'other-access-token',
+      refreshToken: 'other-refresh-token',
+    });
+    const refresh = refreshAuthTokens();
+    await waitForRefreshRequest();
+    // 저장이 끝나기 전에는 갱신 요청이 서버로 나가지 않습니다.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async (): Promise<string> =>
+        JSON.stringify({
+          access_token: 'renewed-access-token',
+          refresh_token: 'renewed-refresh-token',
+          expires_in: 3600,
+        }),
+    } as Response);
+    finishWrite();
+    await save;
+    await refresh;
+
+    const refreshBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(refreshBody).toEqual({ refresh_token: 'other-refresh-token' });
+    expect(storedCredentials?.username).toBe('other@example.com');
   });
 
   it('로그아웃은 진행 중인 갱신을 기다린 뒤 최신 refresh 토큰을 폐기한다', async (): Promise<void> => {
