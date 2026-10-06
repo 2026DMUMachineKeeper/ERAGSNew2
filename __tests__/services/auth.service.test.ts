@@ -3,10 +3,15 @@ import * as Keychain from 'react-native-keychain';
 import { useAuthStore } from '@/store/authStore';
 
 import {
+  AuthSessionChangedError,
   AuthSessionExpiredError,
+  clearAuthSession,
   login,
+  logout,
   refreshAuthTokens,
   restoreAuthSession,
+  saveAuthTokens,
+  updateStoredAuthUser,
 } from '@/services/auth.service';
 import { ApiRequestError } from '@/services/apiError.service';
 
@@ -182,5 +187,137 @@ describe('인증 API 오류', () => {
       message: 'invalid email',
       details: ['email'],
     });
+  });
+});
+
+describe('토큰 갱신과 세션 변경 경쟁', () => {
+  let storedCredentials: { username: string; password: string } | null;
+
+  const readStoredTokens = (): Record<string, unknown> =>
+    JSON.parse(storedCredentials?.password ?? '{}');
+
+  // 갱신 서버 응답을 테스트에서 원하는 시점에 돌려주도록 대기시킵니다.
+  const holdRefreshResponse = (): ((refreshToken: string) => void) => {
+    let resolveRefresh: (response: Response) => void = (): void => {};
+    fetchMock.mockImplementationOnce(
+      (): Promise<Response> =>
+        new Promise<Response>((resolve): void => {
+          resolveRefresh = resolve;
+        }),
+    );
+    return (refreshToken: string): void =>
+      resolveRefresh({
+        ok: true,
+        status: 200,
+        text: async (): Promise<string> =>
+          JSON.stringify({
+            access_token: 'renewed-access-token',
+            refresh_token: refreshToken,
+            expires_in: 3600,
+          }),
+      } as Response);
+  };
+
+  const waitForRefreshRequest = (): Promise<void> =>
+    new Promise<void>((resolve): void => {
+      setImmediate(resolve);
+    });
+
+  beforeEach((): void => {
+    jest.clearAllMocks();
+    fetchMock.mockReset();
+    storedCredentials = {
+      username: 'user@example.com',
+      password: JSON.stringify({
+        accessToken: 'header.eyJleHAiOjF9.signature',
+        refreshToken: 'saved-refresh-token',
+        user: { id: 1, email: 'user@example.com', name: '이전 이름' },
+      }),
+    };
+    jest.mocked(Keychain.getGenericPassword).mockImplementation(async () =>
+      storedCredentials
+        ? {
+            ...storedCredentials,
+            service: 'erags.auth.token',
+            storage: 'KeystoreAESGCM_NoAuth' as Keychain.STORAGE_TYPE,
+          }
+        : false,
+    );
+    jest
+      .mocked(Keychain.setGenericPassword)
+      .mockImplementation(async (username: string, password: string) => {
+        storedCredentials = { username, password };
+        return false;
+      });
+    jest.mocked(Keychain.resetGenericPassword).mockImplementation(async () => {
+      storedCredentials = null;
+      return true;
+    });
+  });
+
+  it('갱신 중 로그아웃하면 늦게 도착한 새 토큰을 다시 저장하지 않는다', async (): Promise<void> => {
+    const respondRefresh = holdRefreshResponse();
+    const refresh = refreshAuthTokens();
+    await waitForRefreshRequest();
+
+    await clearAuthSession();
+    respondRefresh('renewed-refresh-token');
+
+    await expect(refresh).rejects.toBeInstanceOf(AuthSessionChangedError);
+    expect(storedCredentials).toBeNull();
+  });
+
+  it('갱신 중 다른 계정으로 로그인하면 새 계정 토큰을 덮어쓰지 않는다', async (): Promise<void> => {
+    const respondRefresh = holdRefreshResponse();
+    const refresh = refreshAuthTokens();
+    await waitForRefreshRequest();
+
+    await saveAuthTokens('other@example.com', {
+      accessToken: 'other-access-token',
+      refreshToken: 'other-refresh-token',
+    });
+    respondRefresh('renewed-refresh-token');
+
+    await expect(refresh).rejects.toBeInstanceOf(AuthSessionChangedError);
+    expect(storedCredentials?.username).toBe('other@example.com');
+    expect(readStoredTokens()).toMatchObject({
+      accessToken: 'other-access-token',
+    });
+  });
+
+  it('갱신 중 프로필을 저장해도 새 토큰과 새 프로필을 모두 유지한다', async (): Promise<void> => {
+    const respondRefresh = holdRefreshResponse();
+    const refresh = refreshAuthTokens();
+    await waitForRefreshRequest();
+
+    await updateStoredAuthUser({ name: '새 이름' });
+    respondRefresh('renewed-refresh-token');
+    await refresh;
+
+    expect(readStoredTokens()).toMatchObject({
+      accessToken: 'renewed-access-token',
+      refreshToken: 'renewed-refresh-token',
+      user: { id: 1, name: '새 이름' },
+    });
+  });
+
+  it('로그아웃은 진행 중인 갱신을 기다린 뒤 최신 refresh 토큰을 폐기한다', async (): Promise<void> => {
+    const respondRefresh = holdRefreshResponse();
+    const refresh = refreshAuthTokens();
+    await waitForRefreshRequest();
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async (): Promise<string> => JSON.stringify({ success: true }),
+    } as Response);
+
+    const logoutRequest = logout();
+    respondRefresh('renewed-refresh-token');
+    await refresh;
+    await logoutRequest;
+
+    const logoutBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(logoutBody).toEqual({ refresh_token: 'renewed-refresh-token' });
+    expect(storedCredentials).toBeNull();
   });
 });
