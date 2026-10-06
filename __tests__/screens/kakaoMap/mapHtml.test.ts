@@ -54,9 +54,11 @@ const hospital = (
 const renderMap = async (locations: MedicalMapLocation[]) => {
   const overlays: { content: TestNode; setMap: jest.Mock }[] = [];
   const postMessage = jest.fn();
+  const addressSearch = jest.fn();
   const window = {
     ReactNativeWebView: { postMessage },
     eragsFilterMedicalLocations: (_filter: string, _query: string): void => {},
+    eragsSetMedicalLocations: (_locations: MedicalMapLocation[]): void => {},
   };
   const document = {
     getElementById: (): TestNode => new TestNode(),
@@ -98,18 +100,27 @@ const renderMap = async (locations: MedicalMapLocation[]) => {
     services: {
       Status: { OK: 'OK' },
       Geocoder: class {
-        addressSearch(_address: string, callback: (results: { x: number; y: number }[], status: string) => void): void {
+        addressSearch(address: string, callback: (results: { x: number; y: number }[], status: string) => void): void {
+          addressSearch(address);
           callback([{ x: 127, y: 37.5 }], 'OK');
         }
       },
     },
   } };
-  const html = createKakaoMapHtml('key', { aed: 'aed', hospital: 'hospital' }, locations);
+  const html = createKakaoMapHtml('key', { aed: 'aed', hospital: 'hospital' });
   const source = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   expect(source).toBeDefined();
   new Script(source ?? '').runInNewContext({ window, document, kakao });
+  window.eragsSetMedicalLocations(locations);
   await Promise.resolve();
-  return { overlays, window, postMessage };
+  const map = (window as unknown as { eragsMap: { setBounds: jest.Mock } })
+    .eragsMap;
+  const emitMapEvent = (name: string): void => {
+    kakao.maps.event.addListener.mock.calls
+      .filter(([target, eventName]) => target === map && eventName === name)
+      .forEach(([, , handler]) => handler());
+  };
+  return { overlays, window, postMessage, addressSearch, map, emitMapEvent };
 };
 
 describe('병원 지도 병상 표시', () => {
@@ -127,6 +138,25 @@ describe('병원 지도 병상 표시', () => {
     window.eragsFilterMedicalLocations('hospital', '가온');
     expect(overlays[0].setMap.mock.lastCall?.[0]).not.toBeNull();
     expect(overlays[1].setMap).toHaveBeenLastCalledWith(null);
+  });
+
+  it('장소를 다시 주입하면 이전 마커를 지우고 같은 주소는 다시 지오코딩하지 않는다', async () => {
+    const { overlays, window, addressSearch, map, emitMapEvent } =
+      await renderMap([hospital('가온', 3, 1), hospital('나래', 0, 0)]);
+    expect(addressSearch).toHaveBeenCalledTimes(1);
+    expect(map.setBounds).toHaveBeenCalledTimes(1);
+
+    emitMapEvent('dragstart');
+    window.eragsSetMedicalLocations([hospital('가온', 5, 2)]);
+    await Promise.resolve();
+
+    expect(addressSearch).toHaveBeenCalledTimes(1);
+    expect(overlays.slice(0, 2).map(overlay => overlay.setMap.mock.lastCall?.[0]))
+      .toEqual([null, null]);
+    expect(overlays[2].content.textContent).toBe('가온병상 5 · 수술실 2');
+    expect(overlays[2].setMap.mock.lastCall?.[0]).not.toBeNull();
+    // 사용자가 지도를 옮긴 뒤에는 데이터 갱신으로 시점을 바꾸지 않습니다.
+    expect(map.setBounds).toHaveBeenCalledTimes(1);
   });
 
   it('병상 라벨을 누르면 해당 병원을 선택하는 메시지를 보낸다', async () => {

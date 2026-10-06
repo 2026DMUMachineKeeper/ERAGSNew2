@@ -37,11 +37,13 @@ import {
   type MedicalPlacesSheetRef,
 } from './kakaoMap/components';
 import {
+  createCenterOnCurrentLocationScript,
   createCurrentLocationScript,
   createFocusMedicalLocationScript,
   createKakaoMapHtml,
   createMedicalFilterScript,
   createRequestMedicalDirectionsScript,
+  createSetMedicalLocationsScript,
   MEDICAL_MARKER_ASSET_URIS,
   type MapCoordinates,
 } from './kakaoMap/mapHtml';
@@ -233,13 +235,9 @@ export const KakaoMapScreen = ({
   const mapSource = React.useMemo(
     () => ({
       baseUrl: KAKAO_MAP_BASE_URL,
-      html: createKakaoMapHtml(
-        appKey ?? '',
-        MEDICAL_MARKER_ASSET_URIS,
-        medicalLocations,
-      ),
+      html: createKakaoMapHtml(appKey ?? '', MEDICAL_MARKER_ASSET_URIS),
     }),
-    [appKey, medicalLocations],
+    [appKey],
   );
   React.useLayoutEffect(() => {
     if (!isAedGuideVisible || route?.name !== 'MapTab') {
@@ -327,6 +325,16 @@ export const KakaoMapScreen = ({
     }
 
     mapWebViewRef.current?.injectJavaScript(
+      createSetMedicalLocationsScript(medicalLocations),
+    );
+  }, [isMapReady, medicalLocations]);
+
+  React.useEffect(() => {
+    if (!isMapReady) {
+      return;
+    }
+
+    mapWebViewRef.current?.injectJavaScript(
       createMedicalFilterScript(selectedMedicalFilter, searchQuery),
     );
   }, [isMapReady, searchQuery, selectedMedicalFilter]);
@@ -358,12 +366,9 @@ export const KakaoMapScreen = ({
       const coordinates = await getCurrentMapCoordinates(0);
       setCurrentLocation(coordinates);
       setLocationLoadState('ready');
-      mapWebViewRef.current?.injectJavaScript(`
-        window.eragsUpdateCurrentLocation?.(${coordinates.latitude}, ${coordinates.longitude});
-        window.eragsMap?.setCenter(new kakao.maps.LatLng(${coordinates.latitude}, ${coordinates.longitude}));
-        window.eragsMap?.setLevel(3);
-        true;
-      `);
+      mapWebViewRef.current?.injectJavaScript(
+        createCenterOnCurrentLocationScript(coordinates),
+      );
       setSelectedMedicalLocation(null);
       placesSheetRef.current?.dismiss();
     } catch {
