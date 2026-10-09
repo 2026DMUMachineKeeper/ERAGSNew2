@@ -7,6 +7,7 @@ import { launchCamera, type CameraOptions } from 'react-native-image-picker';
 import {
   createAudioEmergencyGuide,
   createPhotoEmergencyGuide,
+  EMERGENCY_GUIDE_IMAGE_MAX_BYTES,
   getAddressFromCoordinates,
   getEmergencyGuideErrorMessage,
   hasLocationPermission,
@@ -14,7 +15,10 @@ import {
   stopAudioRecording,
 } from '@/services';
 import type { EmergencyGuideMediaFile, EmergencyGuideResponse } from '@/types';
-import { showLocationPermissionPrompt } from '@/utils';
+import {
+  showEmergencyEvidenceFailureNotice,
+  showLocationPermissionPrompt,
+} from '@/utils';
 import { getCurrentPosition } from '@/utils/currentPosition';
 
 const CAMERA_OPTIONS: CameraOptions = {
@@ -98,6 +102,9 @@ const getPhotoAsset = async (): Promise<EmergencyGuideMediaFile | null> => {
     uri: photoAsset.uri,
     name: photoAsset.fileName ?? `emergency-${Date.now()}.jpg`,
     type: photoAsset.type ?? 'image/jpeg',
+    ...(typeof photoAsset.fileSize === 'number'
+      ? { size: photoAsset.fileSize }
+      : {}),
   };
 };
 
@@ -241,6 +248,14 @@ export const useHomeEmergencyActions = (
       if (!photoAsset || !isMountedRef.current || !isFocusedRef.current) {
         return;
       }
+      // 서버는 장당 10MB를 넘으면 요청 전체를 거절하므로 촬영 직후에 걸러 냅니다.
+      if ((photoAsset.size ?? 0) > EMERGENCY_GUIDE_IMAGE_MAX_BYTES) {
+        Alert.alert(
+          '사진 용량 초과',
+          '사진 한 장은 10MB 이하여야 합니다. 다시 촬영해 주세요.',
+        );
+        return;
+      }
 
       setPhotoAssets(currentAssets => {
         if (currentAssets.length >= 5) {
@@ -290,6 +305,7 @@ export const useHomeEmergencyActions = (
           setPhotoInputStep(null);
           setPhotoAssets([]);
           setPhotoAdditionalText('');
+          showEmergencyEvidenceFailureNotice(createdGuide);
           onGuideCreated('image', createdGuide);
         }
       } catch (error) {
@@ -486,6 +502,7 @@ export const useHomeEmergencyActions = (
           requestController.signal,
         );
         if (isMountedRef.current && isFocusedRef.current) {
+          showEmergencyEvidenceFailureNotice(createdGuide);
           onGuideCreated('voice', createdGuide);
         }
         return;

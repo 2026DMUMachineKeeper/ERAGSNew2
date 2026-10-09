@@ -26,6 +26,11 @@ import {
 
 const EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS = 60_000;
 
+// 백엔드 V2.1 용량 제한입니다. 초과 시 서버가 413으로 전체 요청을 거절하므로 전송 전에 미리 검사합니다.
+export const EMERGENCY_GUIDE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const EMERGENCY_GUIDE_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+export const EMERGENCY_GUIDE_REQUEST_MAX_BYTES = 80 * 1024 * 1024;
+
 interface EmergencyGuideSuccessEnvelope {
   success: true;
   data: EmergencyGuideResponse;
@@ -92,10 +97,14 @@ const isRecord = (payload: unknown): payload is Record<string, unknown> =>
   payload !== null && typeof payload === 'object';
 
 const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  AI_PARSING_ERROR:
+    '응급 상황 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
   AUDIO_TOO_LARGE:
-    '음성 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+    '음성 파일 용량이 너무 큽니다(최대 25MB). 더 작은 파일로 다시 요청해 주세요.',
   IMAGE_TOO_LARGE:
-    '이미지 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+    '이미지 파일 용량이 너무 큽니다(한 장당 최대 10MB). 더 작은 파일로 다시 요청해 주세요.',
+  PAYLOAD_TOO_LARGE:
+    '전송할 파일 용량이 너무 큽니다(합산 최대 80MB). 사진 수를 줄이거나 더 작은 파일로 다시 요청해 주세요.',
   GUIDE_PENDING: '응급 평가가 완료되었습니다. 처치 안내를 다시 요청해 주세요.',
   INVALID_RESPONSE:
     '응급 가이드 서버 응답을 확인하지 못했습니다. 앱과 서버 버전을 확인해 주세요.',
@@ -326,11 +335,45 @@ const getSessionOwnerHeaders = async (): Promise<Record<string, string>> => {
   }
 };
 
+const EMERGENCY_GUIDE_SESSIONS_PATH = '/api/v1/emergency-guide-sessions';
+
+const assertMediaFilesWithinLimits = (
+  images: readonly EmergencyGuideMediaFile[],
+  audio?: EmergencyGuideMediaFile,
+): void => {
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${EMERGENCY_GUIDE_SESSIONS_PATH}`;
+  const fail = (code: string): never => {
+    throw new EmergencyGuideRequestError(
+      EMERGENCY_GUIDE_ERROR_MESSAGES[code],
+      413,
+      code,
+      requestUrl,
+    );
+  };
+
+  if (
+    images.some(image => (image.size ?? 0) > EMERGENCY_GUIDE_IMAGE_MAX_BYTES)
+  ) {
+    fail('IMAGE_TOO_LARGE');
+  }
+  if ((audio?.size ?? 0) > EMERGENCY_GUIDE_AUDIO_MAX_BYTES) {
+    fail('AUDIO_TOO_LARGE');
+  }
+
+  const totalBytes = [...images, audio].reduce(
+    (sum, file) => sum + (file?.size ?? 0),
+    0,
+  );
+  if (totalBytes > EMERGENCY_GUIDE_REQUEST_MAX_BYTES) {
+    fail('PAYLOAD_TOO_LARGE');
+  }
+};
+
 export const createEmergencyGuide = async (
   formData: FormData,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
-  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${EMERGENCY_GUIDE_SESSIONS_PATH}`;
   const ownerHeaders = await getSessionOwnerHeaders();
   if (signal?.aborted) {
     throw createAbortError();
@@ -350,11 +393,18 @@ export const createEmergencyGuide = async (
   return readEmergencyGuideResponse(response, requestUrl);
 };
 
-const createMediaEmergencyGuide = (
-  fieldName: 'audio' | 'image',
+// 사진은 한 장이어도 서버 규격(V2.1)에 맞춰 images 배열 필드로 보냅니다.
+const createMediaEmergencyGuide = async (
+  fieldName: 'audio' | 'images',
   mediaFile: EmergencyGuideMediaFile,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
+  if (fieldName === 'audio') {
+    assertMediaFilesWithinLimits([], mediaFile);
+  } else {
+    assertMediaFilesWithinLimits([mediaFile]);
+  }
+
   const formData = new FormData();
   const requestIdPrefix = fieldName === 'audio' ? 'voice' : 'image';
   const reactNativeFile: ReactNativeFile = mediaFile;
@@ -381,7 +431,7 @@ export const createImageEmergencyGuide = (
   imageFile: EmergencyGuideMediaFile,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> =>
-  createMediaEmergencyGuide('image', imageFile, signal);
+  createMediaEmergencyGuide('images', imageFile, signal);
 
 export const createPhotoEmergencyGuide = async (
   input: EmergencyGuidePhotoRequest,
@@ -390,6 +440,7 @@ export const createPhotoEmergencyGuide = async (
   if (input.images.length === 0 || input.images.length > 5) {
     throw new Error('응급 사진은 1장 이상 5장 이하로 전송해야 합니다.');
   }
+  assertMediaFilesWithinLimits(input.images, input.audio);
 
   const formData = new FormData();
   formData.append(
@@ -401,7 +452,7 @@ export const createPhotoEmergencyGuide = async (
   );
   input.images.forEach(imageFile => {
     const reactNativeFile: ReactNativeFile = imageFile;
-    formData.append('image', reactNativeFile as unknown as Blob);
+    formData.append('images', reactNativeFile as unknown as Blob);
   });
 
   const normalizedText = input.text?.trim();

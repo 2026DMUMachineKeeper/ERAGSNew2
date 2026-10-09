@@ -13,6 +13,8 @@ export interface EmergencyGuideMediaFile {
   uri: string;
   name: string;
   type: string;
+  // 바이트 단위 파일 크기입니다. 알 수 없으면 생략하며, 알 때만 전송 전 용량을 검사합니다.
+  size?: number;
 }
 
 export interface EmergencyGuidePhotoRequest {
@@ -60,9 +62,33 @@ export interface EmergencyGuideTreatment {
   steps: EmergencyGuideTreatmentStep[];
 }
 
+// 파일별 분석 결과입니다. 일부 파일이 실패해도 응답은 200이며, 실패 항목은 status가 FAILED로 내려옵니다.
+export type EmergencyGuideEvidenceStatus = 'SUCCEEDED' | 'FAILED';
+
+export interface EmergencyGuideEvidenceError {
+  code: string;
+  message: string;
+}
+
+export interface EmergencyGuideEvidenceImage {
+  // 전송한 images 배열 순서대로 image-0, image-1 … 형태로 매핑됩니다.
+  imageId: string;
+  status: EmergencyGuideEvidenceStatus;
+  visibleBlood?: boolean;
+  visibleBloodScore?: number;
+  identifiedCondition?: string;
+  error?: EmergencyGuideEvidenceError;
+}
+
+export interface EmergencyGuideEvidenceVoice {
+  status: EmergencyGuideEvidenceStatus;
+  error?: EmergencyGuideEvidenceError;
+  [key: string]: unknown;
+}
+
 export interface EmergencyGuideEvidence {
-  voice: unknown | null;
-  image: unknown | null;
+  voice: EmergencyGuideEvidenceVoice | null;
+  images: EmergencyGuideEvidenceImage[] | null;
   questionnaire: unknown | null;
 }
 

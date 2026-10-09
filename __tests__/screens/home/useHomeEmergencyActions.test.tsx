@@ -16,7 +16,10 @@ import {
   stopAudioRecording,
 } from '@/services';
 import type { EmergencyGuideResponse } from '@/types';
-import { showLocationPermissionPrompt } from '@/utils';
+import {
+  showEmergencyEvidenceFailureNotice,
+  showLocationPermissionPrompt,
+} from '@/utils';
 
 import { useHomeEmergencyActions } from '@/screens/home/useHomeEmergencyActions';
 
@@ -30,6 +33,7 @@ jest.mock('@react-native-community/geolocation', () => ({
 }));
 
 jest.mock('@/services', () => ({
+  EMERGENCY_GUIDE_IMAGE_MAX_BYTES: 10 * 1024 * 1024,
   createAudioEmergencyGuide: jest.fn(),
   createPhotoEmergencyGuide: jest.fn(),
   getAddressFromCoordinates: jest.fn(),
@@ -40,6 +44,7 @@ jest.mock('@/services', () => ({
 }));
 
 jest.mock('@/utils', () => ({
+  showEmergencyEvidenceFailureNotice: jest.fn(),
   showLocationPermissionPrompt: jest.fn(),
 }));
 
@@ -199,6 +204,90 @@ describe('홈 응급 작업 정리', () => {
       jest.mocked(createPhotoEmergencyGuide).mock.calls[0]?.[0].images,
     ).toHaveLength(5);
     expect(onGuideCreated).toHaveBeenCalledWith('image', GUIDE);
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('10MB를 넘는 사진은 목록에 넣지 않고 안내한다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [
+        {
+          uri: 'file:///huge.jpg',
+          fileName: 'huge.jpg',
+          type: 'image/jpeg',
+          fileSize: 10 * 1024 * 1024 + 1,
+        },
+      ],
+    });
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((): void => {});
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={jest.fn()} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+
+    expect(currentActions.photoCount).toBe(0);
+    expect(currentActions.photoInputStep).toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith(
+      '사진 용량 초과',
+      '사진 한 장은 10MB 이하여야 합니다. 다시 촬영해 주세요.',
+    );
+    await act(async (): Promise<void> => renderer.unmount());
+  });
+
+  it('사진·음성 가이드를 받으면 부분 실패 안내를 먼저 띄운 뒤 가이드로 넘어간다', async (): Promise<void> => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    jest.mocked(launchCamera).mockResolvedValue({
+      assets: [
+        {
+          uri: 'file:///injury.jpg',
+          fileName: 'injury.jpg',
+          type: 'image/jpeg',
+          fileSize: 2048,
+        },
+      ],
+    });
+    jest.mocked(createPhotoEmergencyGuide).mockResolvedValue(GUIDE);
+    jest.mocked(createAudioEmergencyGuide).mockResolvedValue(GUIDE);
+    const callOrder: string[] = [];
+    jest
+      .mocked(showEmergencyEvidenceFailureNotice)
+      .mockImplementation((): boolean => {
+        callOrder.push('notice');
+        return true;
+      });
+    const onGuideCreated = jest.fn((): void => {
+      callOrder.push('guide');
+    });
+    let renderer!: ReactTestRenderer;
+
+    await act(async (): Promise<void> => {
+      renderer = create(<HookHarness onGuideCreated={onGuideCreated} />);
+    });
+    await act(async (): Promise<void> => currentActions.handlePhotoPress());
+    await act(async (): Promise<void> => currentActions.handleSendPhotosOnly());
+
+    expect(createPhotoEmergencyGuide).toHaveBeenCalledWith(
+      { images: [expect.objectContaining({ size: 2048 })] },
+      expect.any(AbortSignal),
+    );
+    expect(showEmergencyEvidenceFailureNotice).toHaveBeenCalledWith(GUIDE);
+    expect(callOrder).toEqual(['notice', 'guide']);
+
+    await act(async (): Promise<void> => currentActions.handleVoicePress());
+    await act(async (): Promise<void> => currentActions.handleVoicePress());
+
+    expect(showEmergencyEvidenceFailureNotice).toHaveBeenCalledTimes(2);
+    expect(onGuideCreated).toHaveBeenLastCalledWith('voice', GUIDE);
     await act(async (): Promise<void> => renderer.unmount());
   });
 
