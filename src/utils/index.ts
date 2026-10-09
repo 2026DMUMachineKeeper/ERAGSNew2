@@ -12,6 +12,10 @@ export {
   collectEmergencySessionLocation,
   reportEmergencySessionLocationOnce,
 } from './emergencySessionLocation';
+export {
+  getEmergencyEvidenceFailureMessage,
+  showEmergencyEvidenceFailureNotice,
+} from './emergencyEvidence';
 
 export * from './medicine';
 export * from './emergencyQuestionnaire';

@@ -252,7 +252,7 @@ describe('emergencyGuide.service', () => {
     };
 
     expect(getFieldNames(0)).toEqual(['request', 'audio']);
-    expect(getFieldNames(1)).toEqual(['request', 'image']);
+    expect(getFieldNames(1)).toEqual(['request', 'images']);
   });
 
   it('최대 5장의 사진과 텍스트 또는 음성을 한 요청으로 전송한다', async (): Promise<void> => {
@@ -308,14 +308,14 @@ describe('emergencyGuide.service', () => {
 
     expect(getFieldNames(0)).toEqual([
       'request',
-      'image',
-      'image',
-      'image',
-      'image',
-      'image',
+      'images',
+      'images',
+      'images',
+      'images',
+      'images',
       'text',
     ]);
-    expect(getFieldNames(1)).toEqual(['request', 'image', 'image', 'audio']);
+    expect(getFieldNames(1)).toEqual(['request', 'images', 'images', 'audio']);
   });
 
   it('사진이 없거나 5장을 초과하면 요청하지 않는다', async (): Promise<void> => {
@@ -332,6 +332,52 @@ describe('emergencyGuide.service', () => {
       createPhotoEmergencyGuide({ images: Array(6).fill(image) }),
     ).rejects.toThrow('응급 사진은 1장 이상 5장 이하로 전송해야 합니다.');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('용량 제한을 넘는 파일은 요청 전에 거절한다', async (): Promise<void> => {
+    const megabyte = 1024 * 1024;
+    const image = (size: number) => ({
+      uri: 'file:///injury.jpg',
+      name: 'injury.jpg',
+      type: 'image/jpeg',
+      size,
+    });
+    const audio = (size: number) => ({
+      uri: 'file:///voice.m4a',
+      name: 'voice.m4a',
+      type: 'audio/mp4',
+      size,
+    });
+
+    await expect(
+      createPhotoEmergencyGuide({ images: [image(10 * megabyte + 1)] }),
+    ).rejects.toMatchObject({ code: 'IMAGE_TOO_LARGE', status: 413 });
+    await expect(
+      createPhotoEmergencyGuide({
+        images: [image(megabyte)],
+        audio: audio(25 * megabyte + 1),
+      }),
+    ).rejects.toMatchObject({ code: 'AUDIO_TOO_LARGE', status: 413 });
+    await expect(
+      createAudioEmergencyGuide(audio(25 * megabyte + 1)),
+    ).rejects.toMatchObject({ code: 'AUDIO_TOO_LARGE', status: 413 });
+    await expect(
+      createImageEmergencyGuide(image(10 * megabyte + 1)),
+    ).rejects.toMatchObject({ code: 'IMAGE_TOO_LARGE', status: 413 });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // 크기를 모르는 파일(size 없음)이나 제한 이내 파일은 그대로 전송합니다.
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: createGuidePayload('size-session'),
+      }),
+    );
+    await createPhotoEmergencyGuide({
+      images: [image(10 * megabyte), { ...image(0), size: undefined }],
+      audio: audio(25 * megabyte),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('빈 sessionId는 요청하지 않는다', async (): Promise<void> => {
@@ -614,7 +660,7 @@ describe('emergencyGuide.service', () => {
   });
 
   it.each([
-    [413, 'AUDIO_TOO_LARGE', '음성 파일 용량이 너무 큽니다.'],
+    [413, 'AUDIO_TOO_LARGE', '음성 파일 용량이 너무 큽니다(최대 25MB)'],
     [415, 'UNSUPPORTED_IMAGE_TYPE', '지원하지 않는 이미지 형식입니다.'],
     [503, 'SM_UNAVAILABLE', '응급 가이드 서버에 일시적인 문제가 있습니다.'],
   ] as const)(
