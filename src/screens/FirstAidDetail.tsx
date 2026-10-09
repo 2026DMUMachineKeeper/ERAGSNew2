@@ -19,6 +19,7 @@ import {
   SERVER_SYMPTOM_ID_BY_CATEGORY,
   toEmergencyGuideQuestionnaire,
 } from '@/utils/emergencyQuestionnaire';
+import { reportEmergencySessionLocationOnce } from '@/utils/emergencySessionLocation';
 
 import { EmergencyQuestionHeader } from './firstAidDetail/components';
 import { CategoryMismatchModal } from './firstAidDetail/components/CategoryMismatchModal';
@@ -204,6 +205,8 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
         mainLabel: category.label,
         source: 'manual',
       });
+      // 관제용 위치 보고는 가이드 흐름과 독립적으로 백그라운드에서 한 번만 보냅니다.
+      reportEmergencySessionLocationOnce(guide.sessionId);
       navigation.replace('EmergencyGuide');
     } catch (error) {
       if (

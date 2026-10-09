@@ -332,6 +332,15 @@ export async function postMedicineVision(params: {
   imageBase64: string;
   quantityToAdd?: number;
 }): Promise<MedicineVisionUploadResult> {
+  const startedAt = Date.now();
+  console.warn('[Medicine Vision API][Request]', {
+    path: '/api/medicines/vision',
+    imageBase64Length: params.imageBase64.length,
+    hasDataUriPrefix: params.imageBase64.startsWith('data:'),
+    quantityToAdd: params.quantityToAdd ?? 1,
+    timeoutMs: MEDICINE_IMAGE_UPLOAD_TIMEOUT_MS,
+  });
+
   const response = await authenticatedMedicineFetch(
     '/api/medicines/vision',
     {
@@ -345,11 +354,31 @@ export async function postMedicineVision(params: {
     MEDICINE_IMAGE_UPLOAD_TIMEOUT_MS,
   );
 
+  console.warn('[Medicine Vision API][Response]', {
+    status: response.status,
+    ok: response.ok,
+    elapsedMs: Date.now() - startedAt,
+  });
+
   if (!response.ok) {
-    throw await readApiRequestError(response, '약품 사진 등록에 실패했습니다.');
+    const error = await readApiRequestError(response, '약품 사진 등록에 실패했습니다.');
+    console.error('[Medicine Vision API][Error]', {
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+    throw error;
   }
 
   const payload = (await response.json()) as unknown;
+  // 미등록 응답의 사유를 확인하되 이미지와 인증 정보는 로그에서 제외합니다.
+  console.warn(
+    '[Medicine Vision API][Response Body]',
+    JSON.stringify(payload, (key: string, value: unknown): unknown =>
+      /image|base64|token|authorization/i.test(key) ? '[omitted]' : value,
+    ),
+  );
   const payloadRecord = isRecord(payload) ? payload : null;
   const result =
     payloadRecord && isRecord(payloadRecord.data) ? payloadRecord.data : null;

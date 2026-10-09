@@ -209,7 +209,11 @@ describe('홈 응급 작업 정리', () => {
     });
     jest.mocked(launchCamera).mockResolvedValue({
       assets: [
-        { uri: 'file:///injury.jpg', fileName: 'injury.jpg', type: 'image/jpeg' },
+        {
+          uri: 'file:///injury.jpg',
+          fileName: 'injury.jpg',
+          type: 'image/jpeg',
+        },
       ],
     });
     let resolveGuide: (guide: typeof GUIDE) => void = (): void => {};

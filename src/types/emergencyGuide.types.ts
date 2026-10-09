@@ -78,6 +78,21 @@ export interface EmergencyGuideResponse {
   error: ApiError | null;
 }
 
+// 소유 앱이 세션당 한 번 보고하는 GPS 수집 결과입니다.
+// AVAILABLE 외의 상태는 좌표를 null로 보냅니다.
+export type EmergencySessionLocationStatus =
+  | 'AVAILABLE'
+  | 'DENIED'
+  | 'UNAVAILABLE';
+
+export interface EmergencySessionLocationReport {
+  status: EmergencySessionLocationStatus;
+  observedAt: string;
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+}
+
 export type EmergencyGuideHandoverStatus = 'COMPLETED' | 'IN_PROGRESS';
 
 export interface CreateEmergencyGuideHandoverRequest {

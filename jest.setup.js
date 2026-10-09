@@ -39,6 +39,15 @@ jest.mock('react-native-image-picker', () => ({
   launchCamera: jest.fn(),
 }));
 
+jest.mock('react-native-permissions', () =>
+  require('react-native-permissions/mock'),
+);
+
+jest.mock('@react-native-community/geolocation', () => ({
+  __esModule: true,
+  default: { getCurrentPosition: jest.fn() },
+}));
+
 jest.mock('react-native-nitro-sound', () => ({
   __esModule: true,
   default: {
