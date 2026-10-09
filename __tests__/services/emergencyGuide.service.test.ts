@@ -8,8 +8,17 @@ import {
   getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
   getEmergencyWasteGuide,
+  reportEmergencySessionLocation,
   retryEmergencyGuide,
 } from '@/services/emergencyGuide.service';
+import { getAuthToken } from '@/services/auth.service';
+import type { EmergencySessionLocationReport } from '@/types';
+
+jest.mock('@/services/auth.service', () => ({
+  getAuthToken: jest.fn(async (): Promise<string> => 'test-token'),
+  isAuthTokenExpiredError: jest.fn((): boolean => false),
+  refreshAuthTokens: jest.fn(),
+}));
 
 const createMockResponse = (status: number, payload: unknown): Response =>
   ({
@@ -42,6 +51,7 @@ describe('emergencyGuide.service', () => {
   beforeEach((): void => {
     fetchMock.mockReset();
     consoleWarnMock.mockClear();
+    jest.mocked(getAuthToken).mockResolvedValue('test-token');
   });
 
   afterAll((): void => {
@@ -76,11 +86,59 @@ describe('emergencyGuide.service', () => {
     );
     const controller = new AbortController();
     const request = createEmergencyGuide(new FormData(), controller.signal);
+    // 소유자 토큰을 읽은 뒤 fetch가 호출될 때까지 기다렸다가 전송 중에 취소합니다.
+    while (fetchMock.mock.calls.length === 0) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
 
     controller.abort();
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' });
     expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it('토큰을 읽는 동안 취소되면 요청을 보내지 않는다', async (): Promise<void> => {
+    const controller = new AbortController();
+    const request = createEmergencyGuide(new FormData(), controller.signal);
+
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('세션 생성에 소유자 토큰을 붙이고, 토큰이 없으면 익명으로 생성한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: createGuidePayload('emg-session-owner'),
+      }),
+    );
+
+    await createEmergencyGuide(new FormData());
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'test-api-base-url/api/v1/emergency-guide-sessions',
+      expect.objectContaining({
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer test-token',
+        },
+      }),
+    );
+
+    const missingTokenError = new Error('');
+    missingTokenError.name = 'AuthSessionExpiredError';
+    jest.mocked(getAuthToken).mockRejectedValueOnce(missingTokenError);
+
+    await createEmergencyGuide(new FormData());
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'test-api-base-url/api/v1/emergency-guide-sessions',
+      expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    );
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      '[EmergencyGuide API][Owner Token]',
+      expect.objectContaining({ reason: 'token_unavailable' }),
+    );
   });
 
   it('생성 응답의 data.sessionId로 body 없이 재시도한다', async (): Promise<void> => {
@@ -122,7 +180,10 @@ describe('emergencyGuide.service', () => {
       'test-api-base-url/api/v1/emergency-guide-sessions',
       expect.objectContaining({
         method: 'POST',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer test-token',
+        },
         body: formData,
         signal: expect.any(AbortSignal),
       }),
@@ -435,7 +496,10 @@ describe('emergencyGuide.service', () => {
         { questionId: 'C1_AGE_GROUP', answerIds: ['ADULT'] },
       ];
       const formData = new FormData();
-      formData.append('request', JSON.stringify({ requestId: 'manual-mismatch', language: 'ko-KR' }));
+      formData.append(
+        'request',
+        JSON.stringify({ requestId: 'manual-mismatch', language: 'ko-KR' }),
+      );
       formData.append('questionnaire', JSON.stringify(questionnaire));
       const payload = {
         ...createGuidePayload('mismatch-session'),
@@ -457,29 +521,42 @@ describe('emergencyGuide.service', () => {
         treatment: {
           routeCode: status === 'COMPLETE' ? 'A' : null,
           modelVersion: null,
-          steps: status === 'COMPLETE' ? [{
-            stepId: 1,
-            stepNo: 1,
-            instruction: '서버의 처치 안내',
-            checkpointQuestion: '상태를 확인해 주세요.',
-            requiredItemId: null,
-            requiredItemName: null,
-            requiredQuantity: 0,
-            requiredSlotId: null,
-            imageResource: null,
-            imageUrl: null,
-          }] : [],
+          steps:
+            status === 'COMPLETE'
+              ? [
+                  {
+                    stepId: 1,
+                    stepNo: 1,
+                    instruction: '서버의 처치 안내',
+                    checkpointQuestion: '상태를 확인해 주세요.',
+                    requiredItemId: null,
+                    requiredItemName: null,
+                    requiredQuantity: 0,
+                    requiredSlotId: null,
+                    imageResource: null,
+                    imageUrl: null,
+                  },
+                ]
+              : [],
         },
       };
-      fetchMock.mockResolvedValue(createMockResponse(200, { success: true, data: payload }));
+      fetchMock.mockResolvedValue(
+        createMockResponse(200, { success: true, data: payload }),
+      );
       await expect(createEmergencyGuide(formData)).resolves.toEqual(payload);
       expect(fetchMock).toHaveBeenCalledWith(
         'test-api-base-url/api/v1/emergency-guide-sessions',
         expect.objectContaining({ method: 'POST', body: formData }),
       );
-      const fields = formData as unknown as { entries: () => Iterable<readonly [string, unknown]> };
-      const submittedQuestionnaire = Array.from(fields.entries()).find(([name]) => name === 'questionnaire')?.[1];
-      expect(JSON.parse(submittedQuestionnaire as string)).toEqual(questionnaire);
+      const fields = formData as unknown as {
+        entries: () => Iterable<readonly [string, unknown]>;
+      };
+      const submittedQuestionnaire = Array.from(fields.entries()).find(
+        ([name]) => name === 'questionnaire',
+      )?.[1];
+      expect(JSON.parse(submittedQuestionnaire as string)).toEqual(
+        questionnaire,
+      );
     },
   );
 
@@ -560,5 +637,123 @@ describe('emergencyGuide.service', () => {
     expect(
       getEmergencyGuideErrorMessage(new TypeError('Network request failed')),
     ).toBe('네트워크 연결을 확인한 후 다시 시도해 주세요.');
+  });
+
+  describe('reportEmergencySessionLocation', () => {
+    const AVAILABLE_REPORT: EmergencySessionLocationReport = {
+      status: 'AVAILABLE',
+      observedAt: '2026-10-03T08:00:00.000Z',
+      latitude: 37.55,
+      longitude: 126.93,
+      accuracy: 20,
+    };
+
+    it('세션 소유자 토큰으로 위치 수집 결과를 PUT 한다', async (): Promise<void> => {
+      fetchMock.mockResolvedValue(createMockResponse(200, { success: true }));
+
+      await expect(
+        reportEmergencySessionLocation('emg-session/001', AVAILABLE_REPORT),
+      ).resolves.toBeUndefined();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'test-api-base-url/api/v1/sessions/emg-session%2F001/location',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-token',
+          },
+          body: JSON.stringify(AVAILABLE_REPORT),
+          signal: expect.any(AbortSignal),
+        }),
+      );
+      expect(consoleWarnMock).toHaveBeenCalledWith(
+        '[EmergencyGuide API][Request]',
+        expect.objectContaining({ method: 'PUT' }),
+      );
+    });
+
+    it('권한 거절은 좌표 null로 보고한다', async (): Promise<void> => {
+      fetchMock.mockResolvedValue(createMockResponse(200, { success: true }));
+
+      await reportEmergencySessionLocation('emg-session-002', {
+        status: 'DENIED',
+        observedAt: '2026-10-03T08:00:00.000Z',
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+      });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+        status: 'DENIED',
+        observedAt: '2026-10-03T08:00:00.000Z',
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+      });
+    });
+
+    it('이미 다른 값이 저장된 세션의 409를 보존한다', async (): Promise<void> => {
+      fetchMock.mockResolvedValue(
+        createMockResponse(409, {
+          success: false,
+          error: {
+            code: 'SESSION_LOCATION_CONFLICT',
+            message: 'location already stored',
+            details: [],
+          },
+        }),
+      );
+
+      const request = reportEmergencySessionLocation(
+        'emg-session-003',
+        AVAILABLE_REPORT,
+      );
+
+      await expect(request).rejects.toBeInstanceOf(EmergencyGuideRequestError);
+      await expect(request).rejects.toMatchObject({
+        status: 409,
+        code: 'SESSION_LOCATION_CONFLICT',
+        message: 'location already stored',
+      });
+    });
+
+    it('본문 없는 실패 응답은 상태 코드로 오류 코드를 정한다', async (): Promise<void> => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: jest.fn(async (): Promise<unknown> => {
+          throw new Error('no body');
+        }),
+      } as unknown as Response);
+
+      await expect(
+        reportEmergencySessionLocation('emg-session-004', AVAILABLE_REPORT),
+      ).rejects.toMatchObject({ status: 403, code: 'SESSION_FORBIDDEN' });
+    });
+
+    it('빈 sessionId나 잘못된 보고 내용은 요청하지 않는다', async (): Promise<void> => {
+      await expect(
+        reportEmergencySessionLocation('  ', AVAILABLE_REPORT),
+      ).rejects.toThrow('응급 가이드 sessionId가 없습니다.');
+      await expect(
+        reportEmergencySessionLocation('emg-session-005', {
+          ...AVAILABLE_REPORT,
+          latitude: null,
+        }),
+      ).rejects.toThrow('세션 위치 보고 내용이 올바르지 않습니다.');
+      await expect(
+        reportEmergencySessionLocation('emg-session-006', {
+          status: 'UNAVAILABLE',
+          observedAt: '2026-10-03T08:00:00.000Z',
+          latitude: 37.55,
+          longitude: 126.93,
+          accuracy: null,
+        }),
+      ).rejects.toThrow('세션 위치 보고 내용이 올바르지 않습니다.');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

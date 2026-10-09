@@ -6,16 +6,23 @@ import type {
   EmergencyGuidePhotoRequest,
   EmergencyGuideHandoverSnapshot,
   EmergencyGuideResponse,
+  EmergencySessionLocationReport,
   EmergencyWasteGuideItem,
   EmergencyWasteGuideResponse,
 } from '@/types';
 
 import {
+  authenticatedFetch,
   fetchWithTimeout,
   getApiBaseUrl,
   RequestTimeoutError,
 } from './authenticatedFetch.service';
 import { ApiRequestError } from './apiError.service';
+import {
+  getAuthToken,
+  isAuthTokenExpiredError,
+  refreshAuthTokens,
+} from './auth.service';
 
 const EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -45,6 +52,13 @@ export class EmergencyGuideRequestError extends ApiRequestError {
 }
 
 const getEmergencyGuideBaseUrl = getApiBaseUrl;
+
+// React Native에는 DOMException이 없어 fetch와 같은 모양의 AbortError를 직접 만듭니다.
+const createAbortError = (): Error => {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+};
 
 export const getEmergencyGuideImageUrl = (
   imageUrl: string | null,
@@ -91,6 +105,8 @@ const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
     '지원하지 않는 이미지 형식입니다. 다른 이미지 파일로 다시 요청해 주세요.',
   SESSION_NOT_FOUND:
     '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+  SESSION_LOCATION_CONFLICT:
+    '이 세션의 위치는 이미 다른 값으로 저장되어 변경할 수 없습니다.',
   WASTE_GUIDE_HANDOVER_NOT_FOUND:
     '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
   SM_BAD_GATEWAY:
@@ -282,17 +298,49 @@ const isEmergencyGuideTreatmentStep = (value: unknown): boolean =>
   Number.isInteger(value.stepId) &&
   (value.stepId as number) > 0;
 
+// 세션 생성 시 JWT 사용자에게 소유권이 연결되어야 이후 위치 보고(PUT /sessions/{id}/location)가
+// 허용됩니다. 다만 토큰 문제로 응급 가이드 자체가 막히면 안 되므로 토큰은 최선 노력으로만 붙입니다.
+const getSessionOwnerHeaders = async (): Promise<Record<string, string>> => {
+  try {
+    return { Authorization: `Bearer ${await getAuthToken()}` };
+  } catch (error: unknown) {
+    if (!isAuthTokenExpiredError(error)) {
+      console.warn('[EmergencyGuide API][Owner Token]', {
+        reason: 'token_unavailable',
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      return {};
+    }
+  }
+
+  try {
+    return {
+      Authorization: `Bearer ${(await refreshAuthTokens()).accessToken}`,
+    };
+  } catch (error: unknown) {
+    console.warn('[EmergencyGuide API][Owner Token]', {
+      reason: 'refresh_failed',
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    return {};
+  }
+};
+
 export const createEmergencyGuide = async (
   formData: FormData,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
   const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
+  const ownerHeaders = await getSessionOwnerHeaders();
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   logRequest(requestUrl);
   const response = await fetchWithTimeout(
     requestUrl,
     {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...ownerHeaders },
       body: formData,
       signal,
     },
@@ -705,4 +753,105 @@ export const getEmergencyWasteGuide = async (
   });
 
   return readEmergencyWasteGuideResponse(response, requestUrl);
+};
+
+const SESSION_LOCATION_STATUS_CODES: Readonly<Record<number, string>> = {
+  403: 'SESSION_FORBIDDEN',
+  404: 'SESSION_NOT_FOUND',
+  409: 'SESSION_LOCATION_CONFLICT',
+};
+
+const isValidSessionLocationReport = (
+  report: EmergencySessionLocationReport,
+): boolean => {
+  if (report.status !== 'AVAILABLE') {
+    return (
+      report.latitude === null &&
+      report.longitude === null &&
+      report.accuracy === null
+    );
+  }
+
+  return (
+    Number.isFinite(report.latitude) &&
+    Number.isFinite(report.longitude) &&
+    (report.accuracy === null || Number.isFinite(report.accuracy))
+  );
+};
+
+// PUT /api/v1/sessions/{sessionId}/location
+// 세션 소유자 토큰으로 일회성 GPS 수집 결과를 저장합니다. 같은 내용의 재시도는 성공하고,
+// 이미 다른 값이 저장된 세션은 409(SESSION_LOCATION_CONFLICT)로 거절됩니다.
+export const reportEmergencySessionLocation = async (
+  sessionId: string,
+  report: EmergencySessionLocationReport,
+  signal?: AbortSignal,
+): Promise<void> => {
+  const normalizedSessionId = sessionId.trim();
+
+  if (!normalizedSessionId) {
+    throw new Error('응급 가이드 sessionId가 없습니다.');
+  }
+
+  if (!isValidSessionLocationReport(report)) {
+    throw new Error('세션 위치 보고 내용이 올바르지 않습니다.');
+  }
+
+  const path = `/api/v1/sessions/${encodeURIComponent(
+    normalizedSessionId,
+  )}/location`;
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${path}`;
+  logRequest(requestUrl, 'PUT');
+  const response = await authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+      signal,
+    },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (
+        await refreshAuthTokens()
+      ).accessToken,
+  });
+
+  if (response.ok) {
+    console.warn('[EmergencyGuide API][Response]', {
+      requestUrl,
+      status: response.status,
+      ok: true,
+      errorCode: null,
+    });
+    return;
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    payload = null;
+  }
+
+  const failure = readFailure(payload);
+  const code =
+    failure?.code ??
+    SESSION_LOCATION_STATUS_CODES[response.status] ??
+    'REQUEST_FAILED';
+  console.warn('[EmergencyGuide API][Response]', {
+    requestUrl,
+    status: response.status,
+    ok: false,
+    errorCode: code,
+  });
+
+  throw new EmergencyGuideRequestError(
+    failure?.message ?? '세션 위치 저장에 실패했습니다.',
+    response.status,
+    code,
+    requestUrl,
+    failure?.details ?? [],
+  );
 };

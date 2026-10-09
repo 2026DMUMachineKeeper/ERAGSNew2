@@ -1,11 +1,6 @@
 import React from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 
-import Geolocation, {
-  type GeolocationError,
-  type GeolocationOptions,
-  type GeolocationResponse,
-} from '@react-native-community/geolocation';
 import { useIsFocused } from '@react-navigation/native';
 import { launchCamera, type CameraOptions } from 'react-native-image-picker';
 
@@ -20,6 +15,7 @@ import {
 } from '@/services';
 import type { EmergencyGuideMediaFile, EmergencyGuideResponse } from '@/types';
 import { showLocationPermissionPrompt } from '@/utils';
+import { getCurrentPosition } from '@/utils/currentPosition';
 
 const CAMERA_OPTIONS: CameraOptions = {
   mediaType: 'photo',
@@ -82,41 +78,6 @@ const requestAndroidPermission = async (
   return result === PermissionsAndroid.RESULTS.GRANTED;
 };
 
-const requestCurrentPosition = (
-  options: GeolocationOptions,
-): Promise<GeolocationResponse> =>
-  new Promise((resolve, reject) => {
-    Geolocation.getCurrentPosition(resolve, reject, options);
-  });
-
-const isLocationPermissionDeniedError = (
-  error: unknown,
-): error is GeolocationError =>
-  error !== null &&
-  typeof error === 'object' &&
-  'code' in error &&
-  error.code === 1;
-
-const getCurrentPosition = async (): Promise<GeolocationResponse> => {
-  try {
-    return await requestCurrentPosition({
-      enableHighAccuracy: false,
-      timeout: 8000,
-      maximumAge: 300000,
-    });
-  } catch (error: unknown) {
-    if (isLocationPermissionDeniedError(error)) {
-      throw error;
-    }
-
-    return requestCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 20000,
-      maximumAge: 60000,
-    });
-  }
-};
-
 const getPhotoAsset = async (): Promise<EmergencyGuideMediaFile | null> => {
   const response = await launchCamera(CAMERA_OPTIONS);
 
@@ -156,8 +117,7 @@ export const useHomeEmergencyActions = (
   const [isListening, setIsListening] = React.useState(false);
   const [isPhotoVoiceRecording, setIsPhotoVoiceRecording] =
     React.useState(false);
-  const [isPhotoVoiceStarting, setIsPhotoVoiceStarting] =
-    React.useState(false);
+  const [isPhotoVoiceStarting, setIsPhotoVoiceStarting] = React.useState(false);
   const [isVisionUploading, setIsVisionUploading] = React.useState(false);
   const [isVoiceProcessing, setIsVoiceProcessing] = React.useState(false);
   const [visionStatus, setVisionStatus] = React.useState<string | null>(null);
@@ -442,10 +402,7 @@ export const useHomeEmergencyActions = (
   }, []);
 
   const handleStartPhotoVoice = React.useCallback(async (): Promise<void> => {
-    if (
-      isPhotoVoiceStartingRef.current ||
-      isPhotoVoiceRecordingRef.current
-    ) {
+    if (isPhotoVoiceStartingRef.current || isPhotoVoiceRecordingRef.current) {
       return;
     }
 
