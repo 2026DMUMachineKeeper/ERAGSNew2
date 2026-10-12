@@ -49,6 +49,23 @@ export function AssessmentOnlyModal({
                   : '119 신고 필요 여부를 확인할 수 없습니다.'}
               </Text>
             </View>
+            {assessment && assessment.missingInputs.length > 0 ? (
+              <View className="mt-5 rounded-2xl bg-background p-4">
+                <Text accessibilityRole="header" className="text-body font-suitBold text-black">
+                  추가로 필요한 정보
+                </Text>
+                {assessment.missingInputs.map((input, index) => (
+                  <View key={`${input}-${index}`} className="mt-2 flex-row">
+                    <Text accessible={false} className="mr-2 text-body font-suitRegular leading-6 text-gray">
+                      {'\u2022'}
+                    </Text>
+                    <Text className="flex-1 text-body font-suitRegular leading-6 text-gray">
+                      {input}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </ScrollView>
           <TouchableOpacity
             accessibilityLabel="새 문진 시작"
