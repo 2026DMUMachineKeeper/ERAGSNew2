@@ -129,9 +129,9 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     });
     const texts = renderer.root.findAllByType(Text).map(node => node.props.children);
     expect(texts).toContain('발진 모양의 추가 확인이 필요합니다.');
-    expect(texts).not.toContain('추가로 필요한 정보');
-    expect(texts).not.toContain('발진 모양');
-    expect(texts).not.toContain('증상 발생 시각');
+    expect(texts).toContain('추가로 필요한 정보');
+    expect(texts).toContain('발진 모양');
+    expect(texts).toContain('증상 발생 시각');
     expect(texts).toContain(`119 신고 ${isCall119Required ? '필요' : '불필요'}`);
     expect(renderer.root.findByType(Modal).props).toMatchObject({
       visible: true,
@@ -157,6 +157,33 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(texts).toContain('판단 요약이 없습니다.');
     expect(texts).toContain('119 신고 필요 여부를 확인할 수 없습니다.');
     expect(texts).not.toContain('119 신고 불필요');
+    expect(texts).not.toContain('추가로 필요한 정보');
+  });
+
+  it('추가 정보 목록이 비어 있으면 목록 영역을 표시하지 않는다', async () => {
+    await act(async () => {
+      useEmergencyGuideStore.getState().setGuide({
+        ...GUIDE,
+        status: 'ASSESSMENT_ONLY',
+        assessment: {
+          assessmentId: 'assessment-1',
+          categoryCode: 'UNKNOWN',
+          subtypeCode: 'UNKNOWN',
+          severityCode: 'UNKNOWN',
+          confidence: null,
+          redFlags: [],
+          call119Required: false,
+          summary: '추가 확인이 필요합니다.',
+          reasons: [],
+          missingInputs: [],
+          decisionSource: 'ML_EVIDENCE',
+          modelVersion: null,
+        },
+      });
+    });
+    const texts = renderer.root.findAllByType(Text).map(node => node.props.children);
+    expect(texts).toContain('추가 확인이 필요합니다.');
+    expect(texts).not.toContain('추가로 필요한 정보');
   });
 
   it('한국어 데이터 누락 시 설치를 안내하고 복귀 시 현재 안내를 다시 재생한다', async () => {
@@ -360,7 +387,7 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(previousState?.index).toBe(0);
   });
 
-  it('추가 정보 목록을 표시하지 않고 닫으면 이전 화면으로 돌아간다', async () => {
+  it('추가 정보 목록을 표시하고 닫으면 이전 화면으로 돌아간다', async () => {
     await act(async () => {
       useEmergencyGuideStore.getState().setGuide({
         ...GUIDE,
@@ -382,9 +409,9 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
       });
     });
     const texts = renderer.root.findAllByType(Text).map(node => node.props.children);
-    expect(texts).not.toContain('추가로 필요한 정보');
-    expect(texts).not.toContain('증상 발생 시각');
-    expect(texts).not.toContain('category');
+    expect(texts).toContain('추가로 필요한 정보');
+    expect(texts).toContain('증상 발생 시각');
+    expect(texts).toContain('category');
 
     await pressButton('닫기');
     expect(navigation.goBack).toHaveBeenCalledTimes(1);
