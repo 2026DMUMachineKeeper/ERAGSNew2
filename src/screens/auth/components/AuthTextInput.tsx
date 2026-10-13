@@ -13,11 +13,14 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 interface AuthTextInputProps {
   errorMessage?: string;
   iconName: 'email' | 'lock' | 'phone' | 'user';
+  inputRef?: React.Ref<TextInput>;
   inputProps: Pick<
     TextInputProps,
     | 'autoCapitalize'
     | 'autoCorrect'
     | 'onChangeText'
+    | 'onSubmitEditing'
+    | 'submitBehavior'
     | 'placeholder'
     | 'placeholderTextColor'
     | 'textContentType'
@@ -125,6 +128,7 @@ export const AuthTextInput = ({
   errorMessage,
   iconName,
   inputProps,
+  inputRef,
   isPassword = false,
 }: AuthTextInputProps): React.JSX.Element => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -143,6 +147,7 @@ export const AuthTextInput = ({
           {renderInputIcon(iconName)}
         </View>
         <TextInput
+          ref={inputRef}
           {...inputProps}
           className="h-full px-14 text-base font-suitRegular text-black"
           secureTextEntry={isPassword && !isPasswordVisible}

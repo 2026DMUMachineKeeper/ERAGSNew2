@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
+  type TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,6 +48,11 @@ export const LoginScreen = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const passwordInputRef = React.useRef<TextInput>(null);
+
+  const handleEmailSubmit = (): void => {
+    passwordInputRef.current?.focus();
+  };
 
   const isLoginDisabled =
     isSubmitting || email.trim().length === 0 || password.trim().length === 0;
@@ -66,6 +73,7 @@ export const LoginScreen = ({
       const shouldShowLocationPermissionPrompt =
         await consumeLocationPermissionPrompt(authenticatedUser.email);
 
+      Keyboard.dismiss();
       navigation.reset({
         index: 0,
         routes: [{ name: 'Home' }],
@@ -127,6 +135,8 @@ export const LoginScreen = ({
                     autoCorrect: false,
                     keyboardType: 'email-address',
                     onChangeText: setEmail,
+                    onSubmitEditing: handleEmailSubmit,
+                    submitBehavior: 'submit',
                     placeholder: '이메일을 입력하세요',
                     placeholderTextColor: colors.placeholder,
                     returnKeyType: 'next',
@@ -138,6 +148,7 @@ export const LoginScreen = ({
                 <View className="mt-5">
                   <AuthTextInput
                     iconName="lock"
+                    inputRef={passwordInputRef}
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
