@@ -464,9 +464,9 @@ describe('MedicalPlacesSheet 스냅', () => {
 
     const output = JSON.stringify(renderer!.toJSON());
     expect(output).toContain('실시간 병상 정보');
-    expect(output).toContain('가용 병상');
+    expect(output).toContain('병상');
     expect(output).toContain('14');
-    expect(output).toContain('수술실 병상');
+    expect(output).toContain('수술실');
     expect(output).toContain('CT');
     expect(output).toContain('가능');
     expect(output).toContain('MRI');

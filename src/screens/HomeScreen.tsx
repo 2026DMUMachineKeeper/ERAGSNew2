@@ -23,10 +23,13 @@ import { medicineAlertsQueryOptions } from '@/query';
 import { getApiErrorUserMessage } from '@/services/apiError.service';
 import { isAuthSessionExpiredError } from '@/services/auth.service';
 import { redirectToLoginForExpiredSession } from '@/utils/authSessionNavigation';
+import { reportEmergencySessionLocationOnce } from '@/utils/emergencySessionLocation';
 
 import {
+  EmergencyInputWaitingModal,
   EmergencySupportSection,
   HomeHeader,
+  PhotoSymptomInputModal,
   QuickActionCard,
 } from './home/components';
 import { useHomeEmergencyActions } from './home/useHomeEmergencyActions';
@@ -75,18 +78,37 @@ export const HomeScreen = ({
   const handleGuideCreated = React.useCallback(
     (source: 'image' | 'voice', guide: EmergencyGuideResponse): void => {
       startGuide({ guide, source });
+      // 관제용 위치 보고는 가이드 흐름과 독립적으로 백그라운드에서 한 번만 보냅니다.
+      reportEmergencySessionLocationOnce(guide.sessionId);
       navigation.navigate('EmergencyGuide');
     },
     [navigation, startGuide],
   );
   const {
     isListening,
+    isPhotoVoiceRecording,
+    isPhotoVoiceStarting,
     isVisionUploading,
     isVoiceProcessing,
+    photoAdditionalText,
+    photoCount,
+    photoInputStep,
+    photoUris,
     visionStatus,
     voiceStatus,
+    handleAddPhotoPress,
     handleEmergencyReportPress,
+    handlePhotoInputBack,
+    handlePhotoFlowCancel,
     handlePhotoPress,
+    handleRemovePhoto,
+    handlePhotoTextChange,
+    handlePhotoTextSubmit,
+    handlePhotoVoiceSubmit,
+    handleStartPhotoVoice,
+    handleSelectPhotoText,
+    handleSelectPhotoVoice,
+    handleSendPhotosOnly,
     handleVoicePress,
   } = useHomeEmergencyActions(handleGuideCreated);
 
@@ -171,6 +193,32 @@ export const HomeScreen = ({
           });
         }}
         onPressMedicine={handleAlertMedicinePress}
+      />
+
+      <PhotoSymptomInputModal
+        additionalText={photoAdditionalText}
+        isUploading={isVisionUploading}
+        isVoiceRecording={isPhotoVoiceRecording}
+        isVoiceStarting={isPhotoVoiceStarting}
+        photoCount={photoCount}
+        photoUris={photoUris}
+        step={photoInputStep}
+        onAddPhoto={handleAddPhotoPress}
+        onBack={handlePhotoInputBack}
+        onCancel={handlePhotoFlowCancel}
+        onChangeAdditionalText={handlePhotoTextChange}
+        onRemovePhoto={handleRemovePhoto}
+        onSelectText={handleSelectPhotoText}
+        onSelectVoice={handleSelectPhotoVoice}
+        onStartVoice={handleStartPhotoVoice}
+        onSendPhotosOnly={handleSendPhotosOnly}
+        onSubmitText={handlePhotoTextSubmit}
+        onSubmitVoice={handlePhotoVoiceSubmit}
+      />
+
+      <EmergencyInputWaitingModal
+        isVisible={isVoiceProcessing}
+        message="음성 입력을 전송하고 분석하고 있습니다."
       />
     </SafeAreaView>
   );

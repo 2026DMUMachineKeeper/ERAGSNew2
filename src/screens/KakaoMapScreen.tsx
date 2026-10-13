@@ -37,11 +37,13 @@ import {
   type MedicalPlacesSheetRef,
 } from './kakaoMap/components';
 import {
+  createCenterOnCurrentLocationScript,
   createCurrentLocationScript,
   createFocusMedicalLocationScript,
   createKakaoMapHtml,
   createMedicalFilterScript,
   createRequestMedicalDirectionsScript,
+  createSetMedicalLocationsScript,
   MEDICAL_MARKER_ASSET_URIS,
   type MapCoordinates,
 } from './kakaoMap/mapHtml';
@@ -233,13 +235,9 @@ export const KakaoMapScreen = ({
   const mapSource = React.useMemo(
     () => ({
       baseUrl: KAKAO_MAP_BASE_URL,
-      html: createKakaoMapHtml(
-        appKey ?? '',
-        MEDICAL_MARKER_ASSET_URIS,
-        medicalLocations,
-      ),
+      html: createKakaoMapHtml(appKey ?? '', MEDICAL_MARKER_ASSET_URIS),
     }),
-    [appKey, medicalLocations],
+    [appKey],
   );
   React.useLayoutEffect(() => {
     if (!isAedGuideVisible || route?.name !== 'MapTab') {
@@ -327,6 +325,16 @@ export const KakaoMapScreen = ({
     }
 
     mapWebViewRef.current?.injectJavaScript(
+      createSetMedicalLocationsScript(medicalLocations),
+    );
+  }, [isMapReady, medicalLocations]);
+
+  React.useEffect(() => {
+    if (!isMapReady) {
+      return;
+    }
+
+    mapWebViewRef.current?.injectJavaScript(
       createMedicalFilterScript(selectedMedicalFilter, searchQuery),
     );
   }, [isMapReady, searchQuery, selectedMedicalFilter]);
@@ -358,12 +366,9 @@ export const KakaoMapScreen = ({
       const coordinates = await getCurrentMapCoordinates(0);
       setCurrentLocation(coordinates);
       setLocationLoadState('ready');
-      mapWebViewRef.current?.injectJavaScript(`
-        window.eragsUpdateCurrentLocation?.(${coordinates.latitude}, ${coordinates.longitude});
-        window.eragsMap?.setCenter(new kakao.maps.LatLng(${coordinates.latitude}, ${coordinates.longitude}));
-        window.eragsMap?.setLevel(3);
-        true;
-      `);
+      mapWebViewRef.current?.injectJavaScript(
+        createCenterOnCurrentLocationScript(coordinates),
+      );
       setSelectedMedicalLocation(null);
       placesSheetRef.current?.dismiss();
     } catch {
@@ -463,11 +468,11 @@ export const KakaoMapScreen = ({
   return (
     <SafeAreaView
       edges={route?.name === 'MapTab' ? ['top'] : ['top', 'bottom']}
-      className="flex-1 bg-white"
+      className="flex-1 bg-background"
     >
       {appKey ? (
         <View
-          className="relative flex-1 overflow-hidden bg-white"
+          className="relative flex-1 overflow-hidden bg-background"
           onLayout={handleMapLayout}
         >
           <WebView
@@ -484,7 +489,7 @@ export const KakaoMapScreen = ({
             onLoadEnd={() => setIsMapReady(true)}
             ref={mapWebViewRef}
             renderLoading={() => (
-              <View className="flex-1 items-center justify-center bg-white">
+              <View className="flex-1 items-center justify-center bg-background">
                 <ActivityIndicator color="#FF3A3A" />
                 <Text className="mt-3 text-coment text-textDim">
                   지도를 불러오는 중입니다.

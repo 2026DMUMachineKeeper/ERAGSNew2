@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import {
   clearAuthSession,
   getStoredAuthUser,
+  isTransientAuthError,
   login,
   logout,
   restoreAuthSession,
@@ -41,7 +42,16 @@ export const useAuthStore = create<AuthState>()(set => ({
 
   restoreSession: async (): Promise<boolean> => {
     try {
-      await restoreAuthSession();
+      try {
+        await restoreAuthSession();
+      } catch (error: unknown) {
+        // 오프라인·서버 오류처럼 서버가 토큰을 판정하지 못한 경우에만 저장된 세션으로 진입합니다.
+        // 세션 만료나 4xx 거부는 동작하지 않는 세션에 갇히지 않도록 로그인 화면으로 보냅니다.
+        if (!isTransientAuthError(error)) {
+          throw error;
+        }
+        console.warn('[authStore] 세션 갱신 실패, 저장된 세션으로 진행:', error);
+      }
       const user = (await getStoredAuthUser()) ?? null;
 
       set({ user, isAuthenticated: true });

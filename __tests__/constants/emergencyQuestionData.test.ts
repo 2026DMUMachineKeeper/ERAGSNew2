@@ -59,6 +59,7 @@ describe('getEmergencyQuestions', () => {
           'immediateDanger',
           'visibleSymptoms',
           'allergyRisk',
+          'rashAppearance',
           'ageGroup',
         ],
       },
@@ -99,7 +100,7 @@ describe('getEmergencyQuestions', () => {
     expect(
       getNextEmergencyAnswerIds(
         feverQuestion,
-        ['TEMP_UNDER_39', 'SEIZURE'],
+        ['TEMP_UNDER_38', 'SEIZURE'],
         'TEMP_39_OR_HIGHER',
       ),
     ).toEqual(['SEIZURE', 'TEMP_39_OR_HIGHER']);
@@ -116,6 +117,33 @@ describe('getEmergencyQuestions', () => {
         option => option.id === 'OTHER_UNKNOWN',
       ),
     ).toBe(true);
+  });
+
+  it('발열의 네 체온 답변은 서로 배타적이고 동반 증상은 유지한다', () => {
+    const question = getEmergencyQuestions('fever')[2];
+    const temperatureIds = [
+      'TEMP_UNDER_38', 'TEMP_38_TO_38_9', 'TEMP_39_OR_HIGHER', 'TEMP_UNKNOWN',
+    ];
+    expect(question.options.slice(0, 4).map(option => option.id)).toEqual(temperatureIds);
+    for (const previousId of temperatureIds) {
+      for (const nextId of temperatureIds.filter(id => id !== previousId)) {
+        expect(getNextEmergencyAnswerIds(question, [previousId, 'SEIZURE'], nextId))
+          .toEqual(['SEIZURE', nextId]);
+      }
+    }
+  });
+
+  it('발진 모양은 다중 선택하되 알 수 없음은 단독 선택한다', () => {
+    const question = getEmergencyQuestions('skinRash')[3];
+    expect(question.options.map(option => option.id)).toEqual([
+      'RASH_FLAT_SPOTS', 'RASH_BLISTERS', 'RASH_RED_WARM', 'RASH_RAISED_WHEALS', 'UNKNOWN',
+    ]);
+    expect(getNextEmergencyAnswerIds(question, ['RASH_FLAT_SPOTS'], 'RASH_BLISTERS'))
+      .toEqual(['RASH_FLAT_SPOTS', 'RASH_BLISTERS']);
+    expect(getNextEmergencyAnswerIds(question, ['RASH_FLAT_SPOTS'], 'UNKNOWN'))
+      .toEqual(['UNKNOWN']);
+    expect(getNextEmergencyAnswerIds(question, ['UNKNOWN'], 'RASH_RED_WARM'))
+      .toEqual(['RASH_RED_WARM']);
   });
 
 });

@@ -31,10 +31,13 @@ const KAKAO_MAP_CENTER = {
   latitude: 37.4999957879,
   longitude: 126.8681696567,
 };
+const toInlineJson = (value: unknown): string =>
+  JSON.stringify(value).replace(/</g, '\\u003c');
+
+// 장소 데이터는 eragsSetMedicalLocations로 주입해 데이터가 바뀌어도 WebView를 다시 로드하지 않습니다.
 export const createKakaoMapHtml = (
   appKey: string,
   markerAssetUris: MarkerAssetUris,
-  medicalLocations: readonly MedicalMapLocation[],
 ): string => `
 <!doctype html>
 <html lang="ko">
@@ -44,6 +47,16 @@ export const createKakaoMapHtml = (
     <title>카카오맵</title>
     <style>
       html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
+      .hospital-bed-labels { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; }
+      .hospital-bed-label {
+        display: block; padding: 7px 10px; border: 1px solid #E4E6EA; border-radius: 10px;
+        background: #FFFFFF; color: #22252A; font: 12px/1.5 sans-serif;
+        white-space: nowrap; box-shadow: 0 2px 6px #0000001A; cursor: pointer;
+      }
+      .hospital-bed-label:focus-visible { outline: 2px solid #FF3A3A; outline-offset: 2px; }
+      .hospital-bed-label strong { color: #FF3A3A; }
+      .hospital-bed-name { display: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+      .hospital-bed-labels.is-cluster .hospital-bed-name { display: block; }
     </style>
     <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(
       appKey,
@@ -61,10 +74,6 @@ export const createKakaoMapHtml = (
       };
       window.eragsMap = new kakao.maps.Map(mapContainer, mapOption);
 
-      const medicalLocations = ${JSON.stringify(medicalLocations).replace(
-        /</g,
-        '\\u003c',
-      )};
       const markerAssetUris = ${JSON.stringify(markerAssetUris)};
       const createMarkerImage = (assetUri) => new kakao.maps.MarkerImage(
         assetUri,
@@ -76,17 +85,26 @@ export const createKakaoMapHtml = (
         hospital: createMarkerImage(markerAssetUris.hospital),
       };
       const CLUSTER_DISTANCE_PX = 28;
-      const bounds = new kakao.maps.LatLngBounds();
-      const markers = {};
-      const markerEntries = [];
+      let bounds = new kakao.maps.LatLngBounds();
+      let markers = {};
+      let markerEntries = [];
       let clusterMarkers = [];
-      const failedHospitalIds = new Set();
-      let markerCount = 0;
+      let clusterBedOverlays = [];
+      let failedHospitalIds = new Set();
       let activeFilter = 'all';
       let activeQuery = '';
       let pendingFocusId = null;
       let pendingDirectionsId = null;
-      let hasFocusedLocation = false;
+      let hasUserMovedMap = false;
+      // 코드가 지도를 옮기는 동안 발생하는 zoom/drag 이벤트를 사용자 조작으로 오인하지 않기 위한 플래그입니다.
+      let isProgrammaticMove = false;
+      let medicalLocationsVersion = 0;
+      const geocodeCache = new Map();
+
+      const moveMapProgrammatically = move => {
+        isProgrammaticMove = true;
+        move();
+      };
 
       const sendDirectionsPosition = (locationId, position) => {
         window.ReactNativeWebView?.postMessage(JSON.stringify({
@@ -101,6 +119,51 @@ export const createKakaoMapHtml = (
         (activeFilter === 'all' || location.type === activeFilter) &&
         (!activeQuery || (location.name + ' ' + location.address)
           .toLocaleLowerCase().includes(activeQuery));
+
+      const handleLocationPress = location => {
+        window.ReactNativeWebView?.postMessage(JSON.stringify({
+          locationId: location.id,
+          type: 'medical-location-pressed',
+        }));
+      };
+
+      const createHospitalBedLabel = location => {
+        if (location.type !== 'hospital') return null;
+        const details = location.hospitalDetails;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'hospital-bed-label';
+        const name = document.createElement('span');
+        name.className = 'hospital-bed-name';
+        name.textContent = location.name;
+        button.appendChild(name);
+        const summary = document.createElement('span');
+        if (details?.availableBeds == null && details?.operatingRoomBeds == null) {
+          summary.textContent = '병상 정보 없음';
+        } else {
+          const appendBeds = (label, beds) => {
+            summary.appendChild(document.createTextNode(label + ' '));
+            const value = document.createElement('strong');
+            value.textContent = beds == null ? '정보 없음'
+              : beds < 0 ? Math.abs(beds) + '명 대기 중' : String(beds);
+            summary.appendChild(value);
+          };
+          appendBeds('병상', details.availableBeds);
+          summary.appendChild(document.createTextNode(' · '));
+          appendBeds('수술실', details.operatingRoomBeds);
+        }
+        button.appendChild(summary);
+        button.setAttribute('aria-label', location.name + ': ' + summary.textContent);
+        button.addEventListener('click', event => {
+          event.stopPropagation();
+          handleLocationPress(location);
+        });
+        return button;
+      };
+
+      const createBedOverlay = (content, position) => new kakao.maps.CustomOverlay({
+        content, position, clickable: true, xAnchor: 0.5, yAnchor: 0, zIndex: 2,
+      });
 
       const createClusterMarkerImage = additionalLocationCount => {
         const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="40" viewBox="0 0 64 40">' +
@@ -163,10 +226,19 @@ export const createKakaoMapHtml = (
         return clusters;
       };
 
-      const renderMedicalMarkers = () => {
+      const hideMedicalMarkers = () => {
         clusterMarkers.forEach(marker => marker.setMap(null));
         clusterMarkers = [];
-        markerEntries.forEach(entry => entry.marker.setMap(null));
+        clusterBedOverlays.forEach(overlay => overlay.setMap(null));
+        clusterBedOverlays = [];
+        markerEntries.forEach(entry => {
+          entry.marker.setMap(null);
+          entry.bedOverlay?.setMap(null);
+        });
+      };
+
+      const renderMedicalMarkers = () => {
+        hideMedicalMarkers();
 
         const visibleEntries = markerEntries.filter(entry =>
           matchesCurrentFilter(entry.location),
@@ -177,6 +249,10 @@ export const createKakaoMapHtml = (
         visibleEntries.forEach(entry => {
           if (!clusteredEntries.has(entry)) {
             entry.marker.setMap(window.eragsMap);
+            if (entry.bedOverlay) {
+              entry.bedContent.appendChild(entry.bedLabel);
+              entry.bedOverlay.setMap(window.eragsMap);
+            }
           }
         });
 
@@ -199,12 +275,19 @@ export const createKakaoMapHtml = (
             }));
           });
           clusterMarkers.push(marker);
+          const bedContent = document.createElement('div');
+          bedContent.className = 'hospital-bed-labels is-cluster';
+          cluster.forEach(entry => {
+            if (entry.bedLabel) bedContent.appendChild(entry.bedLabel);
+          });
+          const bedOverlay = createBedOverlay(bedContent, representative.position);
+          bedOverlay.setMap(window.eragsMap);
+          clusterBedOverlays.push(bedOverlay);
         });
       };
 
       const addMarker = (location, position) => {
         bounds.extend(position);
-        markerCount += 1;
 
         const marker = new kakao.maps.Marker({
           image: markerImages[location.type],
@@ -212,19 +295,23 @@ export const createKakaoMapHtml = (
           title: location.name,
         });
         markers[location.id] = marker;
-        markerEntries.push({ location, marker, position });
+        const bedLabel = createHospitalBedLabel(location);
+        const bedContent = bedLabel ? document.createElement('div') : null;
+        if (bedContent) {
+          bedContent.className = 'hospital-bed-labels';
+          bedContent.appendChild(bedLabel);
+        }
+        const bedOverlay = bedContent ? createBedOverlay(bedContent, position) : null;
+        markerEntries.push({ location, marker, position, bedLabel, bedContent, bedOverlay });
 
         kakao.maps.event.addListener(marker, 'click', () => {
-          window.ReactNativeWebView?.postMessage(JSON.stringify({
-            locationId: location.id,
-            type: 'medical-location-pressed',
-          }));
+          handleLocationPress(location);
         });
         if (pendingFocusId === location.id) {
           window.eragsMap.setCenter(position);
           window.eragsMap.setLevel(3);
           pendingFocusId = null;
-          hasFocusedLocation = true;
+          hasUserMovedMap = true;
         }
         if (pendingDirectionsId === location.id) {
           sendDirectionsPosition(location.id, position);
@@ -233,57 +320,134 @@ export const createKakaoMapHtml = (
       };
 
       const geocoder = new kakao.maps.services.Geocoder();
-      const hospitalSearches = [];
-      medicalLocations.forEach(location => {
-        if (location.type === 'aed') {
-          addMarker(location, new kakao.maps.LatLng(
-            location.latitude,
-            location.longitude,
-          ));
+      // 위치가 갱신될 때마다 같은 주소를 다시 지오코딩하지 않도록 결과를 보관합니다.
+      // 일시적인 오류는 다음 갱신 때 다시 시도하도록 보관하지 않습니다.
+      // 같은 주소의 동시 요청(같은 건물의 병원 등)은 진행 중인 조회 하나를 함께 기다립니다.
+      const geocodeInFlight = new Map();
+      const geocodeAddress = (address, callback) => {
+        if (geocodeCache.has(address)) {
+          callback(geocodeCache.get(address));
+          return;
+        }
+        const waitingCallbacks = geocodeInFlight.get(address);
+        if (waitingCallbacks) {
+          waitingCallbacks.push(callback);
           return;
         }
 
-        hospitalSearches.push(new Promise(resolve => {
-          const searchAddress = location.address.split(',')[0]
-            .replace(/\\s*\\(.*$/, '').trim();
-          geocoder.addressSearch(searchAddress, (results, status) => {
-            if (status === kakao.maps.services.Status.OK && results.length) {
-              addMarker(location, new kakao.maps.LatLng(results[0].y, results[0].x));
-            } else {
-              failedHospitalIds.add(location.id);
-              if (pendingDirectionsId === location.id) {
-                window.ReactNativeWebView?.postMessage(JSON.stringify({
-                  type: 'medical-directions-unavailable',
-                  locationId: location.id,
-                }));
-                pendingDirectionsId = null;
+        geocodeInFlight.set(address, [callback]);
+        geocoder.addressSearch(address, (results, status) => {
+          const { Status } = kakao.maps.services;
+          const position = status === Status.OK && results.length
+            ? new kakao.maps.LatLng(results[0].y, results[0].x)
+            : null;
+          if (position || status === Status.ZERO_RESULT) {
+            geocodeCache.set(address, position);
+          }
+          const callbacks = geocodeInFlight.get(address) || [];
+          geocodeInFlight.delete(address);
+          callbacks.forEach(waitingCallback => waitingCallback(position));
+        });
+      };
+
+      window.eragsSetMedicalLocations = function (medicalLocations) {
+        medicalLocationsVersion += 1;
+        const version = medicalLocationsVersion;
+        hideMedicalMarkers();
+        bounds = new kakao.maps.LatLngBounds();
+        markers = {};
+        markerEntries = [];
+        failedHospitalIds = new Set();
+
+        const hospitalSearches = [];
+        medicalLocations.forEach(location => {
+          if (location.type === 'aed') {
+            addMarker(location, new kakao.maps.LatLng(
+              location.latitude,
+              location.longitude,
+            ));
+            return;
+          }
+
+          hospitalSearches.push(new Promise(resolve => {
+            const searchAddress = location.address.split(',')[0]
+              .replace(/\\s*\\(.*$/, '').trim();
+            geocodeAddress(searchAddress, position => {
+              // 이전 데이터의 늦은 지오코딩 결과가 새 마커 목록을 오염시키지 않게 합니다.
+              if (version !== medicalLocationsVersion) {
+                resolve();
+                return;
               }
-            }
-            resolve();
-          });
-        }));
-      });
+              if (position) {
+                addMarker(location, position);
+              } else {
+                failedHospitalIds.add(location.id);
+                if (pendingDirectionsId === location.id) {
+                  window.ReactNativeWebView?.postMessage(JSON.stringify({
+                    type: 'medical-directions-unavailable',
+                    locationId: location.id,
+                  }));
+                  pendingDirectionsId = null;
+                }
+              }
+              resolve();
+            });
+          }));
+        });
 
-      Promise.all(hospitalSearches).then(() => {
+        // 병원 지오코딩이 끝나기 전에도 AED 마커는 바로 보이게 합니다.
         renderMedicalMarkers();
-        if (hasFocusedLocation) {
-          return;
-        }
-        if (markerCount === 1) {
-          window.eragsMap.setCenter(bounds.getSouthWest());
-        } else if (markerCount > 1) {
-          window.eragsMap.setBounds(bounds, 56, 56, 56, 56);
-        }
-      });
+
+        Promise.all(hospitalSearches).then(() => {
+          if (version !== medicalLocationsVersion) {
+            return;
+          }
+          renderMedicalMarkers();
+
+          // 새 목록에 없는 장소의 대기 중 포커스·길찾기 요청은 나중에 엉뚱하게 실행되지 않도록 정리합니다.
+          const locationIds = new Set(medicalLocations.map(location => location.id));
+          if (pendingFocusId !== null && !locationIds.has(pendingFocusId)) {
+            pendingFocusId = null;
+          }
+          if (pendingDirectionsId !== null && !locationIds.has(pendingDirectionsId)) {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              type: 'medical-directions-unavailable',
+              locationId: pendingDirectionsId,
+            }));
+            pendingDirectionsId = null;
+          }
+
+          // 사용자가 지도를 옮긴 뒤에는 데이터가 갱신되어도 시점을 바꾸지 않습니다.
+          if (hasUserMovedMap) {
+            return;
+          }
+          if (markerEntries.length === 1) {
+            moveMapProgrammatically(() =>
+              window.eragsMap.setCenter(markerEntries[0].position),
+            );
+          } else if (markerEntries.length > 1) {
+            moveMapProgrammatically(() =>
+              window.eragsMap.setBounds(bounds, 56, 56, 56, 56),
+            );
+          }
+        });
+      };
 
       kakao.maps.event.addListener(window.eragsMap, 'click', () => {
         window.ReactNativeWebView?.postMessage('map-clicked');
       });
-      kakao.maps.event.addListener(
-        window.eragsMap,
-        'idle',
-        renderMedicalMarkers,
-      );
+      kakao.maps.event.addListener(window.eragsMap, 'idle', () => {
+        isProgrammaticMove = false;
+        renderMedicalMarkers();
+      });
+      // 드래그뿐 아니라 핀치·더블탭 줌도 사용자 조작으로 봅니다.
+      const markUserMovedMap = () => {
+        if (!isProgrammaticMove) {
+          hasUserMovedMap = true;
+        }
+      };
+      kakao.maps.event.addListener(window.eragsMap, 'dragstart', markUserMovedMap);
+      kakao.maps.event.addListener(window.eragsMap, 'zoom_start', markUserMovedMap);
 
       window.eragsFilterMedicalLocations = function (filter, query) {
         activeFilter = filter;
@@ -295,11 +459,13 @@ export const createKakaoMapHtml = (
         const marker = markers[locationId];
 
         if (!marker) {
-          pendingFocusId = locationId;
+          // 지오코딩에 실패한 장소는 기다려도 마커가 생기지 않으므로 대기시키지 않습니다.
+          pendingFocusId = failedHospitalIds.has(locationId) ? null : locationId;
           return;
         }
 
-        hasFocusedLocation = true;
+        pendingFocusId = null;
+        hasUserMovedMap = true;
         window.eragsMap.setCenter(marker.getPosition());
         window.eragsMap.setLevel(3);
       };
@@ -307,8 +473,10 @@ export const createKakaoMapHtml = (
       window.eragsRequestMedicalDirections = function (locationId) {
         const marker = markers[locationId];
         if (marker) {
+          pendingDirectionsId = null;
           sendDirectionsPosition(locationId, marker.getPosition());
         } else if (failedHospitalIds.has(locationId)) {
+          pendingDirectionsId = null;
           window.ReactNativeWebView?.postMessage(JSON.stringify({
             type: 'medical-directions-unavailable',
             locationId,
@@ -331,6 +499,13 @@ export const createKakaoMapHtml = (
 
         window.eragsCurrentLocationMarker.setMap(window.eragsMap);
       };
+
+      window.eragsCenterOnCurrentLocation = function (latitude, longitude) {
+        window.eragsUpdateCurrentLocation(latitude, longitude);
+        hasUserMovedMap = true;
+        window.eragsMap.setCenter(new kakao.maps.LatLng(latitude, longitude));
+        window.eragsMap.setLevel(3);
+      };
     </script>
   </body>
 </html>
@@ -341,6 +516,21 @@ export const createCurrentLocationScript = ({
   longitude,
 }: MapCoordinates): string => `
   window.eragsUpdateCurrentLocation?.(${latitude}, ${longitude});
+  true;
+`;
+
+export const createCenterOnCurrentLocationScript = ({
+  latitude,
+  longitude,
+}: MapCoordinates): string => `
+  window.eragsCenterOnCurrentLocation?.(${latitude}, ${longitude});
+  true;
+`;
+
+export const createSetMedicalLocationsScript = (
+  medicalLocations: readonly MedicalMapLocation[],
+): string => `
+  window.eragsSetMedicalLocations?.(${toInlineJson(medicalLocations)});
   true;
 `;
 

@@ -1,29 +1,25 @@
 import React from 'react';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 
-import Geolocation, {
-  type GeolocationError,
-  type GeolocationOptions,
-  type GeolocationResponse,
-} from '@react-native-community/geolocation';
 import { useIsFocused } from '@react-navigation/native';
-import {
-  launchCamera,
-  type Asset,
-  type CameraOptions,
-} from 'react-native-image-picker';
+import { launchCamera, type CameraOptions } from 'react-native-image-picker';
 
 import {
   createAudioEmergencyGuide,
-  createImageEmergencyGuide,
+  createPhotoEmergencyGuide,
+  EMERGENCY_GUIDE_IMAGE_MAX_BYTES,
   getAddressFromCoordinates,
   getEmergencyGuideErrorMessage,
   hasLocationPermission,
   startAudioRecording,
   stopAudioRecording,
 } from '@/services';
-import type { EmergencyGuideResponse } from '@/types';
-import { showLocationPermissionPrompt } from '@/utils';
+import type { EmergencyGuideMediaFile, EmergencyGuideResponse } from '@/types';
+import {
+  showEmergencyEvidenceFailureNotice,
+  showLocationPermissionPrompt,
+} from '@/utils';
+import { getCurrentPosition } from '@/utils/currentPosition';
 
 const CAMERA_OPTIONS: CameraOptions = {
   mediaType: 'photo',
@@ -34,16 +30,34 @@ const CAMERA_OPTIONS: CameraOptions = {
 
 interface HomeEmergencyActionState {
   isListening: boolean;
+  isPhotoVoiceRecording: boolean;
+  isPhotoVoiceStarting: boolean;
   isVisionUploading: boolean;
   isVoiceProcessing: boolean;
+  photoAdditionalText: string;
+  photoCount: number;
+  photoInputStep: PhotoInputStep;
+  photoUris: readonly string[];
   visionStatus: string | null;
   voiceStatus: string | null;
+  handleAddPhotoPress: () => Promise<void>;
   handleEmergencyReportPress: () => Promise<void>;
+  handlePhotoInputBack: () => Promise<void>;
+  handlePhotoFlowCancel: () => Promise<void>;
   handlePhotoPress: () => Promise<void>;
+  handleRemovePhoto: (index: number) => void;
+  handlePhotoTextChange: (text: string) => void;
+  handlePhotoTextSubmit: () => Promise<void>;
+  handlePhotoVoiceSubmit: () => Promise<void>;
+  handleStartPhotoVoice: () => Promise<void>;
+  handleSelectPhotoText: () => void;
+  handleSelectPhotoVoice: () => void;
+  handleSendPhotosOnly: () => Promise<void>;
   handleVoicePress: () => Promise<void>;
 }
 
 type GuideSource = 'image' | 'voice';
+export type PhotoInputStep = 'options' | 'text' | 'voice' | null;
 type HandleGuideCreated = (
   source: GuideSource,
   guide: EmergencyGuideResponse,
@@ -68,42 +82,7 @@ const requestAndroidPermission = async (
   return result === PermissionsAndroid.RESULTS.GRANTED;
 };
 
-const requestCurrentPosition = (
-  options: GeolocationOptions,
-): Promise<GeolocationResponse> =>
-  new Promise((resolve, reject) => {
-    Geolocation.getCurrentPosition(resolve, reject, options);
-  });
-
-const isLocationPermissionDeniedError = (
-  error: unknown,
-): error is GeolocationError =>
-  error !== null &&
-  typeof error === 'object' &&
-  'code' in error &&
-  error.code === 1;
-
-const getCurrentPosition = async (): Promise<GeolocationResponse> => {
-  try {
-    return await requestCurrentPosition({
-      enableHighAccuracy: false,
-      timeout: 8000,
-      maximumAge: 300000,
-    });
-  } catch (error: unknown) {
-    if (isLocationPermissionDeniedError(error)) {
-      throw error;
-    }
-
-    return requestCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 20000,
-      maximumAge: 60000,
-    });
-  }
-};
-
-const getPhotoAsset = async (): Promise<Asset | null> => {
+const getPhotoAsset = async (): Promise<EmergencyGuideMediaFile | null> => {
   const response = await launchCamera(CAMERA_OPTIONS);
 
   if (response.didCancel) {
@@ -119,7 +98,14 @@ const getPhotoAsset = async (): Promise<Asset | null> => {
     throw new Error('사진 경로를 가져오지 못했습니다.');
   }
 
-  return photoAsset;
+  return {
+    uri: photoAsset.uri,
+    name: photoAsset.fileName ?? `emergency-${Date.now()}.jpg`,
+    type: photoAsset.type ?? 'image/jpeg',
+    ...(typeof photoAsset.fileSize === 'number'
+      ? { size: photoAsset.fileSize }
+      : {}),
+  };
 };
 
 export const useHomeEmergencyActions = (
@@ -129,13 +115,26 @@ export const useHomeEmergencyActions = (
   const activeRequestControllersRef = React.useRef(new Set<AbortController>());
   const isFocusedRef = React.useRef(isFocused);
   const isListeningRef = React.useRef(false);
+  const isPhotoVoiceRecordingRef = React.useRef(false);
+  const isPhotoVoiceStartingRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const voiceRequestInFlightRef = React.useRef(false);
+  // state는 다음 렌더 전까지 반영되지 않아 빠른 연속 탭을 막지 못하므로 ref로 즉시 잠급니다.
+  const visionUploadInFlightRef = React.useRef(false);
   const [isListening, setIsListening] = React.useState(false);
+  const [isPhotoVoiceRecording, setIsPhotoVoiceRecording] =
+    React.useState(false);
+  const [isPhotoVoiceStarting, setIsPhotoVoiceStarting] = React.useState(false);
   const [isVisionUploading, setIsVisionUploading] = React.useState(false);
   const [isVoiceProcessing, setIsVoiceProcessing] = React.useState(false);
   const [visionStatus, setVisionStatus] = React.useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = React.useState<string | null>(null);
+  const [photoAssets, setPhotoAssets] = React.useState<
+    EmergencyGuideMediaFile[]
+  >([]);
+  const [photoAdditionalText, setPhotoAdditionalText] = React.useState('');
+  const [photoInputStep, setPhotoInputStep] =
+    React.useState<PhotoInputStep>(null);
 
   const cancelActiveWork = React.useCallback((): void => {
     activeRequestControllersRef.current.forEach(controller =>
@@ -143,11 +142,12 @@ export const useHomeEmergencyActions = (
     );
     activeRequestControllersRef.current.clear();
 
-    if (!isListeningRef.current) {
+    if (!isListeningRef.current && !isPhotoVoiceRecordingRef.current) {
       return;
     }
 
     isListeningRef.current = false;
+    isPhotoVoiceRecordingRef.current = false;
     stopAudioRecording().catch((error: unknown): void => {
       console.warn('[HomeScreen] 화면 이탈 시 녹음 정지 실패:', error);
     });
@@ -162,10 +162,16 @@ export const useHomeEmergencyActions = (
 
     cancelActiveWork();
     setIsListening(false);
+    setIsPhotoVoiceRecording(false);
+    isPhotoVoiceStartingRef.current = false;
+    setIsPhotoVoiceStarting(false);
     setIsVisionUploading(false);
     setIsVoiceProcessing(false);
     setVisionStatus(null);
     setVoiceStatus(null);
+    setPhotoAssets([]);
+    setPhotoAdditionalText('');
+    setPhotoInputStep(null);
   }, [cancelActiveWork, isFocused]);
 
   React.useEffect(
@@ -204,83 +210,274 @@ export const useHomeEmergencyActions = (
       }
     }, []);
 
-  const handlePhotoPress = React.useCallback(async (): Promise<void> => {
-    if (isVisionUploading) {
-      return;
-    }
+  const requestCameraPermission =
+    React.useCallback(async (): Promise<boolean> => {
+      let hasPermission: boolean;
 
-    let hasPermission: boolean;
+      try {
+        hasPermission = await requestAndroidPermission(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          '카메라 권한 필요',
+          '사진을 찍어 응급 상황을 분석하려면 카메라 권한이 필요합니다.',
+        );
+      } catch (error: unknown) {
+        console.error('[HomeScreen] 카메라 권한 확인 실패:', error);
+        Alert.alert(
+          '권한 확인 실패',
+          '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        );
+        return false;
+      }
+      if (!isMountedRef.current || !isFocusedRef.current) {
+        return false;
+      }
+      if (!hasPermission) {
+        Alert.alert(
+          '권한 필요',
+          '카메라 권한이 있어야 사진을 촬영할 수 있습니다.',
+        );
+        return false;
+      }
 
-    try {
-      hasPermission = await requestAndroidPermission(
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        '카메라 권한 필요',
-        '사진을 찍어 응급 상황을 분석하려면 카메라 권한이 필요합니다.',
-      );
-    } catch (error: unknown) {
-      console.error('[HomeScreen] 카메라 권한 확인 실패:', error);
-      Alert.alert(
-        '권한 확인 실패',
-        '카메라 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
-      );
-      return;
-    }
-    if (!isMountedRef.current || !isFocusedRef.current) {
-      return;
-    }
-    if (!hasPermission) {
-      Alert.alert(
-        '권한 필요',
-        '카메라 권한이 있어야 사진을 촬영할 수 있습니다.',
-      );
-      return;
-    }
-    setIsVisionUploading(true);
-    setVisionStatus('사진을 준비하고 있습니다.');
-    let requestController: AbortController | null = null;
+      return true;
+    }, []);
 
+  const capturePhoto = React.useCallback(async (): Promise<void> => {
     try {
       const photoAsset = await getPhotoAsset();
-      if (!photoAsset?.uri) {
+      if (!photoAsset || !isMountedRef.current || !isFocusedRef.current) {
+        return;
+      }
+      // 서버는 장당 10MB를 넘으면 요청 전체를 거절하므로 촬영 직후에 걸러 냅니다.
+      if ((photoAsset.size ?? 0) > EMERGENCY_GUIDE_IMAGE_MAX_BYTES) {
+        Alert.alert(
+          '사진 용량 초과',
+          '사진 한 장은 10MB 이하여야 합니다. 다시 촬영해 주세요.',
+        );
+        return;
+      }
+
+      setPhotoAssets(currentAssets => {
+        if (currentAssets.length >= 5) {
+          return currentAssets;
+        }
+
+        const nextAssets = [...currentAssets, photoAsset];
+        setVisionStatus(`사진 ${nextAssets.length}장 선택됨`);
+        return nextAssets;
+      });
+      setPhotoInputStep('options');
+    } catch (error: unknown) {
+      console.error('[HomeScreen] 사진 촬영 실패:', error);
+      Alert.alert(
+        '촬영 실패',
+        '사진을 촬영하지 못했습니다. 다시 시도해 주세요.',
+      );
+    }
+  }, []);
+
+  const sendPhotoRequest = React.useCallback(
+    async (addition?: {
+      text?: string;
+      audio?: EmergencyGuideMediaFile;
+    }): Promise<void> => {
+      if (photoAssets.length === 0 || visionUploadInFlightRef.current) {
+        return;
+      }
+
+      visionUploadInFlightRef.current = true;
+      setIsVisionUploading(true);
+      setVisionStatus(`사진 ${photoAssets.length}장을 전송하고 있습니다.`);
+      let requestController: AbortController | null = null;
+
+      try {
+        requestController = new AbortController();
+        activeRequestControllersRef.current.add(requestController);
+        const createdGuide = await createPhotoEmergencyGuide(
+          {
+            images: photoAssets,
+            ...(addition?.text ? { text: addition.text } : {}),
+            ...(addition?.audio ? { audio: addition.audio } : {}),
+          },
+          requestController.signal,
+        );
+        if (isMountedRef.current && isFocusedRef.current) {
+          setPhotoInputStep(null);
+          setPhotoAssets([]);
+          setPhotoAdditionalText('');
+          showEmergencyEvidenceFailureNotice(createdGuide);
+          onGuideCreated('image', createdGuide);
+        }
+      } catch (error) {
+        if (requestController?.signal.aborted || !isFocusedRef.current) {
+          return;
+        }
+
+        const errorMessage = getEmergencyGuideErrorMessage(error);
+
+        setVisionStatus(errorMessage);
+        Alert.alert('사진 전송 실패', errorMessage);
+        setPhotoInputStep('options');
+      } finally {
+        visionUploadInFlightRef.current = false;
+        if (requestController) {
+          activeRequestControllersRef.current.delete(requestController);
+        }
+        if (isMountedRef.current) {
+          setIsVisionUploading(false);
+        }
+      }
+    },
+    [onGuideCreated, photoAssets],
+  );
+
+  const handlePhotoPress = React.useCallback(async (): Promise<void> => {
+    if (isVisionUploading || photoInputStep !== null) {
+      return;
+    }
+
+    if (!(await requestCameraPermission())) {
+      return;
+    }
+
+    setPhotoAssets([]);
+    setPhotoAdditionalText('');
+    setVisionStatus('사진을 준비하고 있습니다.');
+    await capturePhoto();
+  }, [
+    capturePhoto,
+    isVisionUploading,
+    photoInputStep,
+    requestCameraPermission,
+  ]);
+
+  const handleAddPhotoPress = React.useCallback(async (): Promise<void> => {
+    if (photoAssets.length >= 5) {
+      return;
+    }
+
+    await capturePhoto();
+  }, [capturePhoto, photoAssets.length]);
+
+  const handleRemovePhoto = React.useCallback(
+    (index: number): void => {
+      if (index < 0 || index >= photoAssets.length || isVisionUploading) {
+        return;
+      }
+
+      const nextPhotoAssets = photoAssets.filter(
+        (_photoAsset, photoIndex) => photoIndex !== index,
+      );
+      setPhotoAssets(nextPhotoAssets);
+
+      if (nextPhotoAssets.length === 0) {
+        setPhotoAdditionalText('');
+        setPhotoInputStep(null);
         setVisionStatus(null);
         return;
       }
-      if (!isMountedRef.current || !isFocusedRef.current) {
-        return;
-      }
 
-      requestController = new AbortController();
-      activeRequestControllersRef.current.add(requestController);
-      setVisionStatus('사진을 전송하고 있습니다.');
-      const createdGuide = await createImageEmergencyGuide(
-        {
-          uri: photoAsset.uri,
-          name: photoAsset.fileName ?? `emergency-${Date.now()}.jpg`,
-          type: photoAsset.type ?? 'image/jpeg',
-        },
-        requestController.signal,
-      );
-      if (isMountedRef.current && isFocusedRef.current) {
-        onGuideCreated('image', createdGuide);
-      }
-    } catch (error) {
-      if (requestController?.signal.aborted || !isFocusedRef.current) {
-        return;
-      }
+      setVisionStatus(`사진 ${nextPhotoAssets.length}장 선택됨`);
+    },
+    [isVisionUploading, photoAssets],
+  );
 
-      const errorMessage = getEmergencyGuideErrorMessage(error);
-
-      setVisionStatus(errorMessage);
-      Alert.alert('사진 전송 실패', errorMessage);
-    } finally {
-      if (requestController) {
-        activeRequestControllersRef.current.delete(requestController);
-      }
-      if (isMountedRef.current) {
-        setIsVisionUploading(false);
+  const handlePhotoFlowCancel = React.useCallback(async (): Promise<void> => {
+    if (isPhotoVoiceRecordingRef.current) {
+      isPhotoVoiceRecordingRef.current = false;
+      setIsPhotoVoiceRecording(false);
+      try {
+        await stopAudioRecording();
+      } catch (error: unknown) {
+        console.warn('[HomeScreen] 사진 추가 음성 녹음 취소 실패:', error);
       }
     }
-  }, [isVisionUploading, onGuideCreated]);
+
+    setPhotoAssets([]);
+    setPhotoAdditionalText('');
+    setPhotoInputStep(null);
+    setVisionStatus(null);
+  }, []);
+
+  const handlePhotoInputBack = React.useCallback(async (): Promise<void> => {
+    if (isPhotoVoiceRecordingRef.current) {
+      isPhotoVoiceRecordingRef.current = false;
+      setIsPhotoVoiceRecording(false);
+      try {
+        await stopAudioRecording();
+      } catch (error: unknown) {
+        console.warn('[HomeScreen] 사진 추가 음성 녹음 종료 실패:', error);
+      }
+    }
+
+    setPhotoInputStep('options');
+  }, []);
+
+  const handleSelectPhotoVoice = React.useCallback((): void => {
+    setPhotoInputStep('voice');
+  }, []);
+
+  const handleStartPhotoVoice = React.useCallback(async (): Promise<void> => {
+    if (isPhotoVoiceStartingRef.current || isPhotoVoiceRecordingRef.current) {
+      return;
+    }
+
+    isPhotoVoiceStartingRef.current = true;
+    setIsPhotoVoiceStarting(true);
+
+    try {
+      const hasPermission = await requestAndroidPermission(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        '마이크 권한 필요',
+        '사진에 음성 설명을 추가하려면 마이크 권한이 필요합니다.',
+      );
+      if (!hasPermission || !isMountedRef.current || !isFocusedRef.current) {
+        if (hasPermission || !isMountedRef.current || !isFocusedRef.current) {
+          return;
+        }
+
+        Alert.alert(
+          '마이크 권한 필요',
+          '음성 설명을 녹음하려면 마이크 권한을 허용해 주세요.',
+        );
+        return;
+      }
+
+      await startAudioRecording();
+      if (!isMountedRef.current || !isFocusedRef.current) {
+        await stopAudioRecording();
+        return;
+      }
+
+      isPhotoVoiceRecordingRef.current = true;
+      setIsPhotoVoiceRecording(true);
+    } catch (error: unknown) {
+      Alert.alert('녹음 시작 실패', getEmergencyGuideErrorMessage(error));
+    } finally {
+      isPhotoVoiceStartingRef.current = false;
+      if (isMountedRef.current) {
+        setIsPhotoVoiceStarting(false);
+      }
+    }
+  }, []);
+
+  const handlePhotoVoiceSubmit = React.useCallback(async (): Promise<void> => {
+    if (!isPhotoVoiceRecordingRef.current) {
+      return;
+    }
+
+    try {
+      isPhotoVoiceRecordingRef.current = false;
+      setIsPhotoVoiceRecording(false);
+      const audioFile = await stopAudioRecording();
+      await sendPhotoRequest({ audio: audioFile });
+    } catch (error: unknown) {
+      const errorMessage = getEmergencyGuideErrorMessage(error);
+      setPhotoInputStep('options');
+      setVisionStatus(errorMessage);
+      Alert.alert('음성 추가 실패', errorMessage);
+    }
+  }, [sendPhotoRequest]);
 
   const handleVoicePress = React.useCallback(async (): Promise<void> => {
     if (voiceRequestInFlightRef.current) {
@@ -305,6 +502,7 @@ export const useHomeEmergencyActions = (
           requestController.signal,
         );
         if (isMountedRef.current && isFocusedRef.current) {
+          showEmergencyEvidenceFailureNotice(createdGuide);
           onGuideCreated('voice', createdGuide);
         }
         return;
@@ -352,12 +550,30 @@ export const useHomeEmergencyActions = (
 
   return {
     isListening,
+    isPhotoVoiceRecording,
+    isPhotoVoiceStarting,
     isVisionUploading,
     isVoiceProcessing,
+    photoAdditionalText,
+    photoCount: photoAssets.length,
+    photoInputStep,
+    photoUris: photoAssets.map(photoAsset => photoAsset.uri),
     visionStatus,
     voiceStatus,
+    handleAddPhotoPress,
     handleEmergencyReportPress,
+    handlePhotoInputBack,
+    handlePhotoFlowCancel,
     handlePhotoPress,
+    handleRemovePhoto,
+    handlePhotoTextChange: setPhotoAdditionalText,
+    handlePhotoTextSubmit: () =>
+      sendPhotoRequest({ text: photoAdditionalText }),
+    handlePhotoVoiceSubmit,
+    handleStartPhotoVoice,
+    handleSelectPhotoText: () => setPhotoInputStep('text'),
+    handleSelectPhotoVoice,
+    handleSendPhotosOnly: () => sendPhotoRequest(),
     handleVoicePress,
   };
 };

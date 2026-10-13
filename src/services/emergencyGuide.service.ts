@@ -3,20 +3,33 @@ import type {
   CreateEmergencyGuideHandoverRequest,
   CreateEmergencyGuideHandoverResponse,
   EmergencyGuideMediaFile,
+  EmergencyGuidePhotoRequest,
   EmergencyGuideHandoverSnapshot,
   EmergencyGuideResponse,
+  EmergencySessionLocationReport,
   EmergencyWasteGuideItem,
   EmergencyWasteGuideResponse,
 } from '@/types';
 
 import {
+  authenticatedFetch,
   fetchWithTimeout,
   getApiBaseUrl,
   RequestTimeoutError,
 } from './authenticatedFetch.service';
 import { ApiRequestError } from './apiError.service';
+import {
+  getAuthToken,
+  isAuthTokenExpiredError,
+  refreshAuthTokens,
+} from './auth.service';
 
 const EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS = 60_000;
+
+// 백엔드 V2.1 용량 제한입니다. 초과 시 서버가 413으로 전체 요청을 거절하므로 전송 전에 미리 검사합니다.
+export const EMERGENCY_GUIDE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const EMERGENCY_GUIDE_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+export const EMERGENCY_GUIDE_REQUEST_MAX_BYTES = 80 * 1024 * 1024;
 
 interface EmergencyGuideSuccessEnvelope {
   success: true;
@@ -44,6 +57,13 @@ export class EmergencyGuideRequestError extends ApiRequestError {
 }
 
 const getEmergencyGuideBaseUrl = getApiBaseUrl;
+
+// React Native에는 DOMException이 없어 fetch와 같은 모양의 AbortError를 직접 만듭니다.
+const createAbortError = (): Error => {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+};
 
 export const getEmergencyGuideImageUrl = (
   imageUrl: string | null,
@@ -77,10 +97,14 @@ const isRecord = (payload: unknown): payload is Record<string, unknown> =>
   payload !== null && typeof payload === 'object';
 
 const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  AI_PARSING_ERROR:
+    '응급 상황 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
   AUDIO_TOO_LARGE:
-    '음성 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+    '음성 파일 용량이 너무 큽니다(최대 25MB). 더 작은 파일로 다시 요청해 주세요.',
   IMAGE_TOO_LARGE:
-    '이미지 파일 용량이 너무 큽니다. 더 작은 파일로 다시 요청해 주세요.',
+    '이미지 파일 용량이 너무 큽니다(한 장당 최대 10MB). 더 작은 파일로 다시 요청해 주세요.',
+  PAYLOAD_TOO_LARGE:
+    '전송할 파일 용량이 너무 큽니다(합산 최대 80MB). 사진 수를 줄이거나 더 작은 파일로 다시 요청해 주세요.',
   GUIDE_PENDING: '응급 평가가 완료되었습니다. 처치 안내를 다시 요청해 주세요.',
   INVALID_RESPONSE:
     '응급 가이드 서버 응답을 확인하지 못했습니다. 앱과 서버 버전을 확인해 주세요.',
@@ -90,6 +114,8 @@ const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
     '지원하지 않는 이미지 형식입니다. 다른 이미지 파일로 다시 요청해 주세요.',
   SESSION_NOT_FOUND:
     '응급 가이드 세션을 찾을 수 없습니다. 새 응급 요청을 시작해 주세요.',
+  SESSION_LOCATION_CONFLICT:
+    '이 세션의 위치는 이미 다른 값으로 저장되어 변경할 수 없습니다.',
   WASTE_GUIDE_HANDOVER_NOT_FOUND:
     '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
   SM_BAD_GATEWAY:
@@ -281,17 +307,83 @@ const isEmergencyGuideTreatmentStep = (value: unknown): boolean =>
   Number.isInteger(value.stepId) &&
   (value.stepId as number) > 0;
 
+// 세션 생성 시 JWT 사용자에게 소유권이 연결되어야 이후 위치 보고(PUT /sessions/{id}/location)가
+// 허용됩니다. 다만 토큰 문제로 응급 가이드 자체가 막히면 안 되므로 토큰은 최선 노력으로만 붙입니다.
+const getSessionOwnerHeaders = async (): Promise<Record<string, string>> => {
+  try {
+    return { Authorization: `Bearer ${await getAuthToken()}` };
+  } catch (error: unknown) {
+    if (!isAuthTokenExpiredError(error)) {
+      console.warn('[EmergencyGuide API][Owner Token]', {
+        reason: 'token_unavailable',
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      return {};
+    }
+  }
+
+  try {
+    return {
+      Authorization: `Bearer ${(await refreshAuthTokens()).accessToken}`,
+    };
+  } catch (error: unknown) {
+    console.warn('[EmergencyGuide API][Owner Token]', {
+      reason: 'refresh_failed',
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    return {};
+  }
+};
+
+const EMERGENCY_GUIDE_SESSIONS_PATH = '/api/v1/emergency-guide-sessions';
+
+const assertMediaFilesWithinLimits = (
+  images: readonly EmergencyGuideMediaFile[],
+  audio?: EmergencyGuideMediaFile,
+): void => {
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${EMERGENCY_GUIDE_SESSIONS_PATH}`;
+  const fail = (code: string): never => {
+    throw new EmergencyGuideRequestError(
+      EMERGENCY_GUIDE_ERROR_MESSAGES[code],
+      413,
+      code,
+      requestUrl,
+    );
+  };
+
+  if (
+    images.some(image => (image.size ?? 0) > EMERGENCY_GUIDE_IMAGE_MAX_BYTES)
+  ) {
+    fail('IMAGE_TOO_LARGE');
+  }
+  if ((audio?.size ?? 0) > EMERGENCY_GUIDE_AUDIO_MAX_BYTES) {
+    fail('AUDIO_TOO_LARGE');
+  }
+
+  const totalBytes = [...images, audio].reduce(
+    (sum, file) => sum + (file?.size ?? 0),
+    0,
+  );
+  if (totalBytes > EMERGENCY_GUIDE_REQUEST_MAX_BYTES) {
+    fail('PAYLOAD_TOO_LARGE');
+  }
+};
+
 export const createEmergencyGuide = async (
   formData: FormData,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
-  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions`;
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${EMERGENCY_GUIDE_SESSIONS_PATH}`;
+  const ownerHeaders = await getSessionOwnerHeaders();
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   logRequest(requestUrl);
   const response = await fetchWithTimeout(
     requestUrl,
     {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...ownerHeaders },
       body: formData,
       signal,
     },
@@ -301,11 +393,18 @@ export const createEmergencyGuide = async (
   return readEmergencyGuideResponse(response, requestUrl);
 };
 
-const createMediaEmergencyGuide = (
-  fieldName: 'audio' | 'image',
+// 사진은 한 장이어도 서버 규격(V2.1)에 맞춰 images 배열 필드로 보냅니다.
+const createMediaEmergencyGuide = async (
+  fieldName: 'audio' | 'images',
   mediaFile: EmergencyGuideMediaFile,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> => {
+  if (fieldName === 'audio') {
+    assertMediaFilesWithinLimits([], mediaFile);
+  } else {
+    assertMediaFilesWithinLimits([mediaFile]);
+  }
+
   const formData = new FormData();
   const requestIdPrefix = fieldName === 'audio' ? 'voice' : 'image';
   const reactNativeFile: ReactNativeFile = mediaFile;
@@ -332,7 +431,41 @@ export const createImageEmergencyGuide = (
   imageFile: EmergencyGuideMediaFile,
   signal?: AbortSignal,
 ): Promise<EmergencyGuideResponse> =>
-  createMediaEmergencyGuide('image', imageFile, signal);
+  createMediaEmergencyGuide('images', imageFile, signal);
+
+export const createPhotoEmergencyGuide = async (
+  input: EmergencyGuidePhotoRequest,
+  signal?: AbortSignal,
+): Promise<EmergencyGuideResponse> => {
+  if (input.images.length === 0 || input.images.length > 5) {
+    throw new Error('응급 사진은 1장 이상 5장 이하로 전송해야 합니다.');
+  }
+  assertMediaFilesWithinLimits(input.images, input.audio);
+
+  const formData = new FormData();
+  formData.append(
+    'request',
+    JSON.stringify({
+      requestId: `image-${Date.now()}`,
+      language: 'ko-KR',
+    }),
+  );
+  input.images.forEach(imageFile => {
+    const reactNativeFile: ReactNativeFile = imageFile;
+    formData.append('images', reactNativeFile as unknown as Blob);
+  });
+
+  const normalizedText = input.text?.trim();
+  if (normalizedText) {
+    formData.append('text', normalizedText);
+  }
+  if (input.audio) {
+    const reactNativeFile: ReactNativeFile = input.audio;
+    formData.append('audio', reactNativeFile as unknown as Blob);
+  }
+
+  return createEmergencyGuide(formData, signal);
+};
 
 export const retryEmergencyGuide = async (
   sessionId: string,
@@ -671,4 +804,105 @@ export const getEmergencyWasteGuide = async (
   });
 
   return readEmergencyWasteGuideResponse(response, requestUrl);
+};
+
+const SESSION_LOCATION_STATUS_CODES: Readonly<Record<number, string>> = {
+  403: 'SESSION_FORBIDDEN',
+  404: 'SESSION_NOT_FOUND',
+  409: 'SESSION_LOCATION_CONFLICT',
+};
+
+const isValidSessionLocationReport = (
+  report: EmergencySessionLocationReport,
+): boolean => {
+  if (report.status !== 'AVAILABLE') {
+    return (
+      report.latitude === null &&
+      report.longitude === null &&
+      report.accuracy === null
+    );
+  }
+
+  return (
+    Number.isFinite(report.latitude) &&
+    Number.isFinite(report.longitude) &&
+    (report.accuracy === null || Number.isFinite(report.accuracy))
+  );
+};
+
+// PUT /api/v1/sessions/{sessionId}/location
+// 세션 소유자 토큰으로 일회성 GPS 수집 결과를 저장합니다. 같은 내용의 재시도는 성공하고,
+// 이미 다른 값이 저장된 세션은 409(SESSION_LOCATION_CONFLICT)로 거절됩니다.
+export const reportEmergencySessionLocation = async (
+  sessionId: string,
+  report: EmergencySessionLocationReport,
+  signal?: AbortSignal,
+): Promise<void> => {
+  const normalizedSessionId = sessionId.trim();
+
+  if (!normalizedSessionId) {
+    throw new Error('응급 가이드 sessionId가 없습니다.');
+  }
+
+  if (!isValidSessionLocationReport(report)) {
+    throw new Error('세션 위치 보고 내용이 올바르지 않습니다.');
+  }
+
+  const path = `/api/v1/sessions/${encodeURIComponent(
+    normalizedSessionId,
+  )}/location`;
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${path}`;
+  logRequest(requestUrl, 'PUT');
+  const response = await authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+      signal,
+    },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (
+        await refreshAuthTokens()
+      ).accessToken,
+  });
+
+  if (response.ok) {
+    console.warn('[EmergencyGuide API][Response]', {
+      requestUrl,
+      status: response.status,
+      ok: true,
+      errorCode: null,
+    });
+    return;
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = (await response.json()) as unknown;
+  } catch {
+    payload = null;
+  }
+
+  const failure = readFailure(payload);
+  const code =
+    failure?.code ??
+    SESSION_LOCATION_STATUS_CODES[response.status] ??
+    'REQUEST_FAILED';
+  console.warn('[EmergencyGuide API][Response]', {
+    requestUrl,
+    status: response.status,
+    ok: false,
+    errorCode: code,
+  });
+
+  throw new EmergencyGuideRequestError(
+    failure?.message ?? '세션 위치 저장에 실패했습니다.',
+    response.status,
+    code,
+    requestUrl,
+    failure?.details ?? [],
+  );
 };

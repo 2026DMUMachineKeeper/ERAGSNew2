@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, Text, TextInput } from 'react-native';
+import { Alert, Text, TextInput } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
@@ -43,8 +43,9 @@ describe('회원가입 처리 흐름', () => {
   };
 
   const submitForm = async (): Promise<void> => {
+    // Pressable은 memo로 감싸져 있어 findAllByType으로 찾을 수 없으므로 onPress와 문구로 찾습니다.
     const button = renderer.root
-      .findAllByType(Pressable)
+      .findAll(candidate => typeof candidate.props.onPress === 'function')
       .find(candidate =>
         candidate.findAllByType(Text).some(textNode => textNode.props.children === '회원가입'),
       );
@@ -95,7 +96,7 @@ describe('회원가입 처리 흐름', () => {
     jest
       .mocked(register)
       .mockRejectedValue(
-        new ApiRequestError({ code: 'DUPLICATE_EMAIL', message: '내부 오류' }, 409),
+        new ApiRequestError({ code: 'DUPLICATE_EMAIL', details: [], message: '내부 오류' }, 409),
       );
     fillForm('01012345678');
     await submitForm();

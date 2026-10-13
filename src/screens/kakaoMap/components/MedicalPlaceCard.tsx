@@ -105,13 +105,13 @@ export const MedicalPlaceCard = ({
                 : '실시간 병상 정보 미제공'}
             </Text>
             <View className="flex-row py-1.5">
-              <Text className="w-24 text-coment font-suitMedium text-gray">가용 병상</Text>
+              <Text className="w-24 text-coment font-suitMedium text-gray">병상</Text>
               <Text className="flex-1 text-coment font-suitMedium text-memoText">
                 {formatBedOccupancy(location.hospitalDetails.availableBeds)}
               </Text>
             </View>
             <View className="flex-row py-1.5">
-              <Text className="w-24 text-coment font-suitMedium text-gray">수술실 병상</Text>
+              <Text className="w-24 text-coment font-suitMedium text-gray">수술실</Text>
               <Text className="flex-1 text-coment font-suitMedium text-memoText">
                 {formatBedOccupancy(location.hospitalDetails.operatingRoomBeds)}
               </Text>

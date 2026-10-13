@@ -5,6 +5,7 @@ import {
   type BottomTabBarButtonProps,
 } from '@react-navigation/bottom-tabs';
 import { PlatformPressable } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import tailwindConfig from '../../tailwind.config';
@@ -148,6 +149,8 @@ const renderTabIcon = (routeName: TabRouteName, focused: boolean) => {
 };
 
 export function MainTabNavigator(): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       initialRouteName="HomeTab"
@@ -159,9 +162,9 @@ export function MainTabNavigator(): React.JSX.Element {
         tabBarIcon: ({ focused }) =>
           renderTabIcon(route.name as TabRouteName, focused),
         tabBarStyle: {
-          height: 70,
+          height: 70 + insets.bottom,
           marginBottom: 0,
-          paddingBottom: 0,
+          paddingBottom: insets.bottom,
           paddingHorizontal: 0,
           borderTopWidth: 0,
           backgroundColor: colors.white,

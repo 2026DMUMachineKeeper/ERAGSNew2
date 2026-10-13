@@ -8,3 +8,6 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# react-native-config는 BuildConfig 필드를 리플렉션으로 읽으므로 난독화에서 제외합니다.
+-keep class com.eragsnew2.BuildConfig { *; }
