@@ -1,5 +1,5 @@
 import React from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, type TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -15,6 +15,23 @@ type SignUpScreenProps = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 const { colors } = tailwindConfig;
 export const SignUpScreen = ({ navigation }: SignUpScreenProps): React.JSX.Element => {
   const { values, errors, isSubmitting, handleChange, handleSubmit } = useSignUp(navigation);
+  const emailInputRef = React.useRef<TextInput>(null);
+  const guardianPhoneInputRef = React.useRef<TextInput>(null);
+  const passwordInputRef = React.useRef<TextInput>(null);
+  const passwordConfirmInputRef = React.useRef<TextInput>(null);
+
+  const handleNameSubmit = (): void => {
+    emailInputRef.current?.focus();
+  };
+  const handleEmailSubmit = (): void => {
+    guardianPhoneInputRef.current?.focus();
+  };
+  const handleGuardianPhoneSubmit = (): void => {
+    passwordInputRef.current?.focus();
+  };
+  const handlePasswordSubmit = (): void => {
+    passwordConfirmInputRef.current?.focus();
+  };
 
   const handleLoginPress = (): void => {
     navigation.navigate('Login');
@@ -46,6 +63,8 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps): React.JSX.Eleme
                     autoCapitalize: 'words',
                     autoCorrect: false,
                     onChangeText: (nextText: string): void => handleChange('name', nextText),
+                    onSubmitEditing: handleNameSubmit,
+                    submitBehavior: 'submit',
                     placeholder: '이름을 입력하세요',
                     placeholderTextColor: colors.placeholder,
                     returnKeyType: 'next',
@@ -58,11 +77,14 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps): React.JSX.Eleme
                   <AuthTextInput
                     errorMessage={errors.email ?? undefined}
                     iconName="email"
+                    inputRef={emailInputRef}
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
                       keyboardType: 'email-address',
                       onChangeText: (nextText: string): void => handleChange('email', nextText),
+                      onSubmitEditing: handleEmailSubmit,
+                      submitBehavior: 'submit',
                       placeholder: '이메일을 입력하세요',
                       placeholderTextColor: colors.placeholder,
                       returnKeyType: 'next',
@@ -76,10 +98,13 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps): React.JSX.Eleme
                   <AuthTextInput
                     errorMessage={errors.guardianPhoneNumber ?? undefined}
                     iconName="phone"
+                    inputRef={guardianPhoneInputRef}
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
                       keyboardType: 'phone-pad',
+                      onSubmitEditing: handleGuardianPhoneSubmit,
+                      submitBehavior: 'submit',
                       onChangeText: (nextText: string): void =>
                         handleChange('guardianPhoneNumber', nextText),
                       placeholder: '보호자 전화번호를 입력하세요 (선택)',
@@ -94,10 +119,13 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps): React.JSX.Eleme
                 <View className="mt-5">
                   <AuthTextInput
                     iconName="lock"
+                    inputRef={passwordInputRef}
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
                       onChangeText: (nextText: string): void => handleChange('password', nextText),
+                      onSubmitEditing: handlePasswordSubmit,
+                      submitBehavior: 'submit',
                       placeholder: '비밀번호를 입력하세요',
                       placeholderTextColor: colors.placeholder,
                       returnKeyType: 'next',
@@ -111,6 +139,7 @@ export const SignUpScreen = ({ navigation }: SignUpScreenProps): React.JSX.Eleme
                 <View className="mt-5">
                   <AuthTextInput
                     iconName="lock"
+                    inputRef={passwordConfirmInputRef}
                     inputProps={{
                       autoCapitalize: 'none',
                       autoCorrect: false,
