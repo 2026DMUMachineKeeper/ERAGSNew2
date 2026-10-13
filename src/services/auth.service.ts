@@ -15,6 +15,7 @@ import type {
 
 import {
   AuthSessionExpiredError,
+  RequestTimeoutError,
   authenticatedFetch,
   fetchWithTimeout,
   getApiBaseUrl,
@@ -41,6 +42,28 @@ export const isAuthSessionExpiredError = (
   return (
     error instanceof AuthSessionExpiredError ||
     (error instanceof Error && error.name === 'AuthSessionExpiredError')
+  );
+};
+
+// 토큰 갱신 중 로그아웃이나 다른 계정 로그인으로 세션이 바뀌었을 때 사용합니다.
+// 새 세션을 지우지 않도록 세션 만료(AuthSessionExpiredError)와 구분합니다.
+export class AuthSessionChangedError extends Error {
+  constructor(message = '인증 세션이 변경되었습니다. 다시 시도해 주세요.') {
+    super(message);
+    this.name = 'AuthSessionChangedError';
+  }
+}
+
+// 서버가 토큰에 대한 판정을 내리지 못한 오류입니다(오프라인, 시간 초과, 5xx, 형식 오류).
+// 이 경우에만 저장된 세션으로 앱에 진입하고, 4xx 거부는 세션 무효로 봅니다.
+export const isTransientAuthError = (error: unknown): boolean => {
+  if (error instanceof TypeError || error instanceof RequestTimeoutError) {
+    return true;
+  }
+
+  return (
+    error instanceof ApiRequestError &&
+    (error.status >= 500 || error.code === 'INVALID_RESPONSE')
   );
 };
 
@@ -186,13 +209,46 @@ export const login = async (
   ) as LoginResponse;
 };
 
-export const saveAuthTokens = async (
+// 키체인 읽기-수정-쓰기 작업이 서로 끼어들어 최신 토큰을 덮어쓰지 않도록 순서대로 실행합니다.
+let authStorageQueue: Promise<unknown> = Promise.resolve();
+
+const runAuthStorageTask = <T>(task: () => Promise<T>): Promise<T> => {
+  const result = authStorageQueue.then(task);
+  authStorageQueue = result.catch((): void => undefined);
+  return result;
+};
+
+// 로그인·로그아웃으로 세션이 바뀔 때마다 증가시켜, 이전 세션에서 시작한 토큰 갱신 결과를 버립니다.
+let authSessionGeneration = 0;
+// 로그아웃 요청이 오가는 동안 새 토큰 갱신이 refresh 토큰을 교체해 폐기를 무효화하지 않도록 막습니다.
+let isLogoutInProgress = false;
+
+// 요청을 시작한 세션이 아직 유효할 때만 저장된 세션을 지웁니다(늦은 401이 새 세션을 지우지 않도록).
+const clearAuthSessionIfUnchanged = async (
+  generation: number,
+): Promise<void> => {
+  if (generation !== authSessionGeneration) {
+    throw new AuthSessionChangedError();
+  }
+  await clearAuthSession();
+};
+
+const writeAuthTokens = async (
   email: string,
   tokens: StoredAuthTokens,
 ): Promise<void> => {
   await Keychain.setGenericPassword(email, JSON.stringify(tokens), {
     service: AUTH_TOKEN_SERVICE,
   });
+};
+
+// 새 세션을 저장합니다(로그인). 진행 중이던 이전 세션의 토큰 갱신 결과는 저장되지 않습니다.
+export const saveAuthTokens = (
+  email: string,
+  tokens: StoredAuthTokens,
+): Promise<void> => {
+  authSessionGeneration += 1;
+  return runAuthStorageTask(() => writeAuthTokens(email, tokens));
 };
 
 export const saveAuthToken = async (
@@ -319,9 +375,10 @@ export const getStoredAuthUser = async (): Promise<AuthUser | undefined> => {
   return tokens.user ?? { id: 0, email };
 };
 
-export const updateStoredAuthUser = async (
+export const updateStoredAuthUser = (
   nextProfile: Pick<AuthUser, 'name' | 'guardian_phone'>,
-): Promise<AuthUser> => {
+): Promise<AuthUser> =>
+  runAuthStorageTask(async (): Promise<AuthUser> => {
   const { email, tokens } = await readStoredAuthTokens();
   const currentUser = tokens.user ?? { id: 0, email };
   const nextName = nextProfile.name?.trim();
@@ -333,13 +390,13 @@ export const updateStoredAuthUser = async (
     ...(nextGuardianPhone ? { guardian_phone: nextGuardianPhone } : {}),
   };
 
-  await saveAuthTokens(email, {
+  await writeAuthTokens(email, {
     ...tokens,
     user: nextUser,
   });
 
   return nextUser;
-};
+  });
 
 const getJwtExpiration = (token: string): number | undefined => {
   const tokenParts = token.split('.');
@@ -420,12 +477,13 @@ export const getMyPage = async (userId: number): Promise<MyPageProfile> => {
     throw new Error('로그인 사용자 ID를 확인할 수 없습니다.');
   }
 
+  const generation = authSessionGeneration;
   const response = await authenticatedAuthGet(
     `/api/auth/mypage/${encodeURIComponent(String(userId))}`,
   );
 
   if (response.status === 401 || response.status === 403) {
-    await clearAuthSession();
+    await clearAuthSessionIfUnchanged(generation);
     throw new AuthSessionExpiredError();
   }
 
@@ -479,6 +537,7 @@ export const updateMyPage = async (
     throw new Error('로그인 사용자 ID를 확인할 수 없습니다.');
   }
 
+  const generation = authSessionGeneration;
   const response = await authenticatedAuthPut(
     `/api/auth/mypage/${encodeURIComponent(String(userId))}`,
     {
@@ -488,7 +547,7 @@ export const updateMyPage = async (
   );
 
   if (response.status === 401 || response.status === 403) {
-    await clearAuthSession();
+    await clearAuthSessionIfUnchanged(generation);
     throw new AuthSessionExpiredError();
   }
 
@@ -692,10 +751,18 @@ const normalizeAuthTokenResponse = (
 };
 
 const requestRefreshedAuthTokens = async (): Promise<StoredAuthTokens> => {
-  const { email, tokens } = await readStoredAuthTokens();
+  if (isLogoutInProgress) {
+    throw new AuthSessionChangedError();
+  }
+
+  // 세대 캡처와 토큰 읽기를 큐 안에서 함께 처리해, 저장이 끝나기 전의 이전 세션 토큰을 읽지 않습니다.
+  const { generation, tokens } = await runAuthStorageTask(async () => ({
+    generation: authSessionGeneration,
+    tokens: (await readStoredAuthTokens()).tokens,
+  }));
 
   if (tokens.refreshToken.trim().length === 0) {
-    await clearAuthSession();
+    await clearAuthSessionIfUnchanged(generation);
     throw new AuthSessionExpiredError();
   }
 
@@ -712,23 +779,33 @@ const requestRefreshedAuthTokens = async (): Promise<StoredAuthTokens> => {
       error instanceof ApiRequestError &&
       (error.status === 401 || error.status === 403)
     ) {
-      await clearAuthSession();
+      // 갱신 중에 다른 계정으로 로그인했다면 새 세션을 지우지 않습니다.
+      await clearAuthSessionIfUnchanged(generation);
       throw new AuthSessionExpiredError();
     }
 
     throw error;
   }
 
-  const nextTokens: StoredAuthTokens = {
-    accessToken: refreshResponse.access_token,
-    refreshToken: refreshResponse.refresh_token,
-    expiresIn: refreshResponse.expires_in,
-    ...(tokens.user ? { user: tokens.user } : {}),
-  };
+  return runAuthStorageTask(async (): Promise<StoredAuthTokens> => {
+    // 갱신 중에 로그아웃했거나 다른 계정으로 로그인했다면 이전 세션의 토큰을 되살리지 않습니다.
+    if (generation !== authSessionGeneration) {
+      throw new AuthSessionChangedError();
+    }
 
-  await saveAuthTokens(email, nextTokens);
+    // 갱신 중에 저장된 사용자 정보(프로필 수정 등)를 잃지 않도록 최신 값을 다시 읽습니다.
+    const { email, tokens: latestTokens } = await readStoredAuthTokens();
+    const nextTokens: StoredAuthTokens = {
+      accessToken: refreshResponse.access_token,
+      refreshToken: refreshResponse.refresh_token,
+      expiresIn: refreshResponse.expires_in,
+      ...(latestTokens.user ? { user: latestTokens.user } : {}),
+    };
 
-  return nextTokens;
+    await writeAuthTokens(email, nextTokens);
+
+    return nextTokens;
+  });
 };
 
 let refreshAuthTokensPromise: Promise<StoredAuthTokens> | null = null;
@@ -764,25 +841,32 @@ export const restoreAuthSession = async (): Promise<string> => {
   }
 };
 
-export const clearAuthSession = async (): Promise<void> => {
-  await Keychain.resetGenericPassword({
-    service: AUTH_TOKEN_SERVICE,
+export const clearAuthSession = (): Promise<void> => {
+  authSessionGeneration += 1;
+  return runAuthStorageTask(async (): Promise<void> => {
+    await Keychain.resetGenericPassword({
+      service: AUTH_TOKEN_SERVICE,
+    });
   });
 };
 
 export const logout = async (): Promise<LogoutResponse> => {
-  const { tokens } = await readStoredAuthTokens();
-
-  if (tokens.refreshToken.trim().length === 0) {
-    await clearAuthSession();
-    throw new AuthSessionExpiredError();
-  }
+  isLogoutInProgress = true;
 
   try {
+    // 진행 중인 토큰 갱신이 끝난 뒤의 최신 refresh 토큰을 보내야 서버에서 폐기됩니다.
+    await refreshAuthTokensPromise?.catch((): void => undefined);
+    const { tokens } = await readStoredAuthTokens();
+
+    if (tokens.refreshToken.trim().length === 0) {
+      throw new AuthSessionExpiredError();
+    }
+
     return await postAuthRequest<LogoutResponse>('/api/auth/logout', {
       refresh_token: tokens.refreshToken,
     });
   } finally {
+    isLogoutInProgress = false;
     await clearAuthSession();
   }
 };

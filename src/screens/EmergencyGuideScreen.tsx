@@ -2,6 +2,7 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -17,11 +18,13 @@ import {
 import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
+import { AssessmentOnlyModal } from './emergencyGuide/components/AssessmentOnlyModal';
 import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
   retryEmergencyGuide,
+  requestTtsVoiceDataInstallation,
   speakTts,
   stopTts,
 } from '../services';
@@ -87,8 +90,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     state => state.currentStepIndex,
   );
   const elapsedSeconds = useEmergencyGuideStore(state => state.elapsedSeconds);
-  const incrementElapsedSeconds = useEmergencyGuideStore(
-    state => state.incrementElapsedSeconds,
+  const syncElapsedSeconds = useEmergencyGuideStore(
+    state => state.syncElapsedSeconds,
   );
   const markStepCompleted = useEmergencyGuideStore(
     state => state.markStepCompleted,
@@ -109,19 +112,46 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const mainLabel = storedMainLabel;
   const subtypeLabel = storedSubtypeLabel;
   const lastSpokenMessageRef = React.useRef('');
+  const isStartingNewRequestRef = React.useRef(false);
+  const shouldRetryTtsAfterInstallationRef = React.useRef(false);
+  // 음성 재생에 한 번 실패하면 단계마다 같은 안내 창이 뜨지 않도록 자동 재생을 멈춥니다.
+  const isTtsUnavailableRef = React.useRef(false);
+  const hasShownTtsErrorAlertRef = React.useRef(false);
+  const [ttsRetryCount, setTtsRetryCount] = React.useState(0);
   const [isRetrying, setIsRetrying] = React.useState(false);
+  // 진행 중인 재시도 요청입니다. 연타를 막고 화면을 떠날 때 취소하는 데 씁니다.
+  const retryControllerRef = React.useRef<AbortController | null>(null);
+
+  React.useEffect(
+    () => () => {
+      retryControllerRef.current?.abort();
+    },
+    [],
+  );
   const visibleStepCount = getVisibleStepCount(subtypeLabel);
   const fallbackSteps = emergencyGuideSteps
     .slice(0, visibleStepCount)
     .map(toGuideRuntimeStep);
   const serverSteps =
-    guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
+    guide?.status === 'ASSESSMENT_ONLY'
+      ? []
+      : guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
   const steps = guide ? serverSteps : fallbackSteps;
 
   React.useEffect(() => {
-    const timer = setInterval(incrementElapsedSeconds, 1000);
-    return () => clearInterval(timer);
-  }, [incrementElapsedSeconds]);
+    syncElapsedSeconds();
+    const timer = setInterval(syncElapsedSeconds, 1000);
+    // 백그라운드에서는 타이머가 멈추므로 앱으로 돌아오면 바로 실제 경과 시간을 반영합니다.
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        syncElapsedSeconds();
+      }
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [syncElapsedSeconds]);
 
   const currentStep = steps[currentStepIndex] ?? steps[0];
   const elapsedLabel = formatElapsed(elapsedSeconds);
@@ -133,7 +163,21 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const currentInstruction = currentStep?.instruction?.trim() ?? '';
 
   React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active' && shouldRetryTtsAfterInstallationRef.current) {
+        shouldRetryTtsAfterInstallationRef.current = false;
+        isTtsUnavailableRef.current = false;
+        lastSpokenMessageRef.current = '';
+        setTtsRetryCount(count => count + 1);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  React.useEffect(() => {
     if (
+      isStartingNewRequestRef.current ||
+      isTtsUnavailableRef.current ||
       !currentInstruction ||
       lastSpokenMessageRef.current === currentInstruction
     ) {
@@ -141,24 +185,66 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     }
 
     lastSpokenMessageRef.current = currentInstruction;
+    const speechController = new AbortController();
 
     const speakCurrentStep = async (): Promise<void> => {
       try {
-        await speakTts(currentInstruction);
+        await speakTts(currentInstruction, speechController.signal);
       } catch (error) {
+        if (speechController.signal.aborted) {
+          return;
+        }
         console.error('[EmergencyGuideScreen] TTS 자동 재생 실패:', error);
-        Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 'lang_missing_data'
+        ) {
+          // 음성 데이터가 없으면 설치 전까지는 실패가 반복되므로 자동 재생을 멈춥니다.
+          isTtsUnavailableRef.current = true;
+          Alert.alert(
+            '한국어 음성 데이터가 필요해요',
+            '한국어 음성 데이터를 설치한 뒤 돌아오면 음성 안내를 다시 시도합니다. 설치 전에도 화면의 처치 안내를 계속 확인할 수 있습니다.',
+            [
+              { text: '텍스트로 계속', style: 'cancel' },
+              {
+                text: '음성 데이터 설치',
+                onPress: async (): Promise<void> => {
+                  shouldRetryTtsAfterInstallationRef.current = true;
+                  try {
+                    await requestTtsVoiceDataInstallation();
+                  } catch (installationError) {
+                    shouldRetryTtsAfterInstallationRef.current = false;
+                    console.warn('[EmergencyGuideScreen] 음성 데이터 설치 화면 열기 실패:', installationError);
+                    Alert.alert(
+                      '음성 데이터 설치 안내',
+                      '설치 화면을 열지 못했습니다. 기기의 설정에서 텍스트 음성 변환을 찾아 한국어 음성 데이터를 설치해 주세요.',
+                    );
+                  }
+                },
+              },
+            ],
+          );
+          return;
+        }
+        // 일시적 오류(오디오 포커스 등)는 다음 단계에서 다시 시도하되, 안내 창은 한 번만 띄웁니다.
+        if (!hasShownTtsErrorAlertRef.current) {
+          hasShownTtsErrorAlertRef.current = true;
+          Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
+        }
       }
     };
 
     speakCurrentStep();
 
     return () => {
+      speechController.abort();
       stopTts().catch(error => {
         console.warn('[EmergencyGuideScreen] TTS 정지 실패:', error);
       });
     };
-  }, [currentInstruction]);
+  }, [currentInstruction, ttsRetryCount]);
 
   const handleStopPress = (hasCompletedCurrentStep: boolean): void => {
     if (!hasCompletedCurrentStep && completedStepIds.length === 0) {
@@ -218,15 +304,32 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleRetryPress = async (): Promise<void> => {
-    if (!guide?.sessionId) {
+    const sessionId = guide?.sessionId;
+    if (!sessionId || retryControllerRef.current) {
       return;
     }
 
+    const retryController = new AbortController();
+    retryControllerRef.current = retryController;
     setIsRetrying(true);
 
     try {
-      setGuide(await retryEmergencyGuide(guide.sessionId));
+      const retriedGuide = await retryEmergencyGuide(
+        sessionId,
+        retryController.signal,
+      );
+      // 응답 전에 화면을 떠났거나 새 가이드가 시작됐다면 늦은 응답으로 덮어쓰지 않습니다.
+      if (
+        retryController.signal.aborted ||
+        useEmergencyGuideStore.getState().guide?.sessionId !== sessionId
+      ) {
+        return;
+      }
+      setGuide(retriedGuide);
     } catch (error) {
+      if (retryController.signal.aborted) {
+        return;
+      }
       const errorMessage = getEmergencyGuideErrorMessage(error);
 
       if (error instanceof EmergencyGuideRequestError && error.status === 404) {
@@ -238,9 +341,32 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
 
       Alert.alert('응급 가이드 재시도 실패', errorMessage);
     } finally {
-      setIsRetrying(false);
+      if (retryControllerRef.current === retryController) {
+        retryControllerRef.current = null;
+      }
+      if (!retryController.signal.aborted) {
+        setIsRetrying(false);
+      }
     }
   };
+
+  const handleNewRequestPress = (): void => {
+    isStartingNewRequestRef.current = true;
+    resetGuide();
+    navigation.popTo('FirstAid');
+  };
+
+  if (guide?.status === 'ASSESSMENT_ONLY') {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
+        <AssessmentOnlyModal
+          assessment={guide.assessment}
+          onClose={() => navigation.goBack()}
+          onNewRequest={handleNewRequestPress}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (guide && steps.length === 0) {
     return (

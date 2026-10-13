@@ -120,7 +120,7 @@ export const MedicineMemoScreen = ({ navigation }: MedicineMemoScreenProps): Rea
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-memoBg" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <View className="flex-1 px-4 pt-3">
         <View className="h-10 flex-row items-center">
           <TouchableOpacity
@@ -171,7 +171,7 @@ export const MedicineMemoScreen = ({ navigation }: MedicineMemoScreenProps): Rea
         />
       </View>
 
-      <View className="border-t border-memoLine bg-memoBg px-4 pb-5 pt-3">
+      <View className="border-t border-memoLine bg-background px-4 pb-5 pt-3">
         <TouchableOpacity
           accessibilityLabel="약품 추가"
           accessibilityRole="button"

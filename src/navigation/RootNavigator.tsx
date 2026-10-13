@@ -64,7 +64,7 @@ export const RootNavigator = (): React.JSX.Element => {
 
   if (initialRouteName === null) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
+      <View className="flex-1 items-center justify-center bg-background">
         <ActivityIndicator />
       </View>
     );
@@ -73,7 +73,7 @@ export const RootNavigator = (): React.JSX.Element => {
   return (
     <Stack.Navigator
       initialRouteName={initialRouteName}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, statusBarStyle: 'dark' }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />

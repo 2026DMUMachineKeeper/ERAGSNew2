@@ -22,10 +22,13 @@ jest.mock('@/screens/home/useHomeEmergencyActions', () => ({
     isListening: false,
     isVisionUploading: false,
     isVoiceProcessing: false,
+    photoInputStep: null,
+    photoUris: [],
     visionStatus: null,
     voiceStatus: null,
     handleEmergencyReportPress: jest.fn(),
     handlePhotoPress: jest.fn(),
+    handleRemovePhoto: jest.fn(),
     handleVoicePress: jest.fn(),
   }),
 }));

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
@@ -19,8 +19,10 @@ import {
   SERVER_SYMPTOM_ID_BY_CATEGORY,
   toEmergencyGuideQuestionnaire,
 } from '@/utils/emergencyQuestionnaire';
+import { reportEmergencySessionLocationOnce } from '@/utils/emergencySessionLocation';
 
 import { EmergencyQuestionHeader } from './firstAidDetail/components';
+import { CategoryMismatchModal } from './firstAidDetail/components/CategoryMismatchModal';
 
 type FirstAidDetailProps = NativeStackScreenProps<RootStackParamList, 'FirstAidDetail'>;
 
@@ -33,18 +35,10 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
     [category],
   );
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
-  const [questionAnswers, setQuestionAnswers] = React.useState<QuestionAnswers>(
-    (): QuestionAnswers => {
-      if (!category) {
-        return {};
-      }
-
-      return {
-        visibleSymptoms: [SERVER_SYMPTOM_ID_BY_CATEGORY[category.id]],
-      };
-    },
-  );
+  const [questionAnswers, setQuestionAnswers] = React.useState<QuestionAnswers>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isMismatchModalVisible, setIsMismatchModalVisible] = React.useState(false);
+  const [confirmedMismatchKey, setConfirmedMismatchKey] = React.useState<string | null>(null);
   const activeSubmissionRef = React.useRef<AbortController | null>(null);
   const isFocusedRef = React.useRef(isFocused);
   const isMountedRef = React.useRef(true);
@@ -107,18 +101,17 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
 
   const currentQuestion = questions[currentQuestionIndex];
   const selectedAnswerIds = questionAnswers[currentQuestion.id] ?? [];
+  const mismatchKey = `${category.id}:${[...(questionAnswers.visibleSymptoms ?? [])].sort().join(',')}`;
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
+  const hasImmediateDanger = (questionAnswers.immediateDanger ?? []).some(
+    answerId => answerId !== 'NONE',
+  );
   const handleOptionPress = (answerId: string): void => {
+    if (currentQuestion.id === 'visibleSymptoms') {
+      setConfirmedMismatchKey(null);
+    }
     setQuestionAnswers(currentAnswers => {
       const previousAnswerIds = currentAnswers[currentQuestion.id] ?? [];
-
-      if (
-        currentQuestion.id === 'visibleSymptoms' &&
-        answerId === SERVER_SYMPTOM_ID_BY_CATEGORY[category.id] &&
-        previousAnswerIds.includes(answerId)
-      ) {
-        return currentAnswers;
-      }
 
       const nextAnswerIds = getNextEmergencyAnswerIds(currentQuestion, previousAnswerIds, answerId);
 
@@ -138,12 +131,42 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
   };
 
   const handleNextPress = async (): Promise<void> => {
-    if (!isLastQuestion) {
-      setCurrentQuestionIndex(index => index + 1);
+    if (selectedAnswerIds.length === 0 || isSubmittingRef.current) {
       return;
     }
 
-    if (isSubmittingRef.current) {
+    if (!isLastQuestion) {
+      if (currentQuestion.id === 'immediateDanger' && hasImmediateDanger) {
+        Alert.alert(
+          '119 신고가 필요해요',
+          '즉시 위험 신호가 선택되었습니다. 119에 신고하고 안내를 따라 주세요.',
+          [
+            {
+              text: '119 전화',
+              onPress: (): void => {
+                Linking.openURL('tel:119').catch(() => {
+                  Alert.alert('전화 연결 안내', '전화 앱에서 119로 직접 전화해 주세요.');
+                });
+              },
+            },
+            { text: '문진 계속', onPress: () => setCurrentQuestionIndex(index => index + 1) },
+          ],
+          { cancelable: false },
+        );
+        return;
+      }
+
+      if (
+        currentQuestion.id === 'visibleSymptoms' &&
+        !selectedAnswerIds.includes(SERVER_SYMPTOM_ID_BY_CATEGORY[category.id]) &&
+        !hasImmediateDanger &&
+        confirmedMismatchKey !== mismatchKey
+      ) {
+        setIsMismatchModalVisible(true);
+        return;
+      }
+
+      setCurrentQuestionIndex(index => index + 1);
       return;
     }
 
@@ -182,6 +205,8 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
         mainLabel: category.label,
         source: 'manual',
       });
+      // 관제용 위치 보고는 가이드 흐름과 독립적으로 백그라운드에서 한 번만 보냅니다.
+      reportEmergencySessionLocationOnce(guide.sessionId);
       navigation.replace('EmergencyGuide');
     } catch (error) {
       if (
@@ -207,6 +232,20 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
+      <CategoryMismatchModal
+        isVisible={isMismatchModalVisible}
+        categoryLabel={category.label}
+        onReselectCategory={() => {
+          setIsMismatchModalVisible(false);
+          navigation.popTo('FirstAid');
+        }}
+        onEditSymptoms={() => setIsMismatchModalVisible(false)}
+        onContinue={() => {
+          setConfirmedMismatchKey(mismatchKey);
+          setIsMismatchModalVisible(false);
+          setCurrentQuestionIndex(index => index + 1);
+        }}
+      />
       <EmergencyQuestionHeader
         categoryLabel={category.label}
         questions={questions}

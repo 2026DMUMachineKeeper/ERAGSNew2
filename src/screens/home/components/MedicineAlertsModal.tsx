@@ -33,7 +33,7 @@ export const MedicineAlertsModal = ({
   <Modal visible={isVisible} animationType="fade" onRequestClose={onClose}>
     <SafeAreaView
       edges={['top', 'bottom']}
-      className="flex-1 bg-white px-5 pt-5"
+      className="flex-1 bg-background px-5 pt-5"
     >
       <View className="flex-row items-center justify-between">
         <Text className="text-lg font-suitBold text-memoText">약품 알림</Text>

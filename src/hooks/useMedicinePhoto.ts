@@ -79,8 +79,10 @@ export const useMedicinePhoto = (
     setExpireDateError(null);
   };
 
-  const handleConfirmRegistration = async (
-    shouldSkipExpiry = false,
+  // 버튼 onPress에 바로 넘기는 핸들러는 press 이벤트를 인자로 받으므로,
+  // 건너뛰기 여부는 아래 두 핸들러에서만 명시적으로 넘깁니다.
+  const completeRegistration = async (
+    shouldSkipExpiry: boolean,
   ): Promise<void> => {
     if (!registeredMedicine || isSavingExpiry) {
       return;
@@ -126,8 +128,12 @@ export const useMedicinePhoto = (
     ]);
   };
 
+  const handleConfirmRegistration = async (): Promise<void> => {
+    await completeRegistration(false);
+  };
+
   const handleRegisterWithoutExpiry = async (): Promise<void> => {
-    await handleConfirmRegistration(true);
+    await completeRegistration(true);
   };
 
   const uploadCapturedPhoto = async (imageBase64: string): Promise<void> => {

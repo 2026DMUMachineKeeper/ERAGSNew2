@@ -54,6 +54,59 @@ describe('fetchNearbyAeds', () => {
     );
   });
 
+  it('좌표가 비었거나 잘못된 AED만 제외하고 전화번호·상세 위치는 선택 항목으로 처리한다', async (): Promise<void> => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const aed = {
+      name: '계산1동주민센터',
+      address: '인천광역시 계양구 향교로 24',
+      lat: '37.5396051913',
+      lng: '126.7213476855',
+      phone: '032*******',
+      distance: '0.16',
+      detailPlaces: ['1층 민원실내'],
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => ({
+        success: true,
+        data: [
+          { ...aed, name: '좌표 없음', lat: null, lng: '' },
+          { ...aed, name: '범위 밖 좌표', lat: '137.5' },
+          { ...aed, name: '전화번호 없음', phone: null, detailPlaces: null },
+        ],
+      }),
+    } as Response);
+
+    await expect(
+      fetchNearbyAeds({ latitude: 37.538, longitude: 126.722 }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        name: '전화번호 없음',
+        phone: '',
+        detailPlaces: [],
+        latitude: 37.5396051913,
+      }),
+    ]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('모든 AED 레코드 형식이 잘못되면 응답 오류로 처리한다', async (): Promise<void> => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async (): Promise<unknown> => ({
+        success: true,
+        data: [{ name: '좌표 없음', lat: null, lng: null }],
+      }),
+    } as Response);
+
+    await expect(
+      fetchNearbyAeds({ latitude: 37.538, longitude: 126.722 }),
+    ).rejects.toThrow();
+  });
+
   it('서버 오류의 상태와 오류 정보를 유지한다', async (): Promise<void> => {
     fetchMock.mockResolvedValue({
       ok: false,
