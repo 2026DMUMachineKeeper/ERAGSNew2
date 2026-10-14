@@ -64,12 +64,15 @@ export interface CompoundGuideInjuryInput {
 }
 
 export interface CompoundGuideResult {
+  schemaVersion?: '2';
+  planId?: string | null;
   status: 'ASSESSMENT_ONLY' | 'GUIDE_PENDING' | 'COMPLETE' | 'PARTIAL';
   blockedReasons: readonly string[];
   call119Required: boolean;
   display?: {
     status?: string;
     blockedReasons?: readonly { code: string; label: string }[];
+    redFlags?: readonly { code: string; label: string }[];
   };
   injuries: readonly {
     injuryId: string;
@@ -166,6 +169,9 @@ export interface EmergencyGuideResponse {
   treatment: EmergencyGuideTreatment;
   error: ApiError | null;
   compound?: CompoundGuideResult | null;
+  schemaVersion?: '2';
+  progress?: import('./compoundGuide.types').CompoundGuideProgress | null;
+  usedSupplies?: readonly import('./compoundGuide.types').CompoundConsumptionUnit[];
 }
 
 // 소유 앱이 세션당 한 번 보고하는 GPS 수집 결과입니다.

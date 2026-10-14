@@ -20,6 +20,7 @@ import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { AssessmentOnlyModal } from './emergencyGuide/components/AssessmentOnlyModal';
 import { CompoundGuideStatus } from './emergencyGuide/components/CompoundGuideStatus';
+import { CompoundGuideSession } from './emergencyGuide/components/CompoundGuideSession';
 import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
@@ -134,7 +135,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     .slice(0, visibleStepCount)
     .map(toGuideRuntimeStep);
   const serverSteps =
-    guide?.status === 'ASSESSMENT_ONLY'
+    guide?.compound || guide?.status === 'ASSESSMENT_ONLY'
       ? []
       : guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
   const steps = guide ? serverSteps : fallbackSteps;
@@ -360,7 +361,12 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   if (guide?.compound) {
     return (
       <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
-        <CompoundGuideStatus compound={guide.compound} onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
+        {guide.compound.schemaVersion === '2' && guide.sessionId ? (
+          <CompoundGuideSession key={guide.sessionId} sessionId={guide.sessionId} compound={guide.compound}
+            onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
+        ) : (
+          <CompoundGuideStatus compound={guide.compound} onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
+        )}
       </SafeAreaView>
     );
   }
