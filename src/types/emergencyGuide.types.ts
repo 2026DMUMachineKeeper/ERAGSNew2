@@ -28,6 +28,69 @@ export interface EmergencyGuidePatientContext {
   ageGroup: 'CHILD' | 'ADULT' | 'ELDERLY' | 'UNKNOWN';
 }
 
+export type CompoundCategoryCode =
+  | 'BLEEDING'
+  | 'BURN'
+  | 'FRACTURE_BRUISE'
+  | 'FEVER_NEUROLOGIC'
+  | 'ALLERGY_RASH'
+  | 'AIRWAY_OBSTRUCTION';
+
+export interface CompoundGuideRequest {
+  schemaVersion: '2';
+  requestId: string;
+  language: 'ko-KR';
+  patientContext: EmergencyGuidePatientContext;
+  injuries: readonly [CompoundGuideInjuryInput, CompoundGuideInjuryInput];
+  relations: readonly [
+    {
+      injuryIds: readonly [string, string];
+      relation: 'SAME' | 'DIFFERENT' | 'NOT_APPLICABLE' | 'UNKNOWN';
+      confirmed: boolean;
+    },
+  ];
+}
+
+export interface CompoundGuideInjuryInput {
+  injuryId: string;
+  categoryCode: CompoundCategoryCode;
+  confirmed: true;
+  location: {
+    scope: 'LOCALIZED' | 'SYSTEMIC' | 'UNKNOWN';
+    description: string | null;
+  };
+  observations: readonly string[];
+  questionnaire: readonly EmergencyGuideQuestionnaireAnswer[];
+}
+
+export interface CompoundGuideResult {
+  status: 'ASSESSMENT_ONLY' | 'GUIDE_PENDING' | 'COMPLETE' | 'PARTIAL';
+  blockedReasons: readonly string[];
+  call119Required: boolean;
+  display?: {
+    status?: string;
+    blockedReasons?: readonly { code: string; label: string }[];
+  };
+  injuries: readonly {
+    injuryId: string;
+    categoryCode: string;
+    deferredReason: string | null;
+    display?: { category?: string; disposition?: string };
+    assessment: {
+      subtypeCode: string | null;
+      severityCode: string;
+      call119Required: boolean;
+      missingInputs: readonly string[];
+      display?: {
+        category?: string;
+        subtype?: string;
+        severity?: string;
+        missingInputs?: readonly { code: string; label: string }[];
+      };
+    } | null;
+  }[];
+}
+
 export interface EmergencyGuideAssessment {
   assessmentId: string;
   categoryCode: string;
@@ -102,6 +165,7 @@ export interface EmergencyGuideResponse {
   assessment: EmergencyGuideAssessment | null;
   treatment: EmergencyGuideTreatment;
   error: ApiError | null;
+  compound?: CompoundGuideResult | null;
 }
 
 // 소유 앱이 세션당 한 번 보고하는 GPS 수집 결과입니다.

@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  CompoundGuideRequest,
   CreateEmergencyGuideHandoverRequest,
   CreateEmergencyGuideHandoverResponse,
   EmergencyGuideMediaFile,
@@ -106,6 +107,8 @@ const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   PAYLOAD_TOO_LARGE:
     '전송할 파일 용량이 너무 큽니다(합산 최대 80MB). 사진 수를 줄이거나 더 작은 파일로 다시 요청해 주세요.',
   GUIDE_PENDING: '응급 평가가 완료되었습니다. 처치 안내를 다시 요청해 주세요.',
+  INVALID_COMPOUND_REQUEST: '복합 손상 요청을 서버가 확인하지 못했습니다.',
+  REQUEST_ID_CONFLICT: '요청 내용이 변경되었습니다. 새 문진으로 요청해 주세요.',
   INVALID_RESPONSE:
     '응급 가이드 서버 응답을 확인하지 못했습니다. 앱과 서버 버전을 확인해 주세요.',
   UNSUPPORTED_AUDIO_TYPE:
@@ -299,13 +302,69 @@ const readEmergencyGuideResponse = async (
     );
   }
 
-  return (payload as unknown as EmergencyGuideSuccessEnvelope).data;
+  if (payload.data.compound != null && !isCompoundGuideResult(payload.data.compound)) {
+    throw new EmergencyGuideRequestError(
+      '복합 손상 응답 형식이 올바르지 않습니다.', response.status, 'INVALID_RESPONSE', requestUrl,
+    );
+  }
+
+  const guide = (payload as unknown as EmergencyGuideSuccessEnvelope).data;
+  console.warn(
+    '[EmergencyGuide API][Response Body]',
+    JSON.stringify({
+      sessionId: guide.sessionId,
+      requestId: guide.requestId,
+      status: guide.status,
+      assessment: guide.assessment,
+      treatment: {
+        routeCode: guide.treatment.routeCode,
+        stepCount: guide.treatment.steps.length,
+        steps: guide.treatment.steps.map(step => ({
+          stepId: step.stepId,
+          stepNo: step.stepNo,
+          instruction: step.instruction,
+        })),
+      },
+      error: guide.error,
+      compound: guide.compound ?? null,
+    }),
+  );
+  return guide;
 };
 
 const isEmergencyGuideTreatmentStep = (value: unknown): boolean =>
   isRecord(value) &&
   Number.isInteger(value.stepId) &&
   (value.stepId as number) > 0;
+
+const isCompoundGuideResult = (value: unknown): boolean => {
+  if (!isRecord(value) || typeof value.call119Required !== 'boolean' ||
+    !Array.isArray(value.blockedReasons) || !value.blockedReasons.every(code => typeof code === 'string') ||
+    !Array.isArray(value.injuries) || value.injuries.length !== 2) {
+    return false;
+  }
+  if (value.display != null && (!isRecord(value.display) ||
+    (value.display.blockedReasons != null && (!Array.isArray(value.display.blockedReasons) ||
+      !value.display.blockedReasons.every(reason => isRecord(reason) && typeof reason.code === 'string' && typeof reason.label === 'string'))))) {
+    return false;
+  }
+  return value.injuries.every(injury => {
+    if (!isRecord(injury) || typeof injury.injuryId !== 'string' || typeof injury.categoryCode !== 'string' ||
+      (injury.deferredReason != null && typeof injury.deferredReason !== 'string') ||
+      (injury.display != null && !isRecord(injury.display))) {
+      return false;
+    }
+    const assessment = injury.assessment;
+    if (assessment === null) {
+      return true;
+    }
+    return isRecord(assessment) && typeof assessment.call119Required === 'boolean' &&
+      Array.isArray(assessment.missingInputs) && assessment.missingInputs.every(code => typeof code === 'string') &&
+      (assessment.display == null || (isRecord(assessment.display) &&
+        (assessment.display.missingInputs == null || (Array.isArray(assessment.display.missingInputs) &&
+          assessment.display.missingInputs.every(input => isRecord(input) && typeof input.code === 'string' && typeof input.label === 'string')))));
+  });
+};
 
 // 세션 생성 시 JWT 사용자에게 소유권이 연결되어야 이후 위치 보고(PUT /sessions/{id}/location)가
 // 허용됩니다. 다만 토큰 문제로 응급 가이드 자체가 막히면 안 되므로 토큰은 최선 노력으로만 붙입니다.
@@ -390,6 +449,35 @@ export const createEmergencyGuide = async (
     EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS,
   );
 
+  return readEmergencyGuideResponse(response, requestUrl);
+};
+
+export const createCompoundGuide = async (
+  request: CompoundGuideRequest,
+  signal?: AbortSignal,
+): Promise<EmergencyGuideResponse> => {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+  const formData = new FormData();
+  formData.append('request', JSON.stringify(request));
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${EMERGENCY_GUIDE_SESSIONS_PATH}`;
+  logRequest(requestUrl);
+  console.warn('[EmergencyGuide API][Compound Request]', JSON.stringify(request));
+  const response = await authenticatedFetch({
+    path: EMERGENCY_GUIDE_SESSIONS_PATH,
+    getAccessToken: async () => {
+      const token = await getAuthToken();
+      if (signal?.aborted) {
+        throw createAbortError();
+      }
+      return token;
+    },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    refreshAccessToken: async () => (await refreshAuthTokens()).accessToken,
+    init: { method: 'POST', body: formData, signal },
+    timeoutMs: EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS,
+  });
   return readEmergencyGuideResponse(response, requestUrl);
 };
 
