@@ -149,6 +149,27 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(speakTts).toHaveBeenCalledTimes(spokenCount);
   });
 
+  it('복합 보류 사유를 표시하고 단일 가이드 재시도나 처치 완료로 진행하지 않는다', async () => {
+    await act(async () => useEmergencyGuideStore.getState().setGuide({
+      ...GUIDE, status: 'ASSESSMENT_ONLY', assessment: null,
+      treatment: { routeCode: null, modelVersion: null, steps: [] },
+      compound: {
+        status: 'ASSESSMENT_ONLY', call119Required: true,
+        blockedReasons: ['SITE_RELATION_UNKNOWN'],
+        display: { blockedReasons: [{ code: 'SITE_RELATION_UNKNOWN', label: '손상 부위 관계 미확인' }] },
+        injuries: [
+          { injuryId: 'injury-0', categoryCode: 'BLEEDING', deferredReason: null, assessment: null },
+          { injuryId: 'injury-1', categoryCode: 'BURN', deferredReason: null, assessment: null },
+        ],
+      },
+    }));
+    const texts = renderer.root.findAllByType(Text).map(node => node.props.children).flat();
+    expect(texts).toContain('손상 부위 관계 미확인');
+    expect(texts).toContain('119 신고가 필요합니다.');
+    expect(renderer.root.findAllByType(GuideNextButton)).toHaveLength(0);
+    expect(retryEmergencyGuide).not.toHaveBeenCalled();
+  });
+
   it('평가 정보가 없으면 119 불필요로 표시하지 않는다', async () => {
     await act(async () => {
       useEmergencyGuideStore.getState().setGuide({ ...GUIDE, status: 'ASSESSMENT_ONLY' });

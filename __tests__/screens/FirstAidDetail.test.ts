@@ -10,7 +10,7 @@ import {
 } from 'react-test-renderer';
 
 import type { EmergencyGuideResponse } from '@/types';
-import { createEmergencyGuide, retryEmergencyGuide } from '@/services';
+import { createCompoundGuide, createEmergencyGuide, retryEmergencyGuide } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import { SERVER_SYMPTOM_ID_BY_CATEGORY, toEmergencyGuideQuestionnaire } from '@/utils/emergencyQuestionnaire';
 import { EmergencyQuestionOption } from '@/components/EmergencyGuide';
@@ -28,6 +28,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('@/services', () => ({
+  createCompoundGuide: jest.fn(),
   createEmergencyGuide: jest.fn(),
   getEmergencyGuideErrorMessage: jest.fn(),
   retryEmergencyGuide: jest.fn(),
@@ -248,6 +249,35 @@ const confirmUrgentNotice = async (): Promise<void> => {
 };
 
 describe('FirstAidDetail 응급 평가 보존', () => {
+  it('기존 질문 개수를 유지하며 증상 2개는 V2로 보내고 통신 재시도 ID를 유지한다', async () => {
+    jest.mocked(createCompoundGuide).mockRejectedValueOnce(new TypeError('network'));
+    jest.mocked(createCompoundGuide).mockResolvedValue(PENDING_GUIDE);
+    const renderer = await renderFirstAidDetail(createNavigation());
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        await act(async () => findAction(renderer, '이전 질문').props.onPress());
+      }
+      const header = renderer.root.findByType(EmergencyQuestionHeader);
+      const question = header.props.questions[header.props.currentQuestionIndex];
+      const optionIndex = question.options.findIndex((option: { id: string }) => option.id === 'BURN');
+      await act(async () => renderer.root.findAllByType(EmergencyQuestionOption)[optionIndex].props.onPress());
+      for (let index = 0; index < 3; index += 1) {
+        await act(async () => findAction(renderer, '다음 질문').props.onPress());
+      }
+      expect(renderer.root.findByType(EmergencyQuestionHeader).props.questions).toEqual(getEmergencyQuestions('bleeding'));
+      await act(async () => findAction(renderer, '응급처치 가이드 시작').props.onPress());
+      await act(async () => findAction(renderer, '응급처치 가이드 시작').props.onPress());
+      expect(createEmergencyGuide).not.toHaveBeenCalled();
+      const requests = jest.mocked(createCompoundGuide).mock.calls.map(call => call[0]);
+      expect(requests).toHaveLength(2);
+      expect(requests[0].requestId).toBe(requests[1].requestId);
+      expect(requests[0].injuries.map(injury => injury.categoryCode)).toEqual(['BLEEDING', 'BURN']);
+      expect(requests[0].relations[0]).toMatchObject({ relation: 'UNKNOWN', confirmed: false });
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  });
+
   it('새 문진 제출은 기존 세션 재시도 없이 새 requestId로 생성한다', async () => {
     jest.mocked(createEmergencyGuide).mockResolvedValue(PENDING_GUIDE);
     const requestIds: string[] = [];

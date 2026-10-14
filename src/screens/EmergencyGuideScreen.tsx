@@ -19,6 +19,7 @@ import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { AssessmentOnlyModal } from './emergencyGuide/components/AssessmentOnlyModal';
+import { CompoundGuideStatus } from './emergencyGuide/components/CompoundGuideStatus';
 import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
@@ -355,6 +356,14 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     resetGuide();
     navigation.popTo('FirstAid');
   };
+
+  if (guide?.compound) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
+        <CompoundGuideStatus compound={guide.compound} onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
+      </SafeAreaView>
+    );
+  }
 
   if (guide?.status === 'ASSESSMENT_ONLY') {
     return (

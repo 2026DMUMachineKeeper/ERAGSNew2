@@ -13,11 +13,11 @@ import {
   getEmergencyQuestions,
 } from '@/constants';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
-import { createEmergencyGuide, getEmergencyGuideErrorMessage } from '@/services';
+import { getEmergencyGuideErrorMessage } from '@/services';
+import { useEmergencyQuestionnaireRequest } from '@/hooks/useEmergencyQuestionnaireRequest';
 import { useEmergencyGuideStore } from '@/store';
 import {
   SERVER_SYMPTOM_ID_BY_CATEGORY,
-  toEmergencyGuideQuestionnaire,
 } from '@/utils/emergencyQuestionnaire';
 import { reportEmergencySessionLocationOnce } from '@/utils/emergencySessionLocation';
 
@@ -27,6 +27,7 @@ import { CategoryMismatchModal } from './firstAidDetail/components/CategoryMisma
 type FirstAidDetailProps = NativeStackScreenProps<RootStackParamList, 'FirstAidDetail'>;
 
 export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): React.JSX.Element => {
+  const { handleCreateGuide } = useEmergencyQuestionnaireRequest();
   const startGuide = useEmergencyGuideStore(state => state.startGuide);
   const isFocused = useIsFocused();
   const category = FIRST_AID_CATEGORIES.find(item => item.id === route.params?.mainId);
@@ -170,27 +171,18 @@ export const FirstAidDetail = ({ navigation, route }: FirstAidDetailProps): Reac
       return;
     }
 
+    const symptoms = questionAnswers.visibleSymptoms ?? [];
+    if (symptoms.length > 1 && (symptoms.length !== 2 || !symptoms.every(symptom => Object.values(SERVER_SYMPTOM_ID_BY_CATEGORY).some(code => code === symptom)))) {
+      Alert.alert('복합 선택 확인', '복합 요청은 확인된 증상 2개만 지원합니다. 증상 선택을 수정해 주세요.');
+      return;
+    }
     const requestController = new AbortController();
     activeSubmissionRef.current = requestController;
     isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.append(
-        'request',
-        JSON.stringify({
-          requestId: `manual-${Date.now()}`,
-          language: 'ko-KR',
-        }),
-      );
-      const questionnaire = JSON.stringify(
-        toEmergencyGuideQuestionnaire(questionAnswers),
-      );
-      console.warn('[EmergencyGuide API][Questionnaire]', questionnaire);
-      formData.append('questionnaire', questionnaire);
-
-      const guide = await createEmergencyGuide(formData, requestController.signal);
+      const guide = await handleCreateGuide(questionAnswers, requestController.signal);
       if (
         activeSubmissionRef.current !== requestController ||
         requestController.signal.aborted ||
