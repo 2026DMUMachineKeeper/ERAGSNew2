@@ -11,6 +11,7 @@ import type {
   EmergencyWasteGuideItem,
   EmergencyWasteGuideResponse,
 } from '@/types';
+import { parseCompoundGuideSnapshot } from '@/utils/compoundGuide';
 
 import {
   authenticatedFetch,
@@ -19,6 +20,7 @@ import {
   RequestTimeoutError,
 } from './authenticatedFetch.service';
 import { ApiRequestError } from './apiError.service';
+import { logCompoundGuideDiagnostics } from './compoundGuide.service';
 import {
   getAuthToken,
   isAuthTokenExpiredError,
@@ -289,6 +291,10 @@ const readEmergencyGuideResponse = async (
     );
   }
 
+  if (payload.data.compound != null) {
+    logCompoundGuideDiagnostics(payload.data, { operation: 'CREATE', httpStatus: response.status });
+  }
+
   if (
     !isRecord(payload.data.treatment) ||
     !Array.isArray(payload.data.treatment.steps) ||
@@ -306,6 +312,19 @@ const readEmergencyGuideResponse = async (
     throw new EmergencyGuideRequestError(
       '복합 손상 응답 형식이 올바르지 않습니다.', response.status, 'INVALID_RESPONSE', requestUrl,
     );
+  }
+
+  const compound = payload.data.compound;
+  if (isRecord(compound) && (compound.schemaVersion !== undefined ||
+    compound.status === 'COMPLETE' || compound.status === 'PARTIAL')) {
+    parseCompoundGuideSnapshot({ ...payload.data, planId: compound.planId });
+    if (payload.data.sessionId !== compound.sessionId || payload.data.requestId !== compound.requestId ||
+      payload.data.status !== (compound.status === 'PARTIAL' ? 'GUIDE_PENDING' : compound.status) ||
+      payload.data.treatment.steps.length !== 0) {
+      throw new EmergencyGuideRequestError(
+        '복합 가이드 생성 응답이 저장 계획과 일치하지 않습니다.', response.status, 'INVALID_RESPONSE', requestUrl,
+      );
+    }
   }
 
   const guide = (payload as unknown as EmergencyGuideSuccessEnvelope).data;
@@ -478,7 +497,15 @@ export const createCompoundGuide = async (
     init: { method: 'POST', body: formData, signal },
     timeoutMs: EMERGENCY_GUIDE_UPLOAD_TIMEOUT_MS,
   });
-  return readEmergencyGuideResponse(response, requestUrl);
+  const guide = await readEmergencyGuideResponse(response, requestUrl);
+  if (guide.compound?.schemaVersion === '2' && (guide.requestId !== request.requestId ||
+    request.injuries.some(input => !guide.compound?.injuries.some(injury =>
+      injury.injuryId === input.injuryId && injury.categoryCode === input.categoryCode)))) {
+    throw new EmergencyGuideRequestError(
+      '복합 가이드가 요청한 손상과 일치하지 않습니다.', response.status, 'INVALID_RESPONSE', requestUrl,
+    );
+  }
+  return guide;
 };
 
 // 사진은 한 장이어도 서버 규격(V2.1)에 맞춰 images 배열 필드로 보냅니다.

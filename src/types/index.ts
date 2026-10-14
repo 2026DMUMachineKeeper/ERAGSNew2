@@ -1,5 +1,6 @@
 export * from './auth.types';
 export * from './emergencyGuide.types';
+export * from './compoundGuide.types';
 export * from './facility.types';
 export * from './medicine.types';
 export * from './settings.types';
