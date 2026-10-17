@@ -1,3 +1,5 @@
+import type { CompoundCategoryCode } from '@/types/emergencyGuide.types';
+
 export type EmergencyCategoryId =
   | 'bleeding'
   | 'burn'
@@ -5,6 +7,15 @@ export type EmergencyCategoryId =
   | 'fever'
   | 'skinRash'
   | 'airwayObstruction';
+
+export const SERVER_SYMPTOM_ID_BY_CATEGORY: Record<EmergencyCategoryId, CompoundCategoryCode> = {
+  bleeding: 'BLEEDING',
+  burn: 'BURN',
+  fractureBruise: 'FRACTURE_BRUISE',
+  fever: 'FEVER_NEUROLOGIC',
+  skinRash: 'ALLERGY_RASH',
+  airwayObstruction: 'AIRWAY_OBSTRUCTION',
+};
 
 export interface FirstAidCategory {
   id: EmergencyCategoryId;

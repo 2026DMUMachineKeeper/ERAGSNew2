@@ -9,6 +9,8 @@ import {
 } from '@/services';
 import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
 import { StepDetail } from '@/components/EmergencyGuide/StepDetail';
+import { GuideNextButton } from '@/components/EmergencyGuide/GuideNextButton';
+import * as compoundStatus from '@/screens/emergencyGuide/components/CompoundGuideStatus';
 import { useEmergencyGuideStore } from '@/store';
 import type { CompoundGuideSnapshot } from '@/types';
 import {
@@ -90,11 +92,11 @@ describe('복합 가이드 실행 화면', () => {
   });
 
   it('빈 단일 steps 대신 서버 실행 순서를 표시하고 첫 손상 완료 후 다음 손상을 유지한다', async () => {
-    expect(renderer.root.findAllByType(StepDetail)).toHaveLength(0);
+    expect(renderer.root.findAllByType(StepDetail)).toHaveLength(1);
     expect(speakTts).not.toHaveBeenCalled();
-    expect(
-      renderer.root.findAllByProps({ testID: 'compound-step-2' }).length,
-    ).toBeGreaterThan(0);
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
+    );
     jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
       outcome: 'COMPLETED',
       snapshot: completedSnapshot(1),
@@ -118,15 +120,16 @@ describe('복합 가이드 실행 화면', () => {
     });
     await press('현재 단계 처치 완료');
     await confirm();
-    expect(text()).toContain('전체 처치 완료');
+    expect(text()).not.toContain('전체 처치 완료');
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    expect(useEmergencyGuideStore.getState().handoverStatus).toBe('COMPLETED');
     expect(
       useEmergencyGuideStore.getState().compoundSnapshot?.usedSupplies,
     ).toHaveLength(2);
-    expect(
-      renderer.root
-        .findAllByType(TouchableOpacity)
-        .some(item => item.props.accessibilityLabel === '현재 단계 처치 완료'),
-    ).toBe(false);
+    expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(
+      true,
+    );
   });
   it('응답 유실 뒤 화면 재진입에서도 같은 키·단계·revision으로 재시도한다', async () => {
     jest
@@ -153,6 +156,7 @@ describe('복합 가이드 실행 화면', () => {
     ).toBeNull();
   });
   it('중복 완료 입력은 하나의 서버 요청으로 처리한다', async () => {
+    const statusSpy = jest.spyOn(compoundStatus, 'CompoundGuideStatus');
     let resolve!: (value: {
       outcome: 'COMPLETED';
       snapshot: CompoundGuideSnapshot;
@@ -172,15 +176,80 @@ describe('복합 가이드 실행 화면', () => {
       callback?.();
     });
     expect(completeCompoundGuideStep).toHaveBeenCalledTimes(1);
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
+    );
+    expect(text()).not.toContain('처치 완료 여부를 확인하지 못했습니다.');
+    expect(text()).not.toContain('완료 다시 확인');
+    expect(text()).not.toContain('다시 확인');
+    expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(
+      true,
+    );
     await act(async () =>
       resolve({ outcome: 'COMPLETED', snapshot: completedSnapshot(1) }),
+    );
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[1].instruction,
+    );
+    expect(statusSpy).not.toHaveBeenCalled();
+  });
+  it('저장 중에는 경고를 숨기고 실제 응답 유실 이후에만 완료 재확인을 표시한다', async () => {
+    let reject!: (error: Error) => void;
+    jest.mocked(completeCompoundGuideStep).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+    );
+    await press('현재 단계 처치 완료');
+    const callback = jest
+      .mocked(Alert.alert)
+      .mock.calls.at(-1)?.[2]
+      ?.find(item => item.text === '완료했어요')?.onPress;
+    await act(async () => {
+      callback?.();
+    });
+    expect(text()).not.toContain('처치 완료 여부를 확인하지 못했습니다.');
+    await act(async () => reject(new TypeError('response lost')));
+    expect(text()).toContain('처치 완료 여부를 확인하지 못했습니다.');
+    expect(renderer.root.findByType(GuideNextButton).props.title).toBe(
+      '완료 다시 확인',
+    );
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
+    );
+  });
+  it('최초 저장 상태를 기다리는 동안 결과 화면을 끼워 넣지 않는다', async () => {
+    await act(async () => renderer.unmount());
+    useEmergencyGuideStore
+      .getState()
+      .startGuide({ guide: COMPOUND_CREATION, source: 'manual' });
+    const statusSpy = jest.spyOn(compoundStatus, 'CompoundGuideStatus');
+    let resolve!: (snapshot: CompoundGuideSnapshot) => void;
+    jest.mocked(readCompoundGuideSession).mockReturnValueOnce(
+      new Promise(done => {
+        resolve = done;
+      }),
+    );
+    await mount();
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
+    );
+    expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(
+      true,
+    );
+    await act(async () => resolve(INITIAL_COMPOUND_SNAPSHOT));
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(
+      false,
     );
   });
   it('재고 부족은 이전 사용량을 유지하고 사용자의 새 시도에 새 키와 최신 revision을 보낸다', async () => {
     jest
       .mocked(readCompoundGuideSession)
       .mockResolvedValue(completedSnapshot(1));
-    await press('저장된 복합 가이드 다시 조회');
+    await act(async () => renderer.unmount());
+    await mount();
     jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
       outcome: 'BLOCKED',
       snapshot: blockedSnapshot(),
@@ -279,7 +348,8 @@ describe('복합 가이드 실행 화면', () => {
     jest
       .mocked(readCompoundGuideSession)
       .mockResolvedValueOnce(PARTIAL_COMPOUND_SNAPSHOT);
-    await press('저장된 복합 가이드 다시 조회');
+    await act(async () => renderer.unmount());
+    await mount();
     jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
       outcome: 'COMPLETED',
       snapshot: PARTIAL_FINISHED_SNAPSHOT,
@@ -288,6 +358,53 @@ describe('복합 가이드 실행 화면', () => {
     await confirm();
     expect(text()).toContain('보류된 손상이 남아');
     expect(text()).not.toContain('전체 처치 완료');
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(useEmergencyGuideStore.getState().handoverStatus).toBeNull();
+  });
+  it('이미 완료한 세션을 복원하면 서버 확인 후 한 번만 QR 화면으로 이동한다', async () => {
+    expect(navigation.replace).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+    jest
+      .mocked(readCompoundGuideSession)
+      .mockResolvedValueOnce(completedSnapshot(2));
+    await mount();
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    await act(async () => jest.advanceTimersByTime(1000));
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+  });
+  it('완료된 로컬 기록이 있어도 서버 조회가 실패하면 자동 이동하지 않는다', async () => {
+    await act(async () => renderer.unmount());
+    useEmergencyGuideStore
+      .getState()
+      .applyCompoundSnapshot(completedSnapshot(2));
+    jest
+      .mocked(readCompoundGuideSession)
+      .mockRejectedValueOnce(new TypeError('offline'));
+    await mount();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+  it('마지막 단계의 중단 확인에서 완료를 선택해도 QR 이동과 뒤로 가기가 중복되지 않는다', async () => {
+    const statusSpy = jest.spyOn(compoundStatus, 'CompoundGuideStatus');
+    await act(async () => renderer.unmount());
+    jest
+      .mocked(readCompoundGuideSession)
+      .mockResolvedValueOnce(completedSnapshot(1));
+    await mount();
+    jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
+      outcome: 'COMPLETED',
+      snapshot: completedSnapshot(2),
+    });
+    await act(async () =>
+      renderer.root.findByType(StepDetail).props.onStopPress(true),
+    );
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[1].instruction,
+    );
   });
   it('다른 세션으로 바뀐 후 도착한 완료 응답은 현재 세션을 덮어쓰지 않는다', async () => {
     let resolve!: (value: {

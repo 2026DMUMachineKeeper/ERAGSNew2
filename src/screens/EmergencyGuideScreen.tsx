@@ -362,8 +362,22 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     return (
       <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
         {guide.compound.schemaVersion === '2' && guide.sessionId ? (
-          <CompoundGuideSession key={guide.sessionId} sessionId={guide.sessionId} compound={guide.compound}
-            onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
+          <CompoundGuideSession
+            key={guide.sessionId}
+            sessionId={guide.sessionId}
+            compound={guide.compound}
+            onFinished={() => {
+              if (
+                useEmergencyGuideStore.getState().guide?.sessionId ===
+                guide.sessionId
+              ) {
+                setHandoverStatus('COMPLETED');
+                navigation.replace('QRCode');
+              }
+            }}
+            onNewRequest={handleNewRequestPress}
+            onClose={() => navigation.goBack()}
+          />
         ) : (
           <CompoundGuideStatus compound={guide.compound} onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
         )}

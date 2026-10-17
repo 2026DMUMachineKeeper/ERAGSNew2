@@ -9,13 +9,20 @@ import {
 import { useEmergencyGuideStore } from '@/store';
 import type {
   CreateEmergencyGuideHandoverResponse,
+  CompoundGuideSnapshot,
   EmergencyGuideHandoverStatus,
 } from '@/types';
+import {
+  hasMatchingCompoundHandover,
+  isCompoundTreatmentCompleted,
+} from '@/utils/compoundHandover';
 
 interface Params {
   sessionId: string | null | undefined;
   completedStepIds: number[];
   handoverStatus: EmergencyGuideHandoverStatus | null;
+  compoundSnapshot?: CompoundGuideSnapshot | null;
+  isCompound?: boolean;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -65,6 +72,8 @@ export function useEmergencyHandoverQr({
   sessionId,
   completedStepIds,
   handoverStatus,
+  compoundSnapshot,
+  isCompound = false,
 }: Params) {
   const [handover, setHandover] =
     React.useState<CreateEmergencyGuideHandoverResponse | null>(null);
@@ -91,6 +100,11 @@ export function useEmergencyHandoverQr({
       guideAtRequestStart?.sessionId === sessionId;
 
     const issueQr = async (): Promise<void> => {
+      setHandover(null);
+      setQrSvg(null);
+      setHandoverError(null);
+      setIsIssuingQr(true);
+      setIsHandoverUnavailable(false);
       console.warn('[EmergencyGuide QR][Issue]', {
         phase: 'start',
         sessionId: sessionId ?? null,
@@ -113,7 +127,20 @@ export function useEmergencyHandoverQr({
         return;
       }
 
-      if (completedStepIds.length === 0) {
+      if (
+        isCompound &&
+        (compoundSnapshot?.sessionId !== sessionId ||
+          !isCompoundTreatmentCompleted(compoundSnapshot))
+      ) {
+        const message =
+          '복합 처치의 전체 완료 기록을 확인하지 못했습니다. 가이드에서 진행 상태를 확인해 주세요.';
+        setHandoverError(message);
+        setWasteGuideError(message);
+        setIsIssuingQr(false);
+        return;
+      }
+
+      if (!isCompound && completedStepIds.length === 0) {
         setWasteGuide([]);
         setIsHandoverUnavailable(true);
         setIsIssuingQr(false);
@@ -123,13 +150,65 @@ export function useEmergencyHandoverQr({
       setWasteGuideLoading();
       setIsHandoverUnavailable(false);
 
+      const loadWasteGuide = async (): Promise<void> => {
+        try {
+          const wasteGuideResponse = await getEmergencyWasteGuide(sessionId);
+          if (isCurrentGuide()) {
+            if (
+              isCompound &&
+              compoundSnapshot?.usedSupplies.length &&
+              !wasteGuideResponse.data.length
+            ) {
+              setWasteGuideError(
+                '실제 사용한 물품에 대한 폐기물 안내가 서버 응답에 없습니다.',
+              );
+            } else {
+              setWasteGuide(wasteGuideResponse.data);
+            }
+          }
+        } catch (error: unknown) {
+          if (isCurrentGuide()) {
+            const errorMessage = getEmergencyGuideErrorMessage(error);
+            console.error('[EmergencyGuide QR][Waste Guide Error]', {
+              ...getQrErrorDetails(error),
+              userMessage: errorMessage,
+            });
+            setWasteGuideError(errorMessage);
+          }
+        }
+      };
+
       try {
+        // 복합 실행 ID를 숫자로 바꾸면 기록이 섞입니다. 기존 API의 복합 지원은 서버 저장 기록을 읽어야 하며 응답도 검증합니다.
         const response = await createEmergencyGuideHandover(sessionId, {
-          status: handoverStatus ?? 'IN_PROGRESS',
-          completedStepIds,
+          status: isCompound ? 'COMPLETED' : handoverStatus ?? 'IN_PROGRESS',
+          completedStepIds: isCompound ? [] : completedStepIds,
         });
 
         if (!isCurrentGuide()) {
+          return;
+        }
+
+        if (
+          isCompound &&
+          compoundSnapshot &&
+          !hasMatchingCompoundHandover(compoundSnapshot, response.snapshot)
+        ) {
+          console.error('[EmergencyGuide QR][Handover Error]', {
+            errorCode: 'COMPOUND_HANDOVER_RECORD_MISMATCH',
+            completedExecutionCount:
+              compoundSnapshot.progress?.completedStepIds.length,
+            handoverTreatmentCount:
+              response.snapshot.completedTreatments.length,
+            usedUnitCount: compoundSnapshot.usedSupplies.length,
+            handoverSupplyCount: response.snapshot.usedSupplies.length,
+          });
+          const message =
+            '서버 인계장에 복합 처치 완료 기록 또는 사용 물품이 일치하지 않아 QR을 표시하지 않았습니다. 아래 인계 요약을 직접 보여주세요.';
+          setHandoverError(message);
+          setWasteGuideError(
+            '복합 처치 사용 기록이 인계장에 반영되지 않아 폐기물 안내를 확인할 수 없습니다.',
+          );
           return;
         }
 
@@ -142,26 +221,6 @@ export function useEmergencyHandoverQr({
             response.snapshot.completedTreatments.length,
           usedSuppliesCount: response.snapshot.usedSupplies.length,
         });
-
-        const loadWasteGuide = async (): Promise<void> => {
-          try {
-            const wasteGuideResponse = await getEmergencyWasteGuide(sessionId);
-            if (isCurrentGuide()) {
-              setWasteGuide(wasteGuideResponse.data);
-            }
-          } catch (error: unknown) {
-            if (!isCurrentGuide()) {
-              return;
-            }
-
-            const errorMessage = getEmergencyGuideErrorMessage(error);
-            console.error('[EmergencyGuide QR][Waste Guide Error]', {
-              ...getQrErrorDetails(error),
-              userMessage: errorMessage,
-            });
-            setWasteGuideError(errorMessage);
-          }
-        };
 
         loadWasteGuide();
 
@@ -179,7 +238,7 @@ export function useEmergencyHandoverQr({
             },
           );
 
-          if (isActive) {
+          if (isCurrentGuide()) {
             setQrSvg(generatedQrSvg);
             console.warn('[EmergencyGuide QR][Generate]', {
               phase: 'success',
@@ -192,7 +251,7 @@ export function useEmergencyHandoverQr({
           console.error('[EmergencyGuide QR][Generate Error]', {
             ...getQrErrorDetails(error),
           });
-          if (isActive) {
+          if (isCurrentGuide()) {
             setHandoverError(
               'QR 코드 생성에 실패했습니다. 인계 요약을 직접 보여주세요.',
             );
@@ -206,7 +265,11 @@ export function useEmergencyHandoverQr({
         });
         if (isCurrentGuide()) {
           setHandoverError(errorMessage);
-          setWasteGuideError(errorMessage);
+          if (isCompound) {
+            loadWasteGuide();
+          } else {
+            setWasteGuideError(errorMessage);
+          }
         }
       } finally {
         if (isActive) {
@@ -222,6 +285,8 @@ export function useEmergencyHandoverQr({
     };
   }, [
     completedStepIds,
+    compoundSnapshot,
+    isCompound,
     handoverStatus,
     sessionId,
     setWasteGuide,
