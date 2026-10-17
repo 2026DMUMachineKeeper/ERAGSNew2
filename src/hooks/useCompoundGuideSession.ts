@@ -15,7 +15,7 @@ export const useCompoundGuideSession = (sessionId: string) => {
   const pending = useEmergencyGuideStore(
     state => state.compoundPendingCompletion,
   );
-  const [isBusy, setIsBusy] = React.useState(false);
+  const [isBusy, setIsBusy] = React.useState(true);
   const [hasVerifiedSnapshot, setHasVerifiedSnapshot] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState('');
   const controllerRef = React.useRef<AbortController | null>(null);
@@ -140,11 +140,11 @@ export const useCompoundGuideSession = (sessionId: string) => {
               .toString(36)
               .slice(2)}`,
           };
-    store.setCompoundPendingCompletion({ sessionId, command });
     const controller = new AbortController();
     controllerRef.current = controller;
     setIsBusy(true);
     setErrorMessage('');
+    store.setCompoundPendingCompletion({ sessionId, command });
     try {
       const receipt = await completeCompoundGuideStep(
         sessionId,
@@ -191,6 +191,7 @@ export const useCompoundGuideSession = (sessionId: string) => {
 
   return {
     snapshot: snapshot?.sessionId === sessionId ? snapshot : null,
+    hasVerifiedSnapshot,
     hasPendingAttempt: pending?.sessionId === sessionId,
     canComplete:
       hasVerifiedSnapshot &&

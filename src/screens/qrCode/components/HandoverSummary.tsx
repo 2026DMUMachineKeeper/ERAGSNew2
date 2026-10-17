@@ -22,8 +22,12 @@ interface Props {
   mainLabel: string;
   consciousness: EmergencyGuidePatientContext['consciousness'];
   ageGroup: EmergencyGuidePatientContext['ageGroup'];
-  completedTreatments: EmergencyGuideHandoverCompletedTreatment[];
+  completedTreatments: (Omit<
+    EmergencyGuideHandoverCompletedTreatment,
+    'stepId'
+  > & { stepId: number | string })[];
   usedSupplies: EmergencyGuideHandoverUsedSupply[];
+  injurySummaries?: readonly string[];
 }
 
 export function HandoverSummary({
@@ -33,6 +37,7 @@ export function HandoverSummary({
   ageGroup,
   completedTreatments,
   usedSupplies,
+  injurySummaries,
 }: Props): React.JSX.Element {
   const redFlags = assessment?.redFlags ?? [];
 
@@ -41,8 +46,11 @@ export function HandoverSummary({
       <View className="mt-3 rounded-2xl bg-white p-4">
         <Text className="text-sm font-suitBold text-warning">판단 결과</Text>
         <Text className="mt-2 text-lg font-suitBold text-black">
-          {assessment?.categoryCode ?? mainLabel} /{' '}
-          {assessment?.severityCode ?? 'UNKNOWN'}
+          {injurySummaries
+            ? mainLabel
+            : `${assessment?.categoryCode ?? mainLabel} / ${
+                assessment?.severityCode ?? 'UNKNOWN'
+              }`}
         </Text>
         <Text className="mt-2 leading-6 text-textDim">
           의식 {consciousness} · 연령 {ageGroup}
@@ -57,9 +65,17 @@ export function HandoverSummary({
         <Text className="mt-2 leading-6 text-black">
           위험 신호: {redFlags.length > 0 ? redFlags.join(', ') : '없음'}
         </Text>
-        <Text className="mt-2 leading-6 text-black">
-          {assessment?.summary ?? '판단 요약이 없습니다.'}
-        </Text>
+        {injurySummaries ? (
+          injurySummaries.map((summary, index) => (
+            <Text key={index} className="mt-2 leading-6 text-black">
+              {summary}
+            </Text>
+          ))
+        ) : (
+          <Text className="mt-2 leading-6 text-black">
+            {assessment?.summary ?? '판단 요약이 없습니다.'}
+          </Text>
+        )}
       </View>
 
       <View className="mt-5 rounded-2xl bg-white p-4">

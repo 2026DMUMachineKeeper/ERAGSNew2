@@ -1,10 +1,20 @@
+import { encodedQaFacts, pruneQaFacts } from './compoundQuestionFacts';
+import { fractureSkinFollowup } from '@/constants/compoundQaData';
 import type {
   QuestionAnswers,
   EmergencyGuideQuestionnaireAnswer,
   CompoundCategoryCode,
   CompoundGuideRequest,
+  CompoundQuestionnaireDraft,
 } from '@/types';
-import { getEmergencyQuestions, type EmergencyCategoryId } from '@/constants';
+import {
+  getEmergencyQuestions,
+  SERVER_SYMPTOM_ID_BY_CATEGORY,
+  type EmergencyCategoryId,
+} from '@/constants';
+import { getCompoundQuestionnaireError } from './compoundQuestionnaire';
+
+export { SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/constants';
 
 const SERVER_QUESTION_ID_BY_SCREEN_ID: Record<string, string> = {
   immediateDanger: 'Q1_IMMEDIATE_DANGER',
@@ -38,18 +48,6 @@ const SCREEN_QUESTION_IDS_IN_ORDER = [
   'ageGroup',
 ] as const;
 
-export const SERVER_SYMPTOM_ID_BY_CATEGORY: Record<
-  EmergencyCategoryId,
-  CompoundCategoryCode
-> = {
-  bleeding: 'BLEEDING',
-  burn: 'BURN',
-  fractureBruise: 'FRACTURE_BRUISE',
-  fever: 'FEVER_NEUROLOGIC',
-  skinRash: 'ALLERGY_RASH',
-  airwayObstruction: 'AIRWAY_OBSTRUCTION',
-};
-
 export const toEmergencyGuideQuestionnaire = (
   questionAnswers: QuestionAnswers,
 ): EmergencyGuideQuestionnaireAnswer[] =>
@@ -65,6 +63,7 @@ export const toEmergencyGuideQuestionnaire = (
 export const toCompoundGuideRequest = (
   answers: QuestionAnswers,
   requestId: string,
+  draft?: CompoundQuestionnaireDraft,
 ): CompoundGuideRequest => {
   const symptoms = answers.visibleSymptoms ?? [];
   const entries = Object.entries(SERVER_SYMPTOM_ID_BY_CATEGORY) as [
@@ -74,21 +73,26 @@ export const toCompoundGuideRequest = (
   const categories = symptoms.map(code =>
     entries.find(([, value]) => value === code),
   );
-  if (
-    symptoms.length !== 2 ||
-    new Set(symptoms).size !== 2 ||
-    categories.some(category => !category)
-  ) {
+  if (symptoms.length !== 2 || categories.some(category => !category)) {
     throw new Error('복합 요청은 확인된 증상 2개만 지원합니다.');
   }
+  if (draft) {
+    const error = getCompoundQuestionnaireError(answers, draft);
+    if (error) {
+      throw new Error(error);
+    }
+  }
+  const prunedDraft = draft ? pruneQaFacts(draft) : undefined;
   const injuries = categories.flatMap((entry, index) => {
     if (!entry) {
       return [];
     }
     const [categoryId, categoryCode] = entry;
+    const injury = prunedDraft?.injuries[index];
+    const detailAnswers = injury?.answers ?? answers;
     const injuryAnswers: QuestionAnswers = {
       immediateDanger: answers.immediateDanger ?? [],
-      visibleSymptoms: [categoryCode],
+      ...(draft ? {} : { visibleSymptoms: [categoryCode] }),
       ageGroup: answers.ageGroup ?? [],
     };
     for (const question of getEmergencyQuestions(categoryId)) {
@@ -96,19 +100,32 @@ export const toCompoundGuideRequest = (
         !['immediateDanger', 'visibleSymptoms', 'ageGroup'].includes(
           question.id,
         ) &&
-        answers[question.id]?.length
+        detailAnswers[question.id]?.length
       ) {
-        injuryAnswers[question.id] = answers[question.id];
+        injuryAnswers[question.id] = detailAnswers[question.id];
       }
     }
     return [
       {
-        injuryId: `injury-${index}`,
+        injuryId: injury?.injuryId ?? `injury-${index}`,
         categoryCode,
         confirmed: true as const,
-        // 기존 문진에는 부위 입력이 없으므로 유형으로 부위를 추정하지 않습니다.
-        location: { scope: 'UNKNOWN' as const, description: null },
-        observations: [],
+        location: {
+          scope: injury?.location.scope ?? 'UNKNOWN',
+          description: injury?.location.description.trim() || null,
+        },
+        observations:
+          injury && prunedDraft
+            ? [
+                ...fractureSkinFollowup.options.flatMap(option =>
+                  categoryCode === 'FRACTURE_BRUISE' &&
+                  injury.fractureSkinAnswer === option.value
+                    ? [option.observation]
+                    : [],
+                ),
+                ...encodedQaFacts(prunedDraft, injury),
+              ]
+            : [],
         questionnaire: toEmergencyGuideQuestionnaire(injuryAnswers),
       },
     ];
@@ -119,9 +136,17 @@ export const toCompoundGuideRequest = (
     requestId,
     language: 'ko-KR',
     patientContext: {
-      consciousness: answers.immediateDanger?.includes('UNCONSCIOUS')
-        ? 'UNCONSCIOUS'
-        : 'UNKNOWN',
+      consciousness:
+        answers.immediateDanger?.includes('UNCONSCIOUS') ||
+        draft?.injuries.some(injury =>
+          injury.answers.speakOrCough?.includes('UNCONSCIOUS'),
+        )
+          ? 'UNCONSCIOUS'
+          : answers.consciousness?.[0] === 'CONSCIOUS'
+          ? 'CONSCIOUS'
+          : answers.consciousness?.[0] === 'UNCONSCIOUS'
+          ? 'UNCONSCIOUS'
+          : 'UNKNOWN',
       ageGroup:
         ageGroup === 'CHILD' || ageGroup === 'ADULT' || ageGroup === 'ELDERLY'
           ? ageGroup
@@ -131,8 +156,8 @@ export const toCompoundGuideRequest = (
     relations: [
       {
         injuryIds: [injuries[0].injuryId, injuries[1].injuryId],
-        relation: 'UNKNOWN',
-        confirmed: false,
+        relation: draft?.relation ?? 'UNKNOWN',
+        confirmed: !!draft?.relation && draft.relation !== 'UNKNOWN',
       },
     ],
   };

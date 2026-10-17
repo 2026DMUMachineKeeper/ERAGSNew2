@@ -1,0 +1,117 @@
+{
+  "requestId": "SYNTHETIC_REVIEWED_RULE-03-false-false",
+  "schemaVersion": "2",
+  "language": "ko-KR",
+  "patientContext": {
+    "consciousness": "CONSCIOUS",
+    "ageGroup": "ADULT"
+  },
+  "injuries": [
+    {
+      "injuryId": "left-small-wound",
+      "categoryCode": "BLEEDING",
+      "confirmed": true,
+      "location": {
+        "scope": "LOCALIZED",
+        "description": "Synthetic distinct site 0"
+      },
+      "observations": [
+        "QA_FACT_V1:PRESSURE_REQUIRED=NO",
+        "QA_FACT_V1:HELPER_AVAILABLE=YES",
+        "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+        "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+        "QA_FACT_V1:BLEEDING_STOPPED=YES",
+        "QA_FACT_V1:SMALL_SUPERFICIAL_WOUND=YES",
+        "QA_FACT_V1:WOUND_BITE=NO",
+        "QA_FACT_V1:WOUND_CONTAMINATION=NO",
+        "QA_FACT_V1:WOUND_INFECTION_SIGNS=NO",
+        "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES"
+      ],
+      "questionnaire": [
+        {
+          "questionId": "Q1_IMMEDIATE_DANGER",
+          "answerIds": [
+            "NONE"
+          ]
+        },
+        {
+          "questionId": "B1_BLEEDING_PATTERN",
+          "answerIds": [
+            "BLEEDING_OOZING"
+          ]
+        },
+        {
+          "questionId": "B2_BLEEDING_RISKS",
+          "answerIds": [
+            "NONE"
+          ]
+        },
+        {
+          "questionId": "C1_AGE_GROUP",
+          "answerIds": [
+            "ADULT"
+          ]
+        }
+      ]
+    },
+    {
+      "injuryId": "right-small-wound",
+      "categoryCode": "FRACTURE_BRUISE",
+      "confirmed": true,
+      "location": {
+        "scope": "LOCALIZED",
+        "description": "Synthetic distinct site 1"
+      },
+      "observations": [
+        "QA_FACT_V1:SEVERE_SWELLING=NO",
+        "QA_FACT_V1:HELPER_AVAILABLE=YES",
+        "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+        "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+        "QA_FACT_V1:COOLING_TOOL_AVAILABLE=YES",
+        "QA_FACT_V1:SPLINT_AVAILABLE=YES",
+        "QA_FACT_V1:LIMB_ONLY=YES",
+        "QA_FACT_V1:BRUISE_SKIN_INTACT=YES",
+        "QA_FACT_V1:COMPRESSION_FEASIBLE=YES",
+        "QA_FACT_V1:ELEVATION_FEASIBLE=YES",
+        "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+        "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES"
+      ],
+      "questionnaire": [
+        {
+          "questionId": "Q1_IMMEDIATE_DANGER",
+          "answerIds": [
+            "NONE"
+          ]
+        },
+        {
+          "questionId": "F1_INJURY_STATE",
+          "answerIds": [
+            "MINOR_BRUISE"
+          ]
+        },
+        {
+          "questionId": "F2_DISTAL_STATE",
+          "answerIds": [
+            "NORMAL_DISTAL"
+          ]
+        },
+        {
+          "questionId": "C1_AGE_GROUP",
+          "answerIds": [
+            "ADULT"
+          ]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "injuryIds": [
+        "left-small-wound",
+        "right-small-wound"
+      ],
+      "relation": "DIFFERENT",
+      "confirmed": true
+    }
+  ]
+}

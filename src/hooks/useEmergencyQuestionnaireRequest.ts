@@ -1,6 +1,6 @@
 import React from 'react';
 import { createCompoundGuide, createEmergencyGuide } from '@/services';
-import type { QuestionAnswers } from '@/types';
+import type { CompoundQuestionnaireDraft, QuestionAnswers } from '@/types';
 import {
   toCompoundGuideRequest,
   toEmergencyGuideQuestionnaire,
@@ -14,9 +14,12 @@ export const useEmergencyQuestionnaireRequest = () => {
   const handleCreateGuide = async (
     answers: QuestionAnswers,
     signal: AbortSignal,
+    compoundDraft?: CompoundQuestionnaireDraft,
   ) => {
     if ((answers.visibleSymptoms ?? []).length > 1) {
-      const content = JSON.stringify(toCompoundGuideRequest(answers, ''));
+      const content = JSON.stringify(
+        toCompoundGuideRequest(answers, '', compoundDraft),
+      );
       // 동일 내용의 통신 재시도는 같은 ID를 사용해 중복 세션 생성을 피합니다.
       if (compoundRequestRef.current?.content !== content) {
         compoundRequestRef.current = {
@@ -27,7 +30,11 @@ export const useEmergencyQuestionnaireRequest = () => {
         };
       }
       return createCompoundGuide(
-        toCompoundGuideRequest(answers, compoundRequestRef.current.requestId),
+        toCompoundGuideRequest(
+          answers,
+          compoundRequestRef.current.requestId,
+          compoundDraft,
+        ),
         signal,
       );
     }

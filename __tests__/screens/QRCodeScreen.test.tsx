@@ -1,5 +1,12 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import QRCode from 'qrcode';
+import {
+  COMPOUND_CREATION,
+  completedSnapshot,
+  INITIAL_COMPOUND_SNAPSHOT,
+} from '../../testSupport/compoundGuide';
+import { getCompoundHandoverSummary } from '@/utils/compoundHandover';
 
 import {
   createEmergencyGuideHandover,
@@ -202,7 +209,9 @@ describe('QRCodeScreen', () => {
 
   it('이전 화면의 폐기 안내 응답이 새 응급 세션을 덮어쓰지 않는다', async (): Promise<void> => {
     const handoverResponse: CreateEmergencyGuideHandoverResponse = {
-      publicHandoverUrl: `https://handover.example/handover.html#token=${'A'.repeat(43)}`,
+      publicHandoverUrl: `https://handover.example/handover.html#token=${'A'.repeat(
+        43,
+      )}`,
       snapshot: {
         version: 2,
         generatedAt: '2026-09-03T00:00:00.000Z',
@@ -246,7 +255,10 @@ describe('QRCodeScreen', () => {
 
     await ReactTestRenderer.act(async () => {
       renderer = ReactTestRenderer.create(
-        <QRCodeScreen navigation={{ reset: jest.fn() } as never} route={{} as never} />,
+        <QRCodeScreen
+          navigation={{ reset: jest.fn() } as never}
+          route={{} as never}
+        />,
       );
       await Promise.resolve();
       await Promise.resolve();
@@ -275,6 +287,122 @@ describe('QRCodeScreen', () => {
       await Promise.resolve();
     });
 
-    expect(useEmergencyGuideStore.getState().wasteGuide).toEqual(currentWasteGuide);
+    expect(useEmergencyGuideStore.getState().wasteGuide).toEqual(
+      currentWasteGuide,
+    );
+  });
+
+  const mountCompoundQr = async (isCompleted = true): Promise<void> => {
+    const store = useEmergencyGuideStore.getState();
+    store.startGuide({
+      guide: COMPOUND_CREATION,
+      source: 'manual',
+      mainLabel: '출혈 · 골절',
+    });
+    store.applyCompoundSnapshot(
+      isCompleted ? completedSnapshot(2) : INITIAL_COMPOUND_SNAPSHOT,
+    );
+    store.setHandoverStatus('COMPLETED');
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <QRCodeScreen
+          navigation={{ navigate: jest.fn(), reset: jest.fn() } as never}
+          route={{} as never}
+        />,
+      );
+    });
+  };
+  const compoundHandoverResponse =
+    (): CreateEmergencyGuideHandoverResponse => ({
+      publicHandoverUrl: `https://handover.example/handover.html#token=${'B'.repeat(
+        43,
+      )}`,
+      snapshot: {
+        version: 2,
+        generatedAt: '2026-10-18T00:00:00Z',
+        expiresAt: '2026-10-18T00:30:00Z',
+        status: 'COMPLETED',
+        assessment: {
+          categoryCode: 'BLEEDING',
+          subtypeCode: 'BLEEDING_MILD',
+          severityCode: 'LOW',
+          consciousness: 'CONSCIOUS',
+          ageGroup: 'ADULT',
+          redFlags: [],
+          call119Required: false,
+          summary: '',
+        },
+        completedTreatments: completedSnapshot(2).compound.execution.map(
+          (step, index) => ({
+            stepId: index + 1,
+            stepNo: index + 1,
+            instruction: step.instruction,
+          }),
+        ),
+        usedSupplies: getCompoundHandoverSummary(completedSnapshot(2))
+          .usedSupplies,
+      },
+    });
+  it('복합은 숫자 완료 목록이 비어 있어도 기존 인계 API를 사용하고 서버 완료 기록과 사용 물품을 표시한다', async () => {
+    createHandoverMock.mockResolvedValue(compoundHandoverResponse());
+    getWasteGuideMock.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          itemName: '물품',
+          wasteCategory: 'GENERAL',
+          disposalMethod: '서버 안내',
+          dangerLevel: 'LOW',
+        },
+      ],
+    });
+    await mountCompoundQr();
+    expect(createHandoverMock).toHaveBeenCalledWith(
+      COMPOUND_CREATION.sessionId,
+      { status: 'COMPLETED', completedStepIds: [] },
+    );
+    const rendered = JSON.stringify(renderer?.toJSON());
+    completedSnapshot(2).compound.execution.forEach(step =>
+      expect(rendered).toContain(step.instruction),
+    );
+    getCompoundHandoverSummary(completedSnapshot(2)).usedSupplies.forEach(
+      item => expect(rendered).toContain(item.name),
+    );
+    expect(rendered).toContain('emergency-handover-qr');
+    expect(rendered).toContain('폐기물 배출 안내 보기');
+    expect(getWasteGuideMock).toHaveBeenCalledWith(COMPOUND_CREATION.sessionId);
+  });
+  it('복합 생성 COMPLETE만으로는 실제 처치 완료로 간주해 인계장을 만들지 않는다', async () => {
+    await mountCompoundQr(false);
+    expect(createHandoverMock).not.toHaveBeenCalled();
+    expect(getWasteGuideMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(renderer?.toJSON())).toContain(
+      '전체 완료 기록을 확인하지 못했습니다.',
+    );
+  });
+  it('복합 인계 응답이 빈 기록이면 QR과 잘못된 폐기 안내를 숨기고 실제 로컬 완료 기록을 유지한다', async () => {
+    const response = compoundHandoverResponse();
+    response.snapshot.completedTreatments = [];
+    response.snapshot.usedSupplies = [];
+    createHandoverMock.mockResolvedValue(response);
+    await mountCompoundQr();
+    expect(QRCode.toString).not.toHaveBeenCalled();
+    expect(getWasteGuideMock).not.toHaveBeenCalled();
+    const rendered = JSON.stringify(renderer?.toJSON());
+    expect(rendered).not.toContain('emergency-handover-qr');
+    expect(rendered).toContain('일치하지 않아 QR을 표시하지 않았습니다.');
+    completedSnapshot(2).compound.execution.forEach(step =>
+      expect(rendered).toContain(step.instruction),
+    );
+  });
+  it('복합 인계 요청이 실패해도 완료 요약을 유지하고 기존 폐기물 API를 조회한다', async () => {
+    createHandoverMock.mockRejectedValue(new Error('not supported'));
+    getWasteGuideMock.mockRejectedValue(new Error('not supported'));
+    await mountCompoundQr();
+    expect(getWasteGuideMock).toHaveBeenCalledWith(COMPOUND_CREATION.sessionId);
+    expect(useEmergencyGuideStore.getState().wasteGuideError).toBeTruthy();
+    completedSnapshot(2).compound.execution.forEach(step =>
+      expect(JSON.stringify(renderer?.toJSON())).toContain(step.instruction),
+    );
   });
 });
