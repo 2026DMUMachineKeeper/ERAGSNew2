@@ -54,6 +54,21 @@ export const QA_FACT_IDS = [
   'AIRWAY_OBSTRUCTION_SUSPECTED',
   'CURRENT_CONVULSIONS',
   'EMERGENCY_OBSERVER_PRESENT',
+  'BURN_MEDICINES_AVAILABLE',
+  'FLOWING_COOL_WATER_READY',
+  'BURN_COOLING_STARTED',
+  'BURN_SKIN_INTACT',
+  'BURN_HIGH_RISK_CONTEXT',
+  'BURN_MEDICAL_EVALUATION_PLANNED',
+  'BURN_PROTECTIVE_CLOTH_SUITABLE',
+  'HEAT_SOURCE_OR_CONSTRICTING_ITEMS_REMAIN',
+  'GUIDE_ACTIONS_ALREADY_PERFORMED',
+  'WOUND_CARE_STARTED',
+  'FIXATION_TOOLS_AVAILABLE',
+  'FRACTURE_REST_POSITION_CONFIRMED',
+  'FRACTURE_MANUAL_SUPPORT_REQUIRED',
+  'OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT',
+  'HELP_CALL_DEVICE_READY',
 ] as const;
 export const QA_FACT_QUESTIONS: ReadonlyArray<{
   id: QaFactId;
@@ -272,7 +287,133 @@ export const QA_FACT_QUESTIONS: ReadonlyArray<{
     prompt:
       '119를 기다리는 동안 환자의 호흡과 의식 상태를 계속 직접 지켜볼 사람이 실제로 곁에 있나요?',
   },
+  {
+    id: 'BURN_MEDICINES_AVAILABLE',
+    prompt:
+      '구급함의 화상연고를 포함해, 지금 화상 처치용으로 준비된 약품이 실제로 있나요? 환자·보조자가 가진 약품도 포함합니다. 제품명·성분을 모른다는 이유로 아니요를 선택하지 말고 확인 어려움을 선택해 주세요.',
+  },
+  {
+    id: 'FLOWING_COOL_WATER_READY',
+    prompt:
+      '지금 이 화상 부위에 사용할 시원한 흐르는 물이 준비되어 있나요? 얼음물이나 받아 놓은 물만 있다면 아니요를 선택해 주세요.',
+  },
+  {
+    id: 'BURN_COOLING_STARTED',
+    prompt:
+      '이번 화상 부위를 식히는 처치를 이미 시작했나요? 잠깐이라도 식혔거나 지금 식히는 중이면 예입니다. 냉각을 끝냈는지는 별도 질문에서 답해 주세요.',
+  },
+  {
+    id: 'BURN_SKIN_INTACT',
+    prompt: '화상 부위에 물집·벗겨짐·열린 상처 없이 피부가 온전한가요?',
+  },
+  {
+    id: 'BURN_HIGH_RISK_CONTEXT',
+    prompt:
+      '화상이 얼굴·목·손·발·성기·큰 관절을 포함하거나 몸을 둘러싸고 있나요? 환자 손바닥보다 넓거나 원인·깊이를 확인하기 어려운 경우에도 예 또는 확인 어려움으로 답해 주세요.',
+  },
+  {
+    id: 'BURN_MEDICAL_EVALUATION_PLANNED',
+    prompt:
+      '이 화상에 대해 의료진의 조언이나 평가를 받기로 하고 현재 기다리는 상황인가요? 앱에서 안내를 받는 것만으로 예를 선택하지 마세요.',
+  },
+  {
+    id: 'BURN_PROTECTIVE_CLOTH_SUITABLE',
+    prompt:
+      '냉각 후 화상에 느슨하게 댈 깨끗하고 마른 천을 실제로 준비했나요? 보풀이 없고 달라붙지 않는 재료인지 확인해 주세요. 젖은 천이나 적합성을 모르는 재료는 예가 아닙니다.',
+  },
+  {
+    id: 'HEAT_SOURCE_OR_CONSTRICTING_ITEMS_REMAIN',
+    prompt:
+      '화상 부위에 뜨거운 물질, 달라붙은 옷 또는 조이는 반지·장신구·옷이 남아 있나요? 확인하려고 붙은 것을 떼거나 부위를 움직이지 마세요.',
+  },
+  {
+    id: 'WOUND_CARE_STARTED',
+    prompt:
+      '이번 작은 상처를 씻거나 반창고·드레싱을 붙이는 처치를 이미 시작했나요? 이전 앱 안내나 직접 한 처치도 포함하며, 지혈을 위해 눌렀던 것만으로는 예가 아닙니다.',
+  },
+  {
+    id: 'GUIDE_ACTIONS_ALREADY_PERFORMED',
+    prompt:
+      '이 손상에 냉각·약품 도포·덮기·세척·반창고·골절 지지나 고정·도움 요청 등 안내에 해당하는 처치를 이미 했나요? 이전 앱이나 직접 한 처치도 포함합니다. 자연스럽게 쉬던 자세나 작은 상처의 지혈만은 제외합니다. 기억이 불확실하면 확인 어려움을 선택해 주세요.',
+  },
+  {
+    id: 'FIXATION_TOOLS_AVAILABLE',
+    prompt:
+      '지금 골절 부위를 고정할 도구나 재료가 실제로 있나요? 부목·붕대뿐 아니라 막대·판지·스카프·튼튼한 천 등 대신 쓸 재료도 포함합니다. 적합성을 모르면 확인 어려움으로 답해 주세요.',
+  },
+  {
+    id: 'FRACTURE_REST_POSITION_CONFIRMED',
+    prompt:
+      '환자가 지금 자세를 새로 바꾸지 않아도 다친 팔·다리를 편안한 자세로 쉬고 있나요? 확인하려고 움직이거나 뼈를 맞추지 마세요. 이미 지지·고정 처치를 했다면 수행한 처치 질문에도 예로 답해 주세요.',
+  },
+  {
+    id: 'FRACTURE_MANUAL_SUPPORT_REQUIRED',
+    prompt:
+      '현재 다친 팔·다리의 자세를 유지하려면 누군가 손으로 계속 잡아 주어야 하나요? 확인하려고 잡고 있는 손을 떼지 마세요.',
+  },
+  {
+    id: 'OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT',
+    prompt:
+      '다른 작은 상처가 골절 부위와 떨어져 있고, 지금 환자나 다친 팔·다리를 옮기거나 지지를 풀지 않아도 사용할 손으로 접근할 수 있나요? 실제로 움직여 시험하지 마세요.',
+  },
+  {
+    id: 'HELP_CALL_DEVICE_READY',
+    prompt:
+      '지금 환자 곁에서 도움을 요청할 전화와 사용할 손이 확보되어 있나요? 앞으로 구할 예정이거나 연결 가능 여부를 모르면 예가 아닙니다.',
+  },
 ];
+
+export const C_ROUTE_QA_FACT_ORDER = {
+  BURN: [
+    'HELPER_AVAILABLE',
+    'CLEAN_WATER_AVAILABLE',
+    'CLEAN_CLOTH_AVAILABLE',
+    'THERMAL_CAUSE',
+    'SYMPTOMS_WORSENING',
+    'BURN_COOLING_COMPLETED',
+    'INDEPENDENT_CARE_POSSIBLE',
+    'BURN_MEDICINES_AVAILABLE',
+    'FLOWING_COOL_WATER_READY',
+    'BURN_COOLING_STARTED',
+    'BURN_SKIN_INTACT',
+    'BURN_HIGH_RISK_CONTEXT',
+    'BURN_MEDICAL_EVALUATION_PLANNED',
+    'BURN_PROTECTIVE_CLOTH_SUITABLE',
+    'HEAT_SOURCE_OR_CONSTRICTING_ITEMS_REMAIN',
+    'GUIDE_ACTIONS_ALREADY_PERFORMED',
+  ],
+  FRACTURE_BRUISE: [
+    'SPLINT_AVAILABLE',
+    'HELPER_AVAILABLE',
+    'LIMB_ONLY',
+    'SYMPTOMS_WORSENING',
+    'INDEPENDENT_CARE_POSSIBLE',
+    'GUIDE_ACTIONS_ALREADY_PERFORMED',
+    'FIXATION_TOOLS_AVAILABLE',
+    'FRACTURE_REST_POSITION_CONFIRMED',
+    'FRACTURE_MANUAL_SUPPORT_REQUIRED',
+    'OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT',
+    'HELP_CALL_DEVICE_READY',
+  ],
+  BLEEDING: [
+    'PRESSURE_REQUIRED',
+    'HELPER_AVAILABLE',
+    'CLEAN_WATER_AVAILABLE',
+    'CLEAN_CLOTH_AVAILABLE',
+    'BLEEDING_STOPPED',
+    'SMALL_SUPERFICIAL_WOUND',
+    'WOUND_BITE',
+    'WOUND_CONTAMINATION',
+    'WOUND_INFECTION_SIGNS',
+    'INDEPENDENT_CARE_POSSIBLE',
+    'WOUND_CARE_STARTED',
+    'GUIDE_ACTIONS_ALREADY_PERFORMED',
+  ],
+} as const satisfies Record<
+  'BURN' | 'FRACTURE_BRUISE' | 'BLEEDING',
+  readonly QaFactId[]
+>;
+
 export const fractureSkinFollowup = {
   question:
     '다친 부위 전체의 피부를 확인할 수 있나요? 열린 상처나 찢어진 곳이 있는지 확인해 주세요.',

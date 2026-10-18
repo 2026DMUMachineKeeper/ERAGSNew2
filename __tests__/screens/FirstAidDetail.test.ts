@@ -462,6 +462,32 @@ describe('FirstAidDetail 응급 평가 보존', () => {
       expect(
         renderer.root.findByType(EmergencyQuestionHeader).props.questions,
       ).toHaveLength(8);
+      expect(
+        renderer.root
+          .findAllByType(Text)
+          .some(item => item.props.children === '빠뜨린 추가 질문 확인'),
+      ).toBe(true);
+      await act(async () =>
+        findAction(renderer, '손상 1 추가 질문 확인').props.onPress(),
+      );
+      expect(getCurrentStep(renderer)).toMatchObject({
+        kind: 'injury',
+        injuryId: 'injury-0',
+      });
+      expect(
+        renderer.root
+          .findAllByType(EmergencyQuestionOption)
+          .some(
+            item =>
+              item.props.isSelected &&
+              item.props.label === '피가 조금씩 배어 나옴',
+          ),
+      ).toBe(true);
+      while (getCurrentStep(renderer).id !== 'ageGroup') {
+        await act(async () =>
+          findAction(renderer, '다음 질문').props.onPress(),
+        );
+      }
       await act(async () =>
         findAction(renderer, '응급처치 가이드 시작').props.onPress(),
       );

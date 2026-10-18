@@ -28,6 +28,7 @@ import { useEmergencyQuestionnaireRequest } from '@/hooks/useEmergencyQuestionna
 import { useEmergencyGuideStore } from '@/store';
 import { SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/utils/emergencyQuestionnaire';
 import { reportEmergencySessionLocationOnce } from '@/utils/emergencySessionLocation';
+import { getMissingCompoundQuestions } from '@/utils/compoundQuestionFacts';
 import {
   canContinueQuestionnaireStep,
   getCompoundQuestionnaireError,
@@ -164,6 +165,10 @@ export const FirstAidDetail = ({
     .sort()
     .join(',')}`;
   const isLastQuestion = activeQuestionIndex === questions.length - 1;
+  const missingQuestions =
+    isCompound && isLastQuestion
+      ? getMissingCompoundQuestions(compoundDraft)
+      : [];
   const hasImmediateDanger = (questionAnswers.immediateDanger ?? []).some(
     answerId => answerId !== 'NONE',
   );
@@ -432,6 +437,57 @@ export const FirstAidDetail = ({
                   }))
                 }
               />
+            ))}
+          </View>
+        ) : null}
+        {missingQuestions.length ? (
+          <View className="mb-5 rounded-xl border border-memoLine bg-white px-4 py-4">
+            <Text className="text-body font-suitBold text-black">
+              빠뜨린 추가 질문 확인
+            </Text>
+            <Text className="mt-2 text-body font-suitRegular text-gray">
+              답하지 않은 질문이 있으면 안내가 보류될 수 있습니다. 확인하지 못한
+              내용은 ‘잘 모르겠음’으로 남겨 주세요.
+            </Text>
+            {missingQuestions.map(missing => (
+              <View key={missing.injuryId} className="mt-4">
+                <Text className="text-body font-suitBold text-black">
+                  손상 {missing.injuryIndex + 1} ·{' '}
+                  {
+                    getSelectedCategories([
+                      compoundDraft.injuries[missing.injuryIndex].categoryCode,
+                    ])[0]?.label
+                  }
+                </Text>
+                {missing.prompts.map(prompt => (
+                  <Text
+                    key={prompt}
+                    className="mt-2 text-body font-suitRegular text-gray"
+                  >
+                    {prompt}
+                  </Text>
+                ))}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`손상 ${
+                    missing.injuryIndex + 1
+                  } 추가 질문 확인`}
+                  disabled={isSubmitting}
+                  className="mt-3 min-h-12 items-center justify-center rounded-lg border border-red px-3 py-3"
+                  onPress={() => {
+                    const index = questions.findIndex(
+                      question =>
+                        question.kind === 'injury' &&
+                        question.injuryId === missing.injuryId,
+                    );
+                    if (index >= 0) setCurrentQuestionIndex(index);
+                  }}
+                >
+                  <Text className="text-body font-suitBold text-red">
+                    해당 질문 확인
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         ) : null}
