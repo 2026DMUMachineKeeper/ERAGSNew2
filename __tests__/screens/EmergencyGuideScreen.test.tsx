@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, AppState, Modal, Text, TouchableOpacity } from 'react-native';
+import { Alert, AppState, Linking, Modal, Text, TouchableOpacity } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { CommonActions, StackActions, StackRouter } from '@react-navigation/routers';
@@ -49,6 +49,21 @@ const GUIDE: EmergencyGuideResponse = {
   error: null,
 };
 
+const CALL_ASSESSMENT: NonNullable<EmergencyGuideResponse['assessment']> = {
+  assessmentId: 'assessment-call119',
+  categoryCode: 'BLEEDING',
+  subtypeCode: 'BLEEDING_SEVERE',
+  severityCode: 'HIGH',
+  confidence: null,
+  redFlags: ['MASSIVE_BLEEDING'],
+  call119Required: true,
+  summary: '119 신고가 필요합니다.',
+  reasons: [],
+  missingInputs: [],
+  decisionSource: 'ML_EVIDENCE',
+  modelVersion: null,
+};
+
 describe('EmergencyGuideScreen 처치 완료 확인', () => {
   let renderer: ReactTestRenderer;
   const navigation = {
@@ -84,6 +99,7 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
   beforeEach(async (): Promise<void> => {
     jest.useFakeTimers();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     useEmergencyGuideStore.getState().startGuide({
       guide: GUIDE,
       source: 'manual',
@@ -104,6 +120,67 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  it.each([true, false])('단일 처치 화면은 서버의 119 필요 여부(%s)에 따라 전화 버튼을 표시한다', async isCall119Required => {
+    await act(async () => {
+      useEmergencyGuideStore.getState().setGuide({
+        ...GUIDE,
+        assessment: { ...CALL_ASSESSMENT, call119Required: isCall119Required },
+      });
+    });
+    const callButtons = renderer.root.findAllByType(TouchableOpacity)
+      .filter(button => button.props.accessibilityLabel === '119 전화');
+    expect(callButtons).toHaveLength(isCall119Required ? 1 : 0);
+    const texts = renderer.root.findAllByType(Text).map(node => node.props.children);
+    expect(texts).toContain('주의가 필요한 상황입니다.');
+    expect(texts).not.toContain('MASSIVE_BLEEDING');
+    expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe('테스트 처치 1');
+
+    if (isCall119Required) {
+      await pressButton('119 전화');
+      expect(Linking.openURL).toHaveBeenCalledWith('tel:119');
+      expect(useEmergencyGuideStore.getState()).toMatchObject({
+        completedStepIds: [], currentStepIndex: 0, handoverStatus: null,
+      });
+      expect(navigation.replace).not.toHaveBeenCalled();
+    }
+  });
+
+  it('평가 정보가 없는 단일 처치에는 신고 버튼과 위험 안내를 표시하지 않는다', () => {
+    expect(renderer.root.findAllByType(TouchableOpacity)
+      .filter(button => button.props.accessibilityLabel === '119 전화')).toHaveLength(0);
+    expect(renderer.root.findAllByType(Text).map(node => node.props.children))
+      .not.toContain('주의가 필요한 상황입니다.');
+  });
+
+  it('119 전화 앱을 열지 못하면 직접 전화하도록 안내한다', async () => {
+    await act(async () => {
+      useEmergencyGuideStore.getState().setGuide({ ...GUIDE, assessment: CALL_ASSESSMENT });
+    });
+    jest.mocked(Linking.openURL).mockRejectedValueOnce(new Error('전화 앱 없음'));
+    await pressButton('119 전화');
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      '전화 연결 안내', '전화 앱에서 119로 직접 전화해 주세요.',
+    );
+  });
+
+  it('처치 단계 대기 중에도 신고 필요 문구와 전화 버튼을 표시한다', async () => {
+    await act(async () => {
+      useEmergencyGuideStore.getState().setGuide({
+        ...GUIDE,
+        status: 'GUIDE_PENDING',
+        assessment: CALL_ASSESSMENT,
+        treatment: { ...GUIDE.treatment, steps: [] },
+      });
+    });
+    const texts = renderer.root.findAllByType(Text).map(node => node.props.children);
+    expect(texts).toContain('119 신고가 필요합니다.');
+    expect(texts).toContain('119 전화하기');
+    expect(texts).toContain('다시 시도');
+    await pressButton('119 전화');
+    expect(Linking.openURL).toHaveBeenCalledWith('tel:119');
+    expect(retryEmergencyGuide).not.toHaveBeenCalled();
   });
 
   it.each([true, false])('ASSESSMENT_ONLY의 요약·119 필요 여부(%s)를 표시한다', async isCall119Required => {
@@ -133,6 +210,14 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(texts).toContain('발진 모양');
     expect(texts).toContain('증상 발생 시각');
     expect(texts).toContain(`119 신고 ${isCall119Required ? '필요' : '불필요'}`);
+    expect(renderer.root.findAllByType(TouchableOpacity)
+      .filter(button => button.props.accessibilityLabel === '119 전화'))
+      .toHaveLength(isCall119Required ? 1 : 0);
+    if (isCall119Required) {
+      expect(texts).toContain('처치 안내 확인과 별개로 119에 연락해 주세요.');
+      await pressButton('119 전화');
+      expect(Linking.openURL).toHaveBeenCalledWith('tel:119');
+    }
     expect(renderer.root.findByType(Modal).props).toMatchObject({
       visible: true,
       transparent: true,

@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { EmergencyGuideAssessment } from '../../../types/emergencyGuide.types';
+import { EmergencyCallNotice } from './EmergencyCallNotice';
 
 type Props = {
   assessment: EmergencyGuideAssessment | null;
@@ -25,6 +26,7 @@ export function AssessmentOnlyModal({
           className="w-full max-w-[400px] max-h-full rounded-3xl bg-white p-6"
         >
           <ScrollView showsVerticalScrollIndicator={false}>
+            <EmergencyCallNotice assessment={assessment} variant="status" />
             <View className="mb-4 self-start rounded-full bg-background px-3 py-2">
               <Text className="text-coment font-suitBold text-gray">추가 확인 필요</Text>
             </View>
