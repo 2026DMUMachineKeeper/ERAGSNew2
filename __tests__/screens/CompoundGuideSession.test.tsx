@@ -24,7 +24,7 @@ import {
   PARTIAL_FINISHED_SNAPSHOT,
 } from '../../testSupport/compoundGuide';
 
-jest.mock('@/assets', () => ({ BackIcon: () => null }));
+jest.mock('@/assets', () => ({ BackIcon: () => null, FirstAidGuideIcon: () => null }));
 jest.mock('@/services', () => ({
   ApiRequestError: jest.requireActual('@/services/apiError.service')
     .ApiRequestError,
@@ -292,7 +292,7 @@ describe('복합 가이드 실행 화면', () => {
       }),
     );
     await mount();
-    expect(statusSpy).not.toHaveBeenCalled();
+    expect(statusSpy.mock.calls.every(([props]) => props.isLoading)).toBe(true);
     expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
       INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
     );
@@ -300,7 +300,7 @@ describe('복합 가이드 실행 화면', () => {
       true,
     );
     await act(async () => resolve(INITIAL_COMPOUND_SNAPSHOT));
-    expect(statusSpy).not.toHaveBeenCalled();
+    expect(statusSpy.mock.calls.every(([props]) => props.isLoading)).toBe(true);
     expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(
       false,
     );

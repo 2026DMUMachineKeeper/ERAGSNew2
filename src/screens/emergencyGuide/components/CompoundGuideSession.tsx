@@ -263,34 +263,50 @@ export const CompoundGuideSession = ({
   );
   if (!plan && isBusy) {
     return (
-      <View className="flex-1">
-        {header}
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator accessibilityLabel="복합 가이드 불러오는 중" />
-        </View>
-      </View>
+      <CompoundGuideStatus
+        compound={compound}
+        onClose={onClose}
+        onNewRequest={onNewRequest}
+        canStartNewRequest={false}
+        isLoading
+      />
     );
   }
   if (!plan || !current || !displayed) {
     return (
-      <View className="flex-1">
-        {header}
-        <CompoundGuideStatus
-          compound={plan ?? compound}
-          onClose={onClose}
-          onNewRequest={onNewRequest}
-          isCompleted={progress?.status === 'COMPLETED'}
-          canStartNewRequest={
-            !isBusy &&
-            !hasPendingAttempt &&
-            (progress?.status === 'COMPLETED' ||
-              (progress?.revision ?? 0) === 0)
-          }
-        >
-          {notices}
-          {refresh}
-        </CompoundGuideStatus>
-      </View>
+      <CompoundGuideStatus
+        compound={plan ?? compound}
+        progress={progress}
+        onClose={onClose}
+        onNewRequest={onNewRequest}
+        isCompleted={progress?.status === 'COMPLETED'}
+        onRefresh={handleRefresh}
+        isBusy={isBusy}
+        errorMessage={errorMessage}
+        canStartNewRequest={
+          !isBusy &&
+          !hasPendingAttempt &&
+          (progress?.status === 'COMPLETED' || (progress?.revision ?? 0) === 0)
+        }
+      >
+        {blockedMessage ? (
+          <Text
+            accessibilityRole="alert"
+            className="mt-4 text-body font-suitMedium leading-6 text-red"
+          >
+            {blockedMessage}
+          </Text>
+        ) : null}
+        {hasUnconfirmedCompletion ? (
+          <Text
+            accessibilityRole="alert"
+            className="mt-4 text-body font-suitMedium leading-6 text-red"
+          >
+            처치 완료 여부를 확인하지 못했습니다. ‘다시 확인’을 눌러 저장된
+            기록을 확인해 주세요.
+          </Text>
+        ) : null}
+      </CompoundGuideStatus>
     );
   }
   return (
