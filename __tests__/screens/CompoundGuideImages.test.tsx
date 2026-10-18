@@ -241,14 +241,18 @@ it('이전 단계는 같은 화면으로 다시 볼 수 있으며 다음을 눌�
   );
   expect(completeCompoundGuideStep).not.toHaveBeenCalled();
 });
-it('중단 때 아직 하지 않은 처치는 기록하지 않고 화면을 닫는다', async () => {
+it('완료한 처치 없이 중단하면 기록을 추가하지 않고 홈으로 이동한다', async () => {
   navigation.goBack.mockClear();
   await mount();
   await act(async () =>
     renderer.root.findByType(StepDetail).props.onStopPress(false),
   );
   expect(completeCompoundGuideStep).not.toHaveBeenCalled();
-  expect(navigation.goBack).toHaveBeenCalledTimes(1);
+  expect(navigation.reset).toHaveBeenCalledWith({
+    index: 0,
+    routes: [{ name: 'Home' }],
+  });
+  expect(navigation.goBack).not.toHaveBeenCalled();
 });
 it('중단 전 완료 응답이 유실되면 화면을 닫지 않고 같은 완료 요청을 보존한다', async () => {
   navigation.goBack.mockClear();
@@ -268,7 +272,7 @@ it('중단 전 완료 응답이 유실되면 화면을 닫지 않고 같은 완�
   );
 });
 
-it('중단 전 처치 완료는 서버 기록을 확인한 뒤에만 화면을 닫는다', async () => {
+it('중단 전 처치 완료는 서버 기록을 확인한 뒤에 인계 화면으로 이동한다', async () => {
   navigation.goBack.mockClear();
   const next: CompoundGuideSnapshot = {
     ...initial,
@@ -291,7 +295,9 @@ it('중단 전 처치 완료는 서버 기록을 확인한 뒤에만 화면을 �
     useEmergencyGuideStore.getState().compoundSnapshot?.progress
       ?.completedStepIds,
   ).toContain(initial.compound.execution[0].executionStepId);
-  expect(navigation.goBack).toHaveBeenCalledTimes(1);
+  expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+  expect(navigation.goBack).not.toHaveBeenCalled();
+  expect(useEmergencyGuideStore.getState().handoverStatus).toBe('IN_PROGRESS');
 });
 
 it('하나의 실행 단계가 두 손상을 가리키면 같은 공용 안내에 두 이미지를 표시한다', async () => {

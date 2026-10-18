@@ -5,6 +5,7 @@ import {
   createEmergencyGuideHandover,
   getEmergencyGuideErrorMessage,
   getEmergencyWasteGuide,
+  fetchMedicines,
 } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type {
@@ -14,6 +15,7 @@ import type {
 } from '@/types';
 import {
   hasMatchingCompoundHandover,
+  getCompoundHandoverSupplyNames,
   isCompoundTreatmentCompleted,
 } from '@/utils/compoundHandover';
 
@@ -130,7 +132,8 @@ export function useEmergencyHandoverQr({
       if (
         isCompound &&
         (compoundSnapshot?.sessionId !== sessionId ||
-          !isCompoundTreatmentCompleted(compoundSnapshot))
+          (handoverStatus === 'COMPLETED' &&
+            !isCompoundTreatmentCompleted(compoundSnapshot)))
       ) {
         const message =
           '복합 처치의 전체 완료 기록을 확인하지 못했습니다. 가이드에서 진행 상태를 확인해 주세요.';
@@ -140,7 +143,11 @@ export function useEmergencyHandoverQr({
         return;
       }
 
-      if (!isCompound && completedStepIds.length === 0) {
+      if (
+        isCompound
+          ? !compoundSnapshot?.progress?.completedStepIds.length
+          : completedStepIds.length === 0
+      ) {
         setWasteGuide([]);
         setIsHandoverUnavailable(true);
         setIsIssuingQr(false);
@@ -181,7 +188,11 @@ export function useEmergencyHandoverQr({
       try {
         // 복합 실행 ID를 숫자로 바꾸면 기록이 섞입니다. 기존 API의 복합 지원은 서버 저장 기록을 읽어야 하며 응답도 검증합니다.
         const response = await createEmergencyGuideHandover(sessionId, {
-          status: isCompound ? 'COMPLETED' : handoverStatus ?? 'IN_PROGRESS',
+          status: isCompound
+            ? isCompoundTreatmentCompleted(compoundSnapshot)
+              ? 'COMPLETED'
+              : 'IN_PROGRESS'
+            : handoverStatus ?? 'IN_PROGRESS',
           completedStepIds: isCompound ? [] : completedStepIds,
         });
 
@@ -189,11 +200,37 @@ export function useEmergencyHandoverQr({
           return;
         }
 
-        if (
-          isCompound &&
-          compoundSnapshot &&
-          !hasMatchingCompoundHandover(compoundSnapshot, response.snapshot)
-        ) {
+        let hasMatchingHandover =
+          !isCompound || !compoundSnapshot ||
+          hasMatchingCompoundHandover(compoundSnapshot, response.snapshot);
+        if (isCompound && compoundSnapshot && !hasMatchingHandover) {
+          const names = getCompoundHandoverSupplyNames(compoundSnapshot);
+          const missingIds = [
+            ...new Set(compoundSnapshot.usedSupplies.map(unit => unit.itemId)),
+          ].filter(itemId => !names.has(itemId));
+          if (missingIds.length > 0) {
+            // 물품명이 선택 사항인 저장 세션도 ID로 조회해 대조하며 수량만으로 물품을 추측하지 않습니다.
+            const medicines = await fetchMedicines();
+            if (!isCurrentGuide()) {
+              return;
+            }
+            missingIds.forEach(itemId => {
+              const name = medicines
+                .find(medicine => medicine.id === String(itemId))
+                ?.name.trim();
+              if (name) {
+                names.set(itemId, name);
+              }
+            });
+            hasMatchingHandover = hasMatchingCompoundHandover(
+              compoundSnapshot,
+              response.snapshot,
+              names,
+            );
+          }
+        }
+
+        if (isCompound && compoundSnapshot && !hasMatchingHandover) {
           console.error('[EmergencyGuide QR][Handover Error]', {
             errorCode: 'COMPOUND_HANDOVER_RECORD_MISMATCH',
             completedExecutionCount:

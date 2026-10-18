@@ -11,6 +11,7 @@ import {
 import { GuideHeader } from '@/components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '@/components/EmergencyGuide/GuideNextButton';
 import { useCompoundGuideSession } from '@/hooks/useCompoundGuideSession';
+import { useEmergencyGuideTts } from '@/hooks/useEmergencyGuideTts';
 import { useEmergencyGuideStore } from '@/store';
 import type { CompoundGuideResult } from '@/types';
 import { isCompoundTreatmentCompleted } from '@/utils/compoundHandover';
@@ -22,6 +23,7 @@ interface Props {
   compound: CompoundGuideResult;
   onNewRequest: () => void;
   onClose: () => void;
+  onStopped: () => void;
   onFinished?: () => void;
 }
 const BLOCKED_LABELS: Readonly<Record<string, string>> = {
@@ -36,6 +38,7 @@ export const CompoundGuideSession = ({
   compound,
   onNewRequest,
   onClose,
+  onStopped,
   onFinished,
 }: Props): React.JSX.Element => {
   const {
@@ -99,6 +102,10 @@ export const CompoundGuideSession = ({
   const isDisplayedCompleted =
     !!displayed &&
     !!progress?.completedStepIds.includes(displayed.executionStepId);
+  useEmergencyGuideTts({
+    instruction: isFinishing ? '' : displayed?.instruction.trim() ?? '',
+    stepKey: displayed?.executionStepId,
+  });
   React.useEffect(() => {
     setReviewIndex(null);
   }, [current?.executionStepId]);
@@ -136,11 +143,13 @@ export const CompoundGuideSession = ({
     handleConfirmCompletion();
   };
   const handleStopPress = async (hasCompletedStep: boolean): Promise<void> => {
-    if (!displayed) {
+    if (!displayed || isBusy) {
       return;
     }
     if (!hasCompletedStep || isDisplayedCompleted) {
-      onClose();
+      if (!hasPendingAttempt) {
+        onStopped();
+      }
       return;
     }
     if (
@@ -162,7 +171,7 @@ export const CompoundGuideSession = ({
         !onFinished ||
         !isCompoundTreatmentCompleted(saved.compoundSnapshot)
       ) {
-        onClose();
+        onStopped();
       }
     }
   };

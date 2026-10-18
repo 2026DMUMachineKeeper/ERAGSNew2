@@ -11,7 +11,7 @@ import {
   reportEmergencySessionLocation,
   retryEmergencyGuide,
 } from '@/services/emergencyGuide.service';
-import { getAuthToken } from '@/services/auth.service';
+import { getAuthToken, refreshAuthTokens } from '@/services/auth.service';
 import type { EmergencySessionLocationReport } from '@/types';
 
 jest.mock('@/services/auth.service', () => ({
@@ -52,6 +52,7 @@ describe('emergencyGuide.service', () => {
     fetchMock.mockReset();
     consoleWarnMock.mockClear();
     jest.mocked(getAuthToken).mockResolvedValue('test-token');
+    jest.mocked(refreshAuthTokens).mockReset();
   });
 
   afterAll((): void => {
@@ -433,6 +434,7 @@ describe('emergencyGuide.service', () => {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
         },
         body: JSON.stringify({
           status: 'IN_PROGRESS',
@@ -464,10 +466,84 @@ describe('emergencyGuide.service', () => {
       'test-api-base-url/api/v2/emergency-guide-sessions/session%2F1/waste-guide',
       expect.objectContaining({
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer test-token',
+        },
       }),
     );
   });
+
+  it.each(['handover', 'waste'] as const)(
+    '%s 요청의 401은 토큰 갱신 후 한 번 재시도하고 서버 오류 정보를 유지한다',
+    async operation => {
+      jest.mocked(refreshAuthTokens).mockResolvedValue({
+        accessToken: 'refreshed-token',
+        refreshToken: 'refresh-token',
+      });
+      fetchMock
+        .mockResolvedValueOnce(createMockResponse(401, { success: false }))
+        .mockResolvedValueOnce(
+          createMockResponse(404, {
+            success: false,
+            error: {
+              code: 'SESSION_NOT_FOUND',
+              message: '세션을 찾을 수 없습니다.',
+              details: ['session-1'],
+            },
+          }),
+        );
+
+      const request = operation === 'handover'
+        ? createEmergencyGuideHandover('session-1', {
+            status: 'IN_PROGRESS',
+            completedStepIds: [],
+          })
+        : getEmergencyWasteGuide('session-1');
+
+      await expect(request).rejects.toMatchObject({
+        status: 404,
+        code: 'SESSION_NOT_FOUND',
+        message: '세션을 찾을 수 없습니다.',
+        details: ['session-1'],
+      });
+      expect(refreshAuthTokens).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(
+        'Bearer test-token',
+      );
+      expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe(
+        'Bearer refreshed-token',
+      );
+      expect(fetchMock.mock.calls[1][1].body).toBe(
+        fetchMock.mock.calls[0][1].body,
+      );
+    },
+  );
+
+  it.each(['handover', 'waste'] as const)(
+    '%s 요청은 갱신 후에도 401이면 추가 재시도 없이 세션 만료를 알린다',
+    async operation => {
+      jest.mocked(refreshAuthTokens).mockResolvedValue({
+        accessToken: 'refreshed-token',
+        refreshToken: 'refresh-token',
+      });
+      fetchMock.mockResolvedValue(createMockResponse(401, { success: false }));
+
+      const request = operation === 'handover'
+        ? createEmergencyGuideHandover('session-1', {
+            status: 'IN_PROGRESS',
+            completedStepIds: [],
+          })
+        : getEmergencyWasteGuide('session-1');
+
+      await expect(request).rejects.toMatchObject({
+        name: 'AuthSessionExpiredError',
+      });
+      expect(refreshAuthTokens).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('인계장이 없는 폐기물 안내 404 메시지를 보존한다', async (): Promise<void> => {
     fetchMock.mockResolvedValue(
