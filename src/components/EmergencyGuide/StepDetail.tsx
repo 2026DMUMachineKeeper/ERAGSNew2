@@ -52,25 +52,25 @@ export const StepDetail = ({
       : []);
 
   return (
-    <View className="flex-1 px-4 pt-2">
-      <View className="relative min-h-[84px] justify-center items-center">
-        <View className="items-center justify-center">
-          <Text className="text-xl text-red">{stepNo}단계</Text>
-          <Text className="text-2xl font-bold text-black mt-2 text-center">
-            {instruction}
-          </Text>
-        </View>
-
+    <View className="px-4 pt-2">
+      <View className="items-end">
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="응급처치 중단"
-          className="absolute right-0 top-0 px-2.5 py-1.5 rounded-full border border-red bg-backgroud"
+          className="px-2.5 py-1.5 rounded-full border border-red bg-backgroud"
           onPress={() => setIsStopModalVisible(true)}
         >
           <Text className="text-dangerText text-xs font-bold">
             응급처치 중단
           </Text>
         </TouchableOpacity>
+      </View>
+
+      <View className="mt-2 items-center justify-center">
+        <Text className="text-xl text-red">{stepNo}단계</Text>
+        <Text className="text-2xl font-bold text-black mt-2 text-center">
+          {instruction}
+        </Text>
       </View>
 
       <Modal

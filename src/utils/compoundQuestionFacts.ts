@@ -1,9 +1,143 @@
-import { QA_FACT_QUESTIONS } from '@/constants/compoundQaData';
+import {
+  QA_FACT_QUESTIONS,
+  C_ROUTE_QA_FACT_ORDER,
+  fractureSkinFollowup,
+} from '@/constants/compoundQaData';
 import type {
   CompoundQuestionnaireDraft,
   CompoundQuestionnaireInjury,
   QaFactId,
 } from '@/types';
+
+const hasAnswers = (
+  injury: CompoundQuestionnaireInjury,
+  questionId: string,
+  required: readonly string[],
+  excluded: readonly string[] = [],
+): boolean => {
+  const values = injury.answers[questionId] ?? [];
+  return (
+    new Set(values).size === values.length &&
+    required.every(value => values.includes(value)) &&
+    !excluded.some(value => values.includes(value))
+  );
+};
+const isSmallWound = (injury: CompoundQuestionnaireInjury): boolean =>
+  injury.categoryCode === 'BLEEDING' &&
+  hasAnswers(
+    injury,
+    'bleedingPattern',
+    ['BLEEDING_OOZING'],
+    [
+      'BLEEDING_CONTINUOUS',
+      'BLEEDING_SOAKING',
+      'BLEEDING_SPURTING',
+      'BLEEDING_UNKNOWN',
+    ],
+  ) &&
+  hasAnswers(
+    injury,
+    'woundRisk',
+    ['NONE'],
+    [
+      'WOUND_DEEP',
+      'FOREIGN_OBJECT',
+      'AMPUTATION',
+      'PRESSURE_FAILED',
+      'SHOCK_SIGNS',
+    ],
+  );
+const isSmallBurn = (injury: CompoundQuestionnaireInjury): boolean =>
+  injury.categoryCode === 'BURN' &&
+  hasAnswers(
+    injury,
+    'burnCause',
+    ['BURN_SMALL_AREA'],
+    [
+      'BURN_FACE_NECK',
+      'BURN_LARGE_AREA',
+      'BURN_CHEMICAL',
+      'BURN_ELECTRICAL',
+      'SMOKE_INHALATION',
+    ],
+  ) &&
+  hasAnswers(
+    injury,
+    'burnSkinState',
+    ['RED_PAINFUL'],
+    ['BLISTER', 'WHITE_BLACK', 'NUMB', 'UNKNOWN'],
+  );
+const isClosedInjury = (injury: CompoundQuestionnaireInjury): boolean =>
+  injury.categoryCode === 'FRACTURE_BRUISE' &&
+  hasAnswers(
+    injury,
+    'injuryState',
+    [],
+    ['OPEN_FRACTURE', 'CRUSH_INJURY', 'MINOR_BRUISE', 'UNKNOWN'],
+  ) &&
+  (injury.answers.injuryState ?? []).some(value =>
+    ['DEFORMITY', 'SEVERE_SWELLING', 'CANNOT_USE_LIMB'].includes(value),
+  );
+
+const canHaveCQuestions = (injury: CompoundQuestionnaireInjury): boolean => {
+  if (injury.categoryCode === 'BLEEDING') {
+    return (
+      (!injury.answers.bleedingPattern?.length ||
+        hasAnswers(
+          injury,
+          'bleedingPattern',
+          ['BLEEDING_OOZING'],
+          [
+            'BLEEDING_CONTINUOUS',
+            'BLEEDING_SOAKING',
+            'BLEEDING_SPURTING',
+            'BLEEDING_UNKNOWN',
+          ],
+        )) &&
+      (!injury.answers.woundRisk?.length ||
+        hasAnswers(
+          injury,
+          'woundRisk',
+          ['NONE'],
+          [
+            'WOUND_DEEP',
+            'FOREIGN_OBJECT',
+            'AMPUTATION',
+            'PRESSURE_FAILED',
+            'SHOCK_SIGNS',
+          ],
+        ))
+    );
+  }
+  if (injury.categoryCode === 'BURN') {
+    return (
+      (!injury.answers.burnCause?.length ||
+        hasAnswers(
+          injury,
+          'burnCause',
+          ['BURN_SMALL_AREA'],
+          [
+            'BURN_FACE_NECK',
+            'BURN_LARGE_AREA',
+            'BURN_CHEMICAL',
+            'BURN_ELECTRICAL',
+            'SMOKE_INHALATION',
+          ],
+        )) &&
+      (!injury.answers.burnSkinState?.length ||
+        hasAnswers(
+          injury,
+          'burnSkinState',
+          ['RED_PAINFUL'],
+          ['BLISTER', 'WHITE_BLACK', 'NUMB', 'UNKNOWN'],
+        ))
+    );
+  }
+  return (
+    injury.categoryCode === 'FRACTURE_BRUISE' &&
+    (!injury.answers.injuryState?.length || isClosedInjury(injury))
+  );
+};
 
 // QA main의 노출 조건을 그대로 적용하고, 답하지 않은 항목은 전송하지 않습니다.
 export function relevantQaFacts(
@@ -30,14 +164,7 @@ export function relevantQaFacts(
     questionId: string,
     required: string[],
     excluded: string[] = [],
-  ) => {
-    const values = injury.answers[questionId] ?? [];
-    return (
-      new Set(values).size === values.length &&
-      required.every(value => values.includes(value)) &&
-      !excluded.some(value => values.includes(value))
-    );
-  };
+  ) => hasAnswers(injury, questionId, required, excluded);
   const isMinorBruise =
     injury.categoryCode === 'FRACTURE_BRUISE' &&
     matchesAnswers(
@@ -51,16 +178,46 @@ export function relevantQaFacts(
         'CRUSH_INJURY',
       ],
     );
-  const isSuspectedClosedInjury =
-    injury.categoryCode === 'FRACTURE_BRUISE' &&
-    matchesAnswers(
-      'injuryState',
-      [],
-      ['OPEN_FRACTURE', 'CRUSH_INJURY', 'MINOR_BRUISE', 'UNKNOWN'],
+  const isSuspectedClosedInjury = isClosedInjury(injury);
+  // C 경로를 앱에서 확정하지 않고, 서버가 판단할 때 필요한 관찰만 추가로 수집합니다.
+  const hasCQuestionContext =
+    draft.relation === 'DIFFERENT' &&
+    draft.injuries.every(item => item.location.scope === 'LOCALIZED') &&
+    draft.injuries.some(item => item.categoryCode === 'BLEEDING') &&
+    draft.injuries.some(item =>
+      ['BURN', 'FRACTURE_BRUISE'].includes(item.categoryCode),
     ) &&
-    (injury.answers.injuryState ?? []).some(value =>
-      ['DEFORMITY', 'SEVERE_SWELLING', 'CANNOT_USE_LIMB'].includes(value),
-    );
+    draft.injuries.every(canHaveCQuestions);
+  if (hasCQuestionContext) {
+    ids.add('GUIDE_ACTIONS_ALREADY_PERFORMED');
+    if (isSmallWound(injury)) ids.add('WOUND_CARE_STARTED');
+    if (isSmallBurn(injury)) {
+      (
+        [
+          'BURN_MEDICINES_AVAILABLE',
+          'FLOWING_COOL_WATER_READY',
+          'BURN_COOLING_STARTED',
+          'BURN_SKIN_INTACT',
+          'BURN_HIGH_RISK_CONTEXT',
+          'BURN_MEDICAL_EVALUATION_PLANNED',
+          'BURN_PROTECTIVE_CLOTH_SUITABLE',
+          'HEAT_SOURCE_OR_CONSTRICTING_ITEMS_REMAIN',
+        ] as const
+      ).forEach(id => ids.add(id));
+    }
+    if (isSuspectedClosedInjury) {
+      (
+        [
+          'FIXATION_TOOLS_AVAILABLE',
+          'FRACTURE_REST_POSITION_CONFIRMED',
+          'FRACTURE_MANUAL_SUPPORT_REQUIRED',
+          'OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT',
+          'HELP_CALL_DEVICE_READY',
+          'SYMPTOMS_WORSENING',
+        ] as const
+      ).forEach(id => ids.add(id));
+    }
+  }
   const isLocalFlatRash =
     injury.categoryCode === 'ALLERGY_RASH' &&
     matchesAnswers(
@@ -160,30 +317,7 @@ export function relevantQaFacts(
       ] as const
     ).forEach(id => ids.add(id));
   }
-  if (
-    injury.categoryCode === 'BLEEDING' &&
-    matchesAnswers(
-      'bleedingPattern',
-      ['BLEEDING_OOZING'],
-      [
-        'BLEEDING_CONTINUOUS',
-        'BLEEDING_SOAKING',
-        'BLEEDING_SPURTING',
-        'BLEEDING_UNKNOWN',
-      ],
-    ) &&
-    matchesAnswers(
-      'woundRisk',
-      ['NONE'],
-      [
-        'WOUND_DEEP',
-        'FOREIGN_OBJECT',
-        'AMPUTATION',
-        'PRESSURE_FAILED',
-        'SHOCK_SIGNS',
-      ],
-    )
-  ) {
+  if (isSmallWound(injury)) {
     ids.add('BLEEDING_STOPPED');
     ids.add('SMALL_SUPERFICIAL_WOUND');
     ids.add('WOUND_BITE');
@@ -271,8 +405,56 @@ export function relevantQaFacts(
       ))
   )
     ids.add('HELPER_AVAILABLE');
-  return QA_FACT_QUESTIONS.filter(q => ids.has(q.id));
+  const questions = QA_FACT_QUESTIONS.filter(q => ids.has(q.id));
+  const order: readonly QaFactId[] | null = !hasCQuestionContext
+    ? null
+    : isSmallBurn(injury)
+    ? C_ROUTE_QA_FACT_ORDER.BURN
+    : isSuspectedClosedInjury
+    ? C_ROUTE_QA_FACT_ORDER.FRACTURE_BRUISE
+    : isSmallWound(injury)
+    ? C_ROUTE_QA_FACT_ORDER.BLEEDING
+    : null;
+  if (!order) return questions;
+  // 자료의 C 질문을 먼저 묻고, 이미 확인한 다른 관찰은 숨기거나 삭제하지 않습니다.
+  const ordered = order.flatMap(id =>
+    questions.filter(question => question.id === id),
+  );
+  const hasFixationResourceAnswer =
+    ['YES', 'UNKNOWN'].includes(injury.qaFacts?.SPLINT_AVAILABLE ?? '') ||
+    ['YES', 'UNKNOWN'].includes(injury.qaFacts?.FIXATION_TOOLS_AVAILABLE ?? '');
+  return [
+    ...ordered,
+    ...questions.filter(
+      question =>
+        !order.includes(question.id) &&
+        (injury.qaFacts?.[question.id] !== undefined ||
+          (injury.categoryCode === 'BURN' &&
+            question.id === 'BURN_CAN_REMAIN_CLEAN' &&
+            injury.qaFacts?.BURN_COOLING_COMPLETED === 'YES') ||
+          (injury.categoryCode === 'FRACTURE_BRUISE' &&
+            hasFixationResourceAnswer)),
+    ),
+  ];
 }
+
+export const getMissingCompoundQuestions = (
+  draft: CompoundQuestionnaireDraft,
+) =>
+  draft.injuries.flatMap((injury, index) => {
+    const prompts = relevantQaFacts(draft, injury)
+      .filter(question => injury.qaFacts?.[question.id] === undefined)
+      .map(question => question.prompt);
+    if (
+      injury.categoryCode === 'FRACTURE_BRUISE' &&
+      !injury.fractureSkinAnswer
+    ) {
+      prompts.unshift(fractureSkinFollowup.question);
+    }
+    return prompts.length
+      ? [{ injuryId: injury.injuryId, injuryIndex: index, prompts }]
+      : [];
+  });
 export function pruneQaFacts(
   draft: CompoundQuestionnaireDraft,
 ): CompoundQuestionnaireDraft {
