@@ -21,6 +21,7 @@ import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { AssessmentOnlyModal } from './emergencyGuide/components/AssessmentOnlyModal';
 import { CompoundGuideStatus } from './emergencyGuide/components/CompoundGuideStatus';
 import { CompoundGuideSession } from './emergencyGuide/components/CompoundGuideSession';
+import { EmergencyCallNotice } from './emergencyGuide/components/EmergencyCallNotice';
 import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
@@ -339,6 +340,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         />
 
         <View className="flex-1 items-center justify-center px-6">
+          <EmergencyCallNotice assessment={guide.assessment} variant="status" />
           <Text className="text-center text-title2 font-suitBold text-black">
             {guide.assessment?.summary ?? '응급처치 안내를 준비하고 있습니다.'}
           </Text>
@@ -385,6 +387,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         className="flex-1 px-4 pt-4"
         showsVerticalScrollIndicator={false}
       >
+        <EmergencyCallNotice assessment={guide?.assessment ?? null} />
         <View className="pb-4">
           <StepDetail
             step={currentStep}
