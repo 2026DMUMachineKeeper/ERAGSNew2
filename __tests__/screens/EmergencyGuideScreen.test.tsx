@@ -13,7 +13,7 @@ import type { EmergencyGuideResponse } from '@/types';
 
 import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
 
-jest.mock('@/assets', () => ({ BackIcon: (): null => null }));
+jest.mock('@/assets', () => ({ BackIcon: (): null => null, FirstAidGuideIcon: (): null => null }));
 jest.mock('@/services', () => ({
   getEmergencyGuideImageUrl: jest.fn(() => ''),
   speakTts: jest.fn(async () => {}),
@@ -164,7 +164,7 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
       },
     }));
     const texts = renderer.root.findAllByType(Text).map(node => node.props.children).flat();
-    expect(texts).toContain('손상 부위 관계 미확인');
+    expect(texts).toContain('두 손상이 같은 부위인지, 다른 부위인지 확인이 필요해요.');
     expect(texts).toContain('119 신고가 필요합니다.');
     expect(renderer.root.findAllByType(GuideNextButton)).toHaveLength(0);
     expect(retryEmergencyGuide).not.toHaveBeenCalled();
