@@ -46,7 +46,6 @@ export const CompoundGuideStep = ({
         isStepCompleted={isStepCompleted}
         canCompleteOnStop={canCompleteOnStop}
         onStopPress={onStopPress}
-        stopFooterText="완료가 확인된 처치만 기록하고 가이드를 닫습니다."
       />
     </View>
   );

@@ -6,10 +6,12 @@ import {
   completeCompoundGuideStep,
   readCompoundGuideSession,
   speakTts,
+  stopTts,
 } from '@/services';
 import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
 import { StepDetail } from '@/components/EmergencyGuide/StepDetail';
 import { GuideNextButton } from '@/components/EmergencyGuide/GuideNextButton';
+import { GuideHeader } from '@/components/EmergencyGuide/GuideHeader';
 import * as compoundStatus from '@/screens/emergencyGuide/components/CompoundGuideStatus';
 import { useEmergencyGuideStore } from '@/store';
 import type { CompoundGuideSnapshot } from '@/types';
@@ -93,7 +95,11 @@ describe('복합 가이드 실행 화면', () => {
 
   it('빈 단일 steps 대신 서버 실행 순서를 표시하고 첫 손상 완료 후 다음 손상을 유지한다', async () => {
     expect(renderer.root.findAllByType(StepDetail)).toHaveLength(1);
-    expect(speakTts).not.toHaveBeenCalled();
+    expect(speakTts).toHaveBeenCalledTimes(1);
+    expect(speakTts).toHaveBeenLastCalledWith(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
+      expect.anything(),
+    );
     expect(renderer.root.findByType(StepDetail).props.step.instruction).toBe(
       INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
     );
@@ -129,6 +135,61 @@ describe('복합 가이드 실행 화면', () => {
     ).toHaveLength(2);
     expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(
       true,
+    );
+  });
+  it('같은 안내 문구의 다음 실행 단계와 이전 단계도 각각 읽고 경과 시간 갱신에는 반복하지 않는다', async () => {
+    const firstSignal = jest.mocked(speakTts).mock.calls.at(-1)?.[1];
+    jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
+      outcome: 'COMPLETED',
+      snapshot: completedSnapshot(1),
+    });
+    await press('현재 단계 처치 완료');
+    await confirm();
+    expect(firstSignal?.aborted).toBe(true);
+    expect(stopTts).toHaveBeenCalled();
+    expect(speakTts).toHaveBeenCalledTimes(2);
+    expect(speakTts).toHaveBeenLastCalledWith(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[1].instruction,
+      expect.anything(),
+    );
+    await act(async () => jest.advanceTimersByTime(3000));
+    expect(speakTts).toHaveBeenCalledTimes(2);
+    await act(async () =>
+      renderer.root.findByType(GuideHeader).props.onBackPress(),
+    );
+    expect(speakTts).toHaveBeenCalledTimes(3);
+    expect(speakTts).toHaveBeenLastCalledWith(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[0].instruction,
+      expect.anything(),
+    );
+    await press('다음 단계');
+    expect(speakTts).toHaveBeenCalledTimes(4);
+    expect(speakTts).toHaveBeenLastCalledWith(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[1].instruction,
+      expect.anything(),
+    );
+    const lastSignal = jest.mocked(speakTts).mock.calls.at(-1)?.[1];
+    await act(async () => renderer.unmount());
+    expect(lastSignal?.aborted).toBe(true);
+    await mount();
+  });
+  it('일시적인 음성 오류 후 다음 복합 단계에서는 다시 재생한다', async () => {
+    await act(async () => renderer.unmount());
+    jest.mocked(speakTts).mockRejectedValueOnce(new Error('음성 합성 실패'));
+    await mount();
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      '음성 재생 실패',
+      expect.any(String),
+    );
+    jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
+      outcome: 'COMPLETED',
+      snapshot: completedSnapshot(1),
+    });
+    await press('현재 단계 처치 완료');
+    await confirm();
+    expect(speakTts).toHaveBeenLastCalledWith(
+      INITIAL_COMPOUND_SNAPSHOT.compound.execution[1].instruction,
+      expect.anything(),
     );
   });
   it('응답 유실 뒤 화면 재진입에서도 같은 키·단계·revision으로 재시도한다', async () => {
@@ -383,6 +444,78 @@ describe('복합 가이드 실행 화면', () => {
       .mockRejectedValueOnce(new TypeError('offline'));
     await mount();
     expect(navigation.replace).not.toHaveBeenCalled();
+  });
+  it('첫 단계 완료 후 중단하면 진행 중 인계 화면으로 이동한다', async () => {
+    jest.mocked(completeCompoundGuideStep).mockResolvedValueOnce({
+      outcome: 'COMPLETED',
+      snapshot: completedSnapshot(1),
+    });
+    await act(async () =>
+      renderer.root.findByType(StepDetail).props.onStopPress(true),
+    );
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(useEmergencyGuideStore.getState().handoverStatus).toBe(
+      'IN_PROGRESS',
+    );
+    expect(useEmergencyGuideStore.getState().compoundSnapshot).toEqual(
+      completedSnapshot(1),
+    );
+  });
+  it.each([false, true])(
+    '이전 완료 기록이 있으면 현재 단계 완료 여부(%s)와 관계없이 중단 시 인계한다',
+    async hasCompletedStep => {
+      await act(async () => renderer.unmount());
+      jest
+        .mocked(readCompoundGuideSession)
+        .mockResolvedValueOnce(completedSnapshot(1));
+      await mount();
+      if (hasCompletedStep) {
+        await act(async () =>
+          renderer.root.findByType(GuideHeader).props.onBackPress(),
+        );
+      }
+      await act(async () =>
+        renderer.root
+          .findByType(StepDetail)
+          .props.onStopPress(hasCompletedStep),
+      );
+      expect(completeCompoundGuideStep).not.toHaveBeenCalled();
+      expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+      expect(navigation.goBack).not.toHaveBeenCalled();
+      expect(useEmergencyGuideStore.getState().handoverStatus).toBe(
+        'IN_PROGRESS',
+      );
+    },
+  );
+  it('완료 기록 없이 중단하면 단일 손상과 같이 홈으로 이동한다', async () => {
+    await act(async () =>
+      renderer.root.findByType(StepDetail).props.onStopPress(false),
+    );
+    expect(navigation.reset).toHaveBeenCalledWith({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(useEmergencyGuideStore.getState().guide).toBeNull();
+  });
+  it('중단 직전 완료 저장이 실패하면 미확인 기록을 남기고 이동하지 않는다', async () => {
+    jest
+      .mocked(completeCompoundGuideStep)
+      .mockRejectedValueOnce(new TypeError('offline'));
+    await act(async () =>
+      renderer.root.findByType(StepDetail).props.onStopPress(true),
+    );
+    await act(async () =>
+      renderer.root.findByType(StepDetail).props.onStopPress(false),
+    );
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(navigation.reset).not.toHaveBeenCalled();
+    expect(
+      useEmergencyGuideStore.getState().compoundPendingCompletion,
+    ).not.toBeNull();
   });
   it('마지막 단계의 중단 확인에서 완료를 선택해도 QR 이동과 뒤로 가기가 중복되지 않는다', async () => {
     const statusSpy = jest.spyOn(compoundStatus, 'CompoundGuideStatus');

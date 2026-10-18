@@ -804,18 +804,23 @@ export const createEmergencyGuideHandover = async (
     throw new Error('응급 가이드 sessionId가 없습니다.');
   }
 
-  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v1/emergency-guide-sessions/${encodeURIComponent(
+  const path = `/api/v1/emergency-guide-sessions/${encodeURIComponent(
     normalizedSessionId,
   )}/handover`;
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${path}`;
   logRequest(requestUrl);
-  const response = await fetchWithTimeout(requestUrl, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  const response = await authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal,
     },
-    body: JSON.stringify(input),
-    signal,
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (await refreshAuthTokens()).accessToken,
   });
 
   return readEmergencyGuideHandoverResponse(response, requestUrl);
@@ -908,14 +913,18 @@ export const getEmergencyWasteGuide = async (
     throw new Error('응급 가이드 sessionId가 없습니다.');
   }
 
-  const requestUrl = `${getEmergencyGuideBaseUrl()}/api/v2/emergency-guide-sessions/${encodeURIComponent(
+  const path = `/api/v2/emergency-guide-sessions/${encodeURIComponent(
     normalizedSessionId,
   )}/waste-guide`;
+  const requestUrl = `${getEmergencyGuideBaseUrl()}${path}`;
   logRequest(requestUrl, 'GET');
-  const response = await fetchWithTimeout(requestUrl, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    signal,
+  const response = await authenticatedFetch({
+    getAccessToken: getAuthToken,
+    init: { method: 'GET', signal },
+    isAccessTokenExpiredError: isAuthTokenExpiredError,
+    path,
+    refreshAccessToken: async (): Promise<string> =>
+      (await refreshAuthTokens()).accessToken,
   });
 
   return readEmergencyWasteGuideResponse(response, requestUrl);
