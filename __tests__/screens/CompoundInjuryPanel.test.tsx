@@ -55,6 +55,12 @@ it.each(Object.entries(requests))(
       await act(async () => {
         renderer = create(<Harness initial={initial} />);
       });
+      if (name === 'burn') {
+        const toggle = renderer!.root.findByProps({ testID: 'burn-additional-toggle' });
+        expect(toggle.props.accessibilityState.expanded).toBe(false);
+        expect(renderer!.root.findAllByProps({ testID: 'fact-BURN_MEDICINES_AVAILABLE-NO' })).toHaveLength(0);
+        await act(async () => toggle.props.onPress());
+      }
       const target =
         name === 'burn' ? 'BURN_MEDICINES_AVAILABLE' : 'SPLINT_AVAILABLE';
       const no = renderer!.root

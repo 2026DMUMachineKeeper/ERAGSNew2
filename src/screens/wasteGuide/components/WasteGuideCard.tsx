@@ -42,7 +42,7 @@ export function WasteGuideCard({
                     : 'font-suitBold text-textDim'
                 }
               >
-                {item.dangerLevel === 'HIGH' ? '⚠ 주의' : '일반 배출'}
+                {item.displayTitle}
               </Text>
             </View>
             <Text className="mt-1 leading-6 text-black">

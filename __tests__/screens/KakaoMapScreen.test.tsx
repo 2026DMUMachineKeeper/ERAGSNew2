@@ -129,7 +129,7 @@ describe('주변 병원·AED 조회 상태', () => {
       hospitalStatus: expect.objectContaining({ errorMessage: null }),
     }));
     act(() => renderer.root.findByProps({ testID: 'open-aed-guide' })
-      .props.onSearchQueryChange('없는 장소'));
+      .props.onFilterChange('hospital'));
     expect(getSheet().hasSearchConditions).toBe(true);
     act(() => renderer.unmount());
   });
@@ -259,14 +259,12 @@ jest.mock('@/screens/kakaoMap/components', () => {
   const ReactModule: typeof React = require('react');
   const { View } = require('react-native');
   return {
-    KakaoMapHeader: ({ onOpenAedGuide, onSearchQueryChange, onFilterChange }: {
+    KakaoMapHeader: ({ onOpenAedGuide, onFilterChange }: {
       onOpenAedGuide: () => void;
-      onSearchQueryChange: (value: string) => void;
       onFilterChange: (value: 'all' | 'aed' | 'hospital') => void;
     }) =>
       ReactModule.createElement(View, {
         onPress: onOpenAedGuide,
-        onSearchQueryChange,
         onFilterChange,
         testID: 'open-aed-guide',
       }),

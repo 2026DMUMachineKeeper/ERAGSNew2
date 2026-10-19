@@ -1,6 +1,10 @@
 import React from 'react';
 import { createCompoundGuide, createEmergencyGuide } from '@/services';
-import type { CompoundQuestionnaireDraft, QuestionAnswers } from '@/types';
+import type {
+  CompoundQuestionnaireDraft,
+  EmergencyGuidePhotoRequest,
+  QuestionAnswers,
+} from '@/types';
 import {
   toCompoundGuideRequest,
   toEmergencyGuideQuestionnaire,
@@ -15,6 +19,7 @@ export const useEmergencyQuestionnaireRequest = () => {
     answers: QuestionAnswers,
     signal: AbortSignal,
     compoundDraft?: CompoundQuestionnaireDraft,
+    originalMedia?: EmergencyGuidePhotoRequest,
   ) => {
     if ((answers.visibleSymptoms ?? []).length > 1) {
       const media = {
@@ -57,6 +62,15 @@ export const useEmergencyQuestionnaireRequest = () => {
     );
     console.warn('[EmergencyGuide API][Questionnaire]', questionnaire);
     formData.append('questionnaire', questionnaire);
+    originalMedia?.images.forEach(file =>
+      formData.append('images', file as unknown as Blob),
+    );
+    if (originalMedia?.audio) {
+      formData.append('audio', originalMedia.audio as unknown as Blob);
+    }
+    if (originalMedia?.text?.trim()) {
+      formData.append('text', originalMedia.text.trim());
+    }
     return createEmergencyGuide(formData, signal);
   };
   return { handleCreateGuide };

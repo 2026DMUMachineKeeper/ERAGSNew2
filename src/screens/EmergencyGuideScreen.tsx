@@ -30,6 +30,8 @@ import {
 } from '../services';
 import { useEmergencyGuideStore } from '../store';
 import { useEmergencyGuideTts } from '@/hooks/useEmergencyGuideTts';
+import { useSingleGuideCompletion } from '@/hooks/useSingleGuideCompletion';
+import { FIRST_AID_CATEGORIES, SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/constants';
 import type { EmergencyGuideTreatmentStep } from '../types';
 
 type EmergencyGuideProps = NativeStackScreenProps<
@@ -83,6 +85,7 @@ const toServerGuideRuntimeStep = (
 
 export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const storedGuide = useEmergencyGuideStore(state => state.guide);
+  const storedInput = useEmergencyGuideStore(state => state.input);
   const storedMainLabel = useEmergencyGuideStore(state => state.mainLabel);
   const storedSubtypeLabel = useEmergencyGuideStore(
     state => state.subtypeLabel,
@@ -114,6 +117,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const subtypeLabel = storedSubtypeLabel;
   const isStartingNewRequestRef = React.useRef(false);
   const [isRetrying, setIsRetrying] = React.useState(false);
+  const { isCompleting, handleComplete } = useSingleGuideCompletion(navigation);
   // 진행 중인 재시도 요청입니다. 연타를 막고 화면을 떠날 때 취소하는 데 씁니다.
   const retryControllerRef = React.useRef<AbortController | null>(null);
 
@@ -163,6 +167,9 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   });
 
   const handleStopPress = (hasCompletedCurrentStep: boolean): void => {
+    if (useEmergencyGuideStore.getState().isCompletingSingleGuide) {
+      return;
+    }
     if (!hasCompletedCurrentStep && completedStepIds.length === 0) {
       resetGuide();
       navigation.reset({
@@ -181,11 +188,14 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleNextStep = (): void => {
-    if (!currentStep) {
+    if (
+      !currentStep ||
+      useEmergencyGuideStore.getState().isCompletingSingleGuide
+    ) {
       return;
     }
 
-    const handleConfirmCompletion = (): void => {
+    const handleConfirmCompletion = async (): Promise<void> => {
       markStepCompleted(currentStep.stepId);
 
       if (!isLastStep) {
@@ -193,8 +203,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         return;
       }
 
-      setHandoverStatus('COMPLETED');
-      navigation.replace('QRCode');
+      await handleComplete();
     };
 
     if (isCurrentStepCompleted) {
@@ -214,7 +223,10 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleBackStep = () => {
-    if (currentStepIndex > 0) {
+    if (
+      currentStepIndex > 0 &&
+      !useEmergencyGuideStore.getState().isCompletingSingleGuide
+    ) {
       moveToPreviousStep();
     }
   };
@@ -271,6 +283,22 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     resetGuide();
     navigation.popTo('FirstAid');
   };
+  const handleContinueQuestionsPress = (): void => {
+    const input = useEmergencyGuideStore.getState().input;
+    if (!input) {
+      handleNewRequestPress();
+      return;
+    }
+    const mainId = input.mainId ?? FIRST_AID_CATEGORIES.find(
+      item => SERVER_SYMPTOM_ID_BY_CATEGORY[item.id] === guide?.assessment?.categoryCode,
+    )?.id ?? FIRST_AID_CATEGORIES[0].id;
+    isStartingNewRequestRef.current = true;
+    resetGuide();
+    navigation.replace('FirstAidDetail', {
+      mainId,
+      continuation: { ...input, mainId },
+    });
+  };
 
   const shouldConfirmCompound =
     guide?.status !== 'COMPLETE' &&
@@ -280,9 +308,13 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
       'MULTIPLE_CATEGORIES_REQUIRE_COMPOUND',
     );
   const handleConfirmCompoundPress = (): void => {
+    const input = useEmergencyGuideStore.getState().input;
     isStartingNewRequestRef.current = true;
     resetGuide();
-    navigation.replace('FirstAidDetail', { isCompoundIntake: true });
+    navigation.replace('FirstAidDetail', {
+      isCompoundIntake: true,
+      ...(input ? { continuation: input } : {}),
+    });
   };
 
   if (guide?.compound) {
@@ -318,11 +350,25 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
                 navigation.replace('QRCode');
               }
             }}
-            onNewRequest={handleNewRequestPress}
+            onNewRequest={
+              guide.compound.status === 'ASSESSMENT_ONLY' ||
+              guide.compound.status === 'GUIDE_PENDING'
+                ? handleConfirmCompoundPress
+                : handleNewRequestPress
+            }
             onClose={() => navigation.goBack()}
           />
         ) : (
-          <CompoundGuideStatus compound={guide.compound} onNewRequest={handleNewRequestPress} onClose={() => navigation.goBack()} />
+          <CompoundGuideStatus
+            compound={guide.compound}
+            onNewRequest={
+              guide.compound.status === 'ASSESSMENT_ONLY' ||
+              guide.compound.status === 'GUIDE_PENDING'
+                ? handleConfirmCompoundPress
+                : handleNewRequestPress
+            }
+            onClose={() => navigation.goBack()}
+          />
         )}
       </SafeAreaView>
     );
@@ -334,7 +380,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         <AssessmentOnlyModal
           assessment={guide.assessment}
           onClose={() => navigation.goBack()}
-          onNewRequest={handleNewRequestPress}
+          onNewRequest={handleContinueQuestionsPress}
+          onContinueQuestions={storedInput ? handleContinueQuestionsPress : undefined}
           onConfirmCompound={
             shouldConfirmCompound ? handleConfirmCompoundPress : undefined
           }
@@ -415,7 +462,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
 
       <View className="bg-background px-5 pb-5">
         <GuideNextButton
-          title={isLastStep ? '완료' : '다음 단계'}
+          title={isCompleting ? '완료 처리 중' : isLastStep ? '완료' : '다음 단계'}
+          isDisabled={isCompleting}
           onPress={handleNextStep}
         />
       </View>

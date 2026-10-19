@@ -181,6 +181,7 @@ describe('QRCodeScreen', () => {
         {
           itemName: '거즈',
           wasteCategory: 'GENERAL',
+          displayTitle: '일반 배출',
           disposalMethod: '일반 쓰레기로 배출하세요.',
           dangerLevel: 'LOW',
         },
@@ -240,6 +241,7 @@ describe('QRCodeScreen', () => {
       {
         itemName: '새 세션 물품',
         wasteCategory: 'GENERAL',
+        displayTitle: '일반 배출',
         disposalMethod: '새 세션 안내',
         dangerLevel: 'LOW',
       },
@@ -284,6 +286,7 @@ describe('QRCodeScreen', () => {
           {
             itemName: '이전 세션 물품',
             wasteCategory: 'GENERAL',
+            displayTitle: '일반 배출',
             disposalMethod: '이전 세션 안내',
             dangerLevel: 'LOW',
           },
@@ -360,6 +363,7 @@ describe('QRCodeScreen', () => {
         {
           itemName: '물품',
           wasteCategory: 'GENERAL',
+          displayTitle: '일반 배출',
           disposalMethod: '서버 안내',
           dangerLevel: 'LOW',
         },
@@ -397,6 +401,7 @@ describe('QRCodeScreen', () => {
         {
           itemName: '물품',
           wasteCategory: 'GENERAL',
+          displayTitle: '일반 배출',
           disposalMethod: '서버 안내',
           dangerLevel: 'LOW',
         },

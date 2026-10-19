@@ -203,7 +203,9 @@ describe('홈 응급 작업 정리', () => {
     expect(
       jest.mocked(createPhotoEmergencyGuide).mock.calls[0]?.[0].images,
     ).toHaveLength(5);
-    expect(onGuideCreated).toHaveBeenCalledWith('image', GUIDE);
+    expect(onGuideCreated).toHaveBeenCalledWith(
+      'image', GUIDE, jest.mocked(createPhotoEmergencyGuide).mock.calls[0][0],
+    );
     await act(async (): Promise<void> => renderer.unmount());
   });
 
@@ -287,7 +289,10 @@ describe('홈 응급 작업 정리', () => {
     await act(async (): Promise<void> => currentActions.handleVoicePress());
 
     expect(showEmergencyEvidenceFailureNotice).toHaveBeenCalledTimes(2);
-    expect(onGuideCreated).toHaveBeenLastCalledWith('voice', GUIDE);
+    expect(onGuideCreated).toHaveBeenLastCalledWith('voice', GUIDE, {
+      images: [],
+      audio: jest.mocked(createAudioEmergencyGuide).mock.calls[0][0],
+    });
     await act(async (): Promise<void> => renderer.unmount());
   });
 
@@ -437,7 +442,9 @@ describe('홈 응급 작업 정리', () => {
       },
       expect.any(AbortSignal),
     );
-    expect(onGuideCreated).toHaveBeenCalledWith('image', GUIDE);
+    expect(onGuideCreated).toHaveBeenCalledWith(
+      'image', GUIDE, jest.mocked(createPhotoEmergencyGuide).mock.calls[0][0],
+    );
     await act(async (): Promise<void> => renderer.unmount());
   });
 
@@ -574,7 +581,9 @@ describe('홈 응급 작업 정리', () => {
       await currentActions.handleVoicePress();
     });
 
-    expect(onGuideCreated).toHaveBeenCalledWith('voice', PENDING_GUIDE);
+    expect(onGuideCreated).toHaveBeenCalledWith('voice', PENDING_GUIDE, {
+      images: [], audio: jest.mocked(createAudioEmergencyGuide).mock.calls[0][0],
+    });
     expect(retryEmergencyGuide).not.toHaveBeenCalled();
     await act(async (): Promise<void> => renderer.unmount());
   });

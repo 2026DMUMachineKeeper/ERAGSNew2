@@ -30,6 +30,11 @@ import { SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/utils/emergencyQuestionnaire';
 import { reportEmergencySessionLocationOnce } from '@/utils/emergencySessionLocation';
 import { getMissingCompoundQuestions } from '@/utils/compoundQuestionFacts';
 import {
+  getPreviousEmergencyEvidence,
+  getPreviousEvidenceInjuryId,
+} from '@/utils/previousEmergencyEvidence';
+import { PreviousEvidencePanel } from './firstAidDetail/components/PreviousEvidencePanel';
+import {
   canContinueQuestionnaireStep,
   getCompoundQuestionnaireError,
   getQuestionnaireStepAnswers,
@@ -56,17 +61,28 @@ export const FirstAidDetail = ({
   const { handleCreateGuide } = useEmergencyQuestionnaireRequest();
   const startGuide = useEmergencyGuideStore(state => state.startGuide);
   const isFocused = useIsFocused();
+  const continuation = route.params?.continuation;
+  const originalMedia = continuation?.media;
   const category =
-    FIRST_AID_CATEGORIES.find(item => item.id === route.params?.mainId) ??
+    FIRST_AID_CATEGORIES.find(
+      item => item.id === (continuation?.mainId ?? route.params?.mainId),
+    ) ??
     (route.params?.isCompoundIntake ? FIRST_AID_CATEGORIES[0] : undefined);
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
   const [questionnaire, setQuestionnaire] = React.useState<QuestionnaireState>(
     () => {
+      const previous = continuation?.questionnaire;
+      if (previous &&
+        (!route.params?.isCompoundIntake || previous.compoundDraft.injuries.length === 2)) {
+        return previous;
+      }
       const initial: QuestionnaireState = {
-        questionAnswers: {},
+        questionAnswers: previous
+          ? { ...previous.questionAnswers, visibleSymptoms: [] }
+          : {},
         compoundDraft: { injuries: [], relation: null },
       };
-      // 복합 확인 요청에는 원래 음성을 복제하지 않고 손상별 답변을 새로 받습니다.
+      // 처음 분석한 자료의 대상 손상은 자동 추정하지 않고 문진에서 확인합니다.
       if (!route.params?.isCompoundIntake || !category) return initial;
       const compound = setCompoundInjuryCount(
         initial,
@@ -174,10 +190,6 @@ export const FirstAidDetail = ({
     currentQuestion,
     questionnaire,
   );
-  const canContinue = canContinueQuestionnaireStep(
-    currentQuestion,
-    questionnaire,
-  );
   const isCompound = isSupportedCompoundSelection(
     questionAnswers.visibleSymptoms ?? [],
   );
@@ -187,10 +199,33 @@ export const FirstAidDetail = ({
     .sort()
     .join(',')}`;
   const isLastQuestion = activeQuestionIndex === questions.length - 1;
-  const missingQuestions =
-    isCompound && isLastQuestion
-      ? getMissingCompoundQuestions(compoundDraft)
-      : [];
+  const missingQuestions = isCompound
+    ? getMissingCompoundQuestions(compoundDraft)
+    : [];
+  const hasUnansweredBurnQuestions = missingQuestions.some(missing =>
+    compoundDraft.injuries.some(injury =>
+      injury.injuryId === missing.injuryId && injury.categoryCode === 'BURN',
+    ),
+  );
+  const previousEvidence = getPreviousEmergencyEvidence(originalMedia);
+  const hasUnassignedEvidence = isCompound && previousEvidence.some(
+    evidence => !getPreviousEvidenceInjuryId(compoundDraft, evidence),
+  );
+  // 뒤쪽 손상 답변으로 앞쪽 질문이 추가될 수 있어 제출 직전에도 전체를 확인합니다.
+  const unansweredCount = missingQuestions
+    .filter(
+      missing =>
+        compoundDraft.injuries.find(injury => injury.injuryId === missing.injuryId)
+          ?.categoryCode !== 'BURN' &&
+        (isLastQuestion ||
+          (currentQuestion.kind === 'injury' &&
+            missing.injuryId === currentQuestion.injuryId)),
+    )
+    .reduce((count, missing) => count + missing.prompts.length, 0);
+  const canContinue =
+    canContinueQuestionnaireStep(currentQuestion, questionnaire) &&
+    unansweredCount === 0 &&
+    !((currentQuestion.id === 'visibleSymptoms' || isLastQuestion) && hasUnassignedEvidence);
   const hasImmediateDanger = (questionAnswers.immediateDanger ?? []).some(
     answerId => answerId !== 'NONE',
   );
@@ -302,6 +337,7 @@ export const FirstAidDetail = ({
         questionAnswers,
         requestController.signal,
         isCompound ? compoundDraft : undefined,
+        originalMedia,
       );
       if (
         activeSubmissionRef.current !== requestController ||
@@ -320,6 +356,7 @@ export const FirstAidDetail = ({
               .join(' · ')
           : category.label,
         source: 'manual',
+        input: { media: originalMedia, questionnaire, mainId: category.id },
       });
       // 관제용 위치 보고는 가이드 흐름과 독립적으로 백그라운드에서 한 번만 보냅니다.
       reportEmergencySessionLocationOnce(guide.sessionId);
@@ -414,6 +451,15 @@ export const FirstAidDetail = ({
             onChange={setQuestionnaire}
           />
         ) : null}
+        {originalMedia && previousEvidence.length > 0 &&
+        (currentQuestion.id === 'visibleSymptoms' || isLastQuestion) ? (
+          <PreviousEvidencePanel
+            media={originalMedia}
+            state={questionnaire}
+            isCompound={isCompound}
+            onChange={setQuestionnaire}
+          />
+        ) : null}
         {currentQuestion.kind === 'injury' ? (
           <CompoundInjuryPanel
             state={questionnaire}
@@ -486,14 +532,15 @@ export const FirstAidDetail = ({
             ))}
           </View>
         ) : null}
-        {missingQuestions.length ? (
+        {isLastQuestion && missingQuestions.length ? (
           <View className="mb-5 rounded-xl border border-memoLine bg-white px-4 py-4">
             <Text className="text-body font-suitBold text-black">
-              빠뜨린 추가 질문 확인
+              {hasUnansweredBurnQuestions ? '답하지 않은 추가 질문' : '답하지 않은 필수 질문'}
             </Text>
             <Text className="mt-2 text-body font-suitRegular text-gray">
-              답하지 않은 질문이 있으면 안내가 보류될 수 있습니다. 확인하지 못한
-              내용은 ‘잘 모르겠음’으로 남겨 주세요.
+              {hasUnansweredBurnQuestions
+                ? '화상의 추가 확인은 선택 사항입니다. 답하지 않은 내용에 따라 안내가 보류될 수 있습니다. 확인하기 어려운 항목은 ‘확인 어려움’을 선택해 주세요.'
+                : '각 손상의 추가 확인에 모두 답해야 가이드를 요청할 수 있습니다. 확인하기 어려운 항목은 ‘잘 모르겠음’을 선택해 주세요.'}
             </Text>
             {missingQuestions.map(missing => (
               <View key={missing.injuryId} className="mt-4">
@@ -541,6 +588,21 @@ export const FirstAidDetail = ({
       </ScrollView>
 
       <View className="bg-background px-5 pb-5 pt-3">
+        {hasUnassignedEvidence &&
+        (currentQuestion.id === 'visibleSymptoms' || isLastQuestion) ? (
+          <Text className="mb-2 text-caption font-suitMedium text-red">
+            처음 보낸 자료가 어느 손상에 해당하는지 선택해 주세요.
+          </Text>
+        ) : null}
+        {unansweredCount > 0 ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            className="mb-2 text-caption font-suitMedium text-red"
+          >
+            추가 확인 {unansweredCount}개에 답해 주세요. 확인하기 어렵다면
+            ‘잘 모르겠음’을 선택할 수 있습니다.
+          </Text>
+        ) : null}
         <TouchableOpacity
           accessibilityLabel={
             isLastQuestion ? '응급처치 가이드 시작' : '다음 질문'

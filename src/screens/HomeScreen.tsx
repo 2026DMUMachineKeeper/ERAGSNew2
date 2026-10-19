@@ -18,7 +18,11 @@ import { CameraIcon, MicIcon } from '@/assets/icons';
 import type { MainTabParamList } from '@/navigation/MainTabNavigator';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyGuideResponse, MedicineAlert } from '@/types';
+import type {
+  EmergencyGuidePhotoRequest,
+  EmergencyGuideResponse,
+  MedicineAlert,
+} from '@/types';
 import { medicineAlertsQueryOptions } from '@/query';
 import { getApiErrorUserMessage } from '@/services/apiError.service';
 import { isAuthSessionExpiredError } from '@/services/auth.service';
@@ -76,8 +80,12 @@ export const HomeScreen = ({
     [navigation],
   );
   const handleGuideCreated = React.useCallback(
-    (source: 'image' | 'voice', guide: EmergencyGuideResponse): void => {
-      startGuide({ guide, source });
+    (
+      source: 'image' | 'voice',
+      guide: EmergencyGuideResponse,
+      media: EmergencyGuidePhotoRequest,
+    ): void => {
+      startGuide({ guide, source, input: { media } });
       // 관제용 위치 보고는 가이드 흐름과 독립적으로 백그라운드에서 한 번만 보냅니다.
       reportEmergencySessionLocationOnce(guide.sessionId);
       navigation.navigate('EmergencyGuide');
