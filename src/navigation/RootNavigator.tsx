@@ -29,7 +29,11 @@ export type RootStackParamList = {
   MedicineManualInput: undefined;
   PasswordReset: undefined;
   FirstAid: undefined;
-  FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
+  FirstAidDetail: {
+    mainId?: string;
+    mainLabel?: string;
+    isCompoundIntake?: boolean;
+  } | undefined;
   EmergencyGuide: undefined;
   QRCode: undefined;
   WasteGuide: undefined;

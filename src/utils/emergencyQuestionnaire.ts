@@ -124,6 +124,9 @@ export const toCompoundGuideRequest = (
                     : [],
                 ),
                 ...encodedQaFacts(prunedDraft, injury),
+                ...(injury.observationText?.trim()
+                  ? [injury.observationText.trim()]
+                  : []),
               ]
             : [],
         questionnaire: toEmergencyGuideQuestionnaire(injuryAnswers),
@@ -131,10 +134,34 @@ export const toCompoundGuideRequest = (
     ];
   });
   const ageGroup = answers.ageGroup?.[0];
+  const imageInjuries =
+    prunedDraft?.injuries.flatMap(injury =>
+      (injury.images ?? []).map(() => injury.injuryId),
+    ) ?? [];
+  const audioInjuries =
+    prunedDraft?.injuries.filter(injury => injury.audio) ?? [];
+  if (imageInjuries.length > 5 || audioInjuries.length > 1) {
+    throw new Error('사진은 합계 5장, 음성은 1개까지 첨부할 수 있습니다.');
+  }
   return {
     schemaVersion: '2',
     requestId,
     language: 'ko-KR',
+    ...(imageInjuries.length || audioInjuries.length
+      ? {
+          evidenceBindings: {
+            ...(imageInjuries.length
+              ? {
+                  images: imageInjuries.map((injuryId, imageIndex) => ({
+                    imageIndex,
+                    injuryId,
+                  })),
+                }
+              : {}),
+            ...(audioInjuries[0] ? { audio: audioInjuries[0].injuryId } : {}),
+          },
+        }
+      : {}),
     patientContext: {
       consciousness:
         answers.immediateDanger?.includes('UNCONSCIOUS') ||

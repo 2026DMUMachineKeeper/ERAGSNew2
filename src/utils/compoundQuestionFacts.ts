@@ -47,26 +47,6 @@ const isSmallWound = (injury: CompoundQuestionnaireInjury): boolean =>
       'SHOCK_SIGNS',
     ],
   );
-const isSmallBurn = (injury: CompoundQuestionnaireInjury): boolean =>
-  injury.categoryCode === 'BURN' &&
-  hasAnswers(
-    injury,
-    'burnCause',
-    ['BURN_SMALL_AREA'],
-    [
-      'BURN_FACE_NECK',
-      'BURN_LARGE_AREA',
-      'BURN_CHEMICAL',
-      'BURN_ELECTRICAL',
-      'SMOKE_INHALATION',
-    ],
-  ) &&
-  hasAnswers(
-    injury,
-    'burnSkinState',
-    ['RED_PAINFUL'],
-    ['BLISTER', 'WHITE_BLACK', 'NUMB', 'UNKNOWN'],
-  );
 const isClosedInjury = (injury: CompoundQuestionnaireInjury): boolean =>
   injury.categoryCode === 'FRACTURE_BRUISE' &&
   hasAnswers(
@@ -78,66 +58,6 @@ const isClosedInjury = (injury: CompoundQuestionnaireInjury): boolean =>
   (injury.answers.injuryState ?? []).some(value =>
     ['DEFORMITY', 'SEVERE_SWELLING', 'CANNOT_USE_LIMB'].includes(value),
   );
-
-const canHaveCQuestions = (injury: CompoundQuestionnaireInjury): boolean => {
-  if (injury.categoryCode === 'BLEEDING') {
-    return (
-      (!injury.answers.bleedingPattern?.length ||
-        hasAnswers(
-          injury,
-          'bleedingPattern',
-          ['BLEEDING_OOZING'],
-          [
-            'BLEEDING_CONTINUOUS',
-            'BLEEDING_SOAKING',
-            'BLEEDING_SPURTING',
-            'BLEEDING_UNKNOWN',
-          ],
-        )) &&
-      (!injury.answers.woundRisk?.length ||
-        hasAnswers(
-          injury,
-          'woundRisk',
-          ['NONE'],
-          [
-            'WOUND_DEEP',
-            'FOREIGN_OBJECT',
-            'AMPUTATION',
-            'PRESSURE_FAILED',
-            'SHOCK_SIGNS',
-          ],
-        ))
-    );
-  }
-  if (injury.categoryCode === 'BURN') {
-    return (
-      (!injury.answers.burnCause?.length ||
-        hasAnswers(
-          injury,
-          'burnCause',
-          ['BURN_SMALL_AREA'],
-          [
-            'BURN_FACE_NECK',
-            'BURN_LARGE_AREA',
-            'BURN_CHEMICAL',
-            'BURN_ELECTRICAL',
-            'SMOKE_INHALATION',
-          ],
-        )) &&
-      (!injury.answers.burnSkinState?.length ||
-        hasAnswers(
-          injury,
-          'burnSkinState',
-          ['RED_PAINFUL'],
-          ['BLISTER', 'WHITE_BLACK', 'NUMB', 'UNKNOWN'],
-        ))
-    );
-  }
-  return (
-    injury.categoryCode === 'FRACTURE_BRUISE' &&
-    (!injury.answers.injuryState?.length || isClosedInjury(injury))
-  );
-};
 
 // QA main의 노출 조건을 그대로 적용하고, 답하지 않은 항목은 전송하지 않습니다.
 export function relevantQaFacts(
@@ -184,14 +104,13 @@ export function relevantQaFacts(
     draft.relation === 'DIFFERENT' &&
     draft.injuries.every(item => item.location.scope === 'LOCALIZED') &&
     draft.injuries.some(item => item.categoryCode === 'BLEEDING') &&
-    draft.injuries.some(item =>
-      ['BURN', 'FRACTURE_BRUISE'].includes(item.categoryCode),
-    ) &&
-    draft.injuries.every(canHaveCQuestions);
+    draft.injuries.some(
+      item => item.categoryCode === 'BURN' || isClosedInjury(item),
+    );
   if (hasCQuestionContext) {
     ids.add('GUIDE_ACTIONS_ALREADY_PERFORMED');
-    if (isSmallWound(injury)) ids.add('WOUND_CARE_STARTED');
-    if (isSmallBurn(injury)) {
+    if (injury.categoryCode === 'BLEEDING') ids.add('WOUND_CARE_STARTED');
+    if (injury.categoryCode === 'BURN') {
       (
         [
           'BURN_MEDICINES_AVAILABLE',
@@ -408,33 +327,21 @@ export function relevantQaFacts(
   const questions = QA_FACT_QUESTIONS.filter(q => ids.has(q.id));
   const order: readonly QaFactId[] | null = !hasCQuestionContext
     ? null
-    : isSmallBurn(injury)
+    : injury.categoryCode === 'BURN'
     ? C_ROUTE_QA_FACT_ORDER.BURN
     : isSuspectedClosedInjury
     ? C_ROUTE_QA_FACT_ORDER.FRACTURE_BRUISE
-    : isSmallWound(injury)
+    : injury.categoryCode === 'BLEEDING'
     ? C_ROUTE_QA_FACT_ORDER.BLEEDING
     : null;
   if (!order) return questions;
-  // 자료의 C 질문을 먼저 묻고, 이미 확인한 다른 관찰은 숨기거나 삭제하지 않습니다.
+  // COMPLETE 예시는 가능한 입력의 일부이므로 예시 밖의 적용 질문도 함께 표시합니다.
   const ordered = order.flatMap(id =>
     questions.filter(question => question.id === id),
   );
-  const hasFixationResourceAnswer =
-    ['YES', 'UNKNOWN'].includes(injury.qaFacts?.SPLINT_AVAILABLE ?? '') ||
-    ['YES', 'UNKNOWN'].includes(injury.qaFacts?.FIXATION_TOOLS_AVAILABLE ?? '');
   return [
     ...ordered,
-    ...questions.filter(
-      question =>
-        !order.includes(question.id) &&
-        (injury.qaFacts?.[question.id] !== undefined ||
-          (injury.categoryCode === 'BURN' &&
-            question.id === 'BURN_CAN_REMAIN_CLEAN' &&
-            injury.qaFacts?.BURN_COOLING_COMPLETED === 'YES') ||
-          (injury.categoryCode === 'FRACTURE_BRUISE' &&
-            hasFixationResourceAnswer)),
-    ),
+    ...questions.filter(question => !order.includes(question.id)),
   ];
 }
 

@@ -272,6 +272,19 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     navigation.popTo('FirstAid');
   };
 
+  const shouldConfirmCompound =
+    guide?.status !== 'COMPLETE' &&
+    !guide?.compound &&
+    guide?.treatment.steps.length === 0 &&
+    !!guide.assessment?.missingInputs.includes(
+      'MULTIPLE_CATEGORIES_REQUIRE_COMPOUND',
+    );
+  const handleConfirmCompoundPress = (): void => {
+    isStartingNewRequestRef.current = true;
+    resetGuide();
+    navigation.replace('FirstAidDetail', { isCompoundIntake: true });
+  };
+
   if (guide?.compound) {
     return (
       <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
@@ -315,13 +328,16 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     );
   }
 
-  if (guide?.status === 'ASSESSMENT_ONLY') {
+  if (guide?.status === 'ASSESSMENT_ONLY' || shouldConfirmCompound) {
     return (
       <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
         <AssessmentOnlyModal
           assessment={guide.assessment}
           onClose={() => navigation.goBack()}
           onNewRequest={handleNewRequestPress}
+          onConfirmCompound={
+            shouldConfirmCompound ? handleConfirmCompoundPress : undefined
+          }
         />
       </SafeAreaView>
     );

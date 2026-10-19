@@ -6,6 +6,7 @@ import type {
   CompoundCategoryCode,
   CompoundGuideInjuryInput,
   CompoundGuideRequest,
+  EmergencyGuideMediaFile,
 } from './emergencyGuide.types';
 import type { QuestionAnswers } from './emergencyQuestionnaire.types';
 import type { EmergencyQuestion } from '@/constants/emergencyQuestionData';
@@ -19,11 +20,16 @@ export interface CompoundQuestionnaireInjury {
   categoryCode: CompoundCategoryCode;
   location: { scope: CompoundLocationScope | null; description: string };
   answers: QuestionAnswers;
+  observationText?: string;
+  images?: readonly EmergencyGuideMediaFile[];
+  audio?: EmergencyGuideMediaFile | null;
+  isEvidenceBusy?: boolean;
   qaFacts?: Partial<Record<QaFactId, QaFactAnswer>>;
   fractureSkinAnswer?:
     | (typeof fractureSkinFollowup.options)[number]['value']
     | null;
   isConfirmed?: boolean;
+  hasSelectedCategory?: boolean;
 }
 export interface CompoundQuestionnaireDraft {
   injuries: readonly CompoundQuestionnaireInjury[];

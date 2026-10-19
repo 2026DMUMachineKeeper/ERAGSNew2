@@ -199,7 +199,20 @@ export const canContinueQuestionnaireStep = (
   step: QuestionnaireStep,
   state: QuestionnaireState,
 ): boolean => {
+  if (
+    step.id === 'immediateDanger' &&
+    state.questionAnswers.immediateDangerUnknown?.[0] === 'UNKNOWN' &&
+    !state.questionAnswers.immediateDanger?.length
+  ) {
+    return true;
+  }
   if (step.kind === 'injury') {
+    if (
+      state.compoundDraft.injuries.find(item => item.injuryId === step.injuryId)
+        ?.isEvidenceBusy
+    ) {
+      return false;
+    }
     return getInjuryDetailSteps(state.compoundDraft, step.injuryId).every(
       detail => canContinueQuestionnaireStep(detail, state),
     );
@@ -232,7 +245,10 @@ export const canContinueQuestionnaireStep = (
     return (
       isSupportedCompoundSelection(
         state.questionAnswers.visibleSymptoms ?? [],
-      ) && state.compoundDraft.injuries.every(i => i.isConfirmed !== false)
+      ) &&
+      state.compoundDraft.injuries.every(
+        i => i.isConfirmed !== false && i.hasSelectedCategory !== false,
+      )
     );
   }
   const selected = getQuestionnaireStepAnswers(step, state);
@@ -282,8 +298,9 @@ export const updateQuestionnaireAnswer = (
     return state;
   }
   if (!step.kind) {
-    const questionAnswers = {
+    const questionAnswers: QuestionAnswers = {
       ...state.questionAnswers,
+      ...(step.id === 'immediateDanger' ? { immediateDangerUnknown: [] } : {}),
       [step.id]: getNextEmergencyAnswerIds(
         step,
         state.questionAnswers[step.id] ?? [],
@@ -391,7 +408,9 @@ export const getCompoundQuestionnaireError = (
   if (
     !isSupportedCompoundSelection(answers.visibleSymptoms ?? []) ||
     draft.injuries.length !== 2 ||
-    draft.injuries.some(i => i.isConfirmed === false) ||
+    draft.injuries.some(
+      i => i.isConfirmed === false || i.hasSelectedCategory === false,
+    ) ||
     new Set(draft.injuries.map(injury => injury.injuryId)).size !== 2 ||
     draft.injuries.some(
       (injury, index) =>
@@ -425,7 +444,10 @@ export const setCompoundInjuryCategory = (
   if (symptoms.length !== 2 || !state.compoundDraft.injuries[index]) {
     return state;
   }
-  if (symptoms[index] === code) {
+  if (
+    symptoms[index] === code &&
+    state.compoundDraft.injuries[index].hasSelectedCategory !== false
+  ) {
     return state;
   }
   symptoms[index] = code;
@@ -434,9 +456,14 @@ export const setCompoundInjuryCategory = (
       return {
         ...injury,
         categoryCode: code,
+        hasSelectedCategory: true,
         answers: {},
         qaFacts: {},
         fractureSkinAnswer: null,
+        observationText: '',
+        images: [],
+        audio: null,
+        isEvidenceBusy: false,
         isConfirmed: false,
       };
     }

@@ -41,6 +41,10 @@ export interface CompoundGuideRequest {
   requestId: string;
   language: 'ko-KR';
   patientContext: EmergencyGuidePatientContext;
+  evidenceBindings?: {
+    images?: readonly { imageIndex: number; injuryId: string }[];
+    audio?: string;
+  };
   injuries: readonly [CompoundGuideInjuryInput, CompoundGuideInjuryInput];
   relations: readonly [
     {

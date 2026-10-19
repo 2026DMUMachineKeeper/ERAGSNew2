@@ -234,6 +234,63 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     expect(speakTts).toHaveBeenCalledTimes(spokenCount);
   });
 
+  it.each(['ASSESSMENT_ONLY', 'GUIDE_PENDING'] as const)(
+    '%s의 복합 확인 요구는 두 손상 문진으로 연결하고 원래 음성을 넘기지 않는다',
+    async (status) => {
+      const transcript =
+        '왼손은 칼에 베여서 피가 계속 나고 오른팔은 데여서 물집이 생겼어요.';
+      await act(async () =>
+        useEmergencyGuideStore.getState().setGuide({
+          ...GUIDE,
+          status,
+          evidence: {
+            voice: { status: 'SUCCEEDED', transcript },
+            images: null,
+            questionnaire: null,
+          },
+          assessment: {
+            ...CALL_ASSESSMENT,
+            categoryCode: 'UNKNOWN',
+            summary: '두 손상을 함께 확인해 주세요.',
+            missingInputs: ['MULTIPLE_CATEGORIES_REQUIRE_COMPOUND'],
+          },
+          treatment: { routeCode: null, modelVersion: null, steps: [] },
+        }),
+      );
+      const texts = renderer.root
+        .findAllByType(Text)
+        .map((node) => node.props.children);
+      expect(texts).toContain('추가 정보 입력');
+      expect(texts).toContain('처치 안내를 위해 손상 정보를 추가로 확인해야 합니다.');
+      expect(texts).toContain('119 신고가 필요합니다.');
+      expect(texts).not.toContain('MULTIPLE_CATEGORIES_REQUIRE_COMPOUND');
+      expect(renderer.root.findAllByType(StepDetail)).toHaveLength(0);
+      await pressButton('추가 정보 입력');
+      expect(navigation.replace).toHaveBeenCalledWith('FirstAidDetail', {
+        isCompoundIntake: true,
+      });
+      expect(navigation.popTo).not.toHaveBeenCalled();
+      expect(useEmergencyGuideStore.getState().guide).toBeNull();
+      expect(retryEmergencyGuide).not.toHaveBeenCalled();
+    },
+  );
+
+  it('이미 생성된 처치 단계는 복합 확인 코드가 있어도 새 문진으로 바꾸지 않는다', async () => {
+    await act(async () =>
+      useEmergencyGuideStore.getState().setGuide({
+        ...GUIDE,
+        assessment: {
+          ...CALL_ASSESSMENT,
+          missingInputs: ['MULTIPLE_CATEGORIES_REQUIRE_COMPOUND'],
+        },
+      }),
+    );
+    expect(renderer.root.findAllByType(StepDetail)).toHaveLength(1);
+    expect(
+      renderer.root.findAllByType(Modal).filter((node) => node.props.visible),
+    ).toHaveLength(0);
+  });
+
   it('복합 보류 사유를 표시하고 단일 가이드 재시도나 처치 완료로 진행하지 않는다', async () => {
     await act(async () => useEmergencyGuideStore.getState().setGuide({
       ...GUIDE, status: 'ASSESSMENT_ONLY', assessment: null,

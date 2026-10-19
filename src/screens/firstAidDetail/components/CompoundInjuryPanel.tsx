@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { EmergencyQuestionOption } from '@/components/EmergencyGuide';
 import { fractureSkinFollowup } from '@/constants/compoundQaData';
 import type {
@@ -13,6 +13,7 @@ import {
   updateQuestionnaireAnswer,
 } from '@/utils/compoundQuestionnaire';
 import { pruneQaFacts, relevantQaFacts } from '@/utils/compoundQuestionFacts';
+import { useCompoundInjuryEvidence } from '@/hooks/useCompoundInjuryEvidence';
 
 export const IntakeChoice = ({
   label,
@@ -53,6 +54,8 @@ export const CompoundInjuryPanel = ({
   const injury = state.compoundDraft.injuries.find(
     item => item.injuryId === injuryId,
   );
+  const { isBusy, isRecording, handleAddPhoto, handleAudio } =
+    useCompoundInjuryEvidence(injury, state, onChange);
   if (!injury) {
     return null;
   }
@@ -149,6 +152,79 @@ export const CompoundInjuryPanel = ({
           ))}
         </View>
       ))}
+      <Text className="mb-3 text-body font-suitBold text-black">
+        관찰 내용·사진·음성 (선택)
+      </Text>
+      <Text className="mb-3 text-caption font-suitMedium text-gray">
+        이 손상의 자료만 첨부해 주세요. 사진은 두 손상 합계 5장, 음성은 1개까지
+        가능합니다.
+      </Text>
+      <TextInput
+        accessibilityLabel="이 손상의 추가 관찰 내용"
+        multiline
+        value={injury.observationText ?? ''}
+        onChangeText={observationText => handlePatch({ observationText })}
+        placeholder="직접 확인한 내용을 적어 주세요."
+        className="mb-4 min-h-20 rounded-lg border border-memoLine bg-white px-4 py-3 text-body font-suitMedium text-black"
+      />
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="이 손상 사진 촬영"
+        disabled={isBusy}
+        onPress={handleAddPhoto}
+        className="mb-3 rounded-lg border border-memoLine bg-white px-4 py-3"
+      >
+        <Text className="text-body font-suitMedium text-black">사진 촬영</Text>
+      </TouchableOpacity>
+      {injury.images?.map((image, index) => (
+        <TouchableOpacity
+          key={`${image.uri}-${index}`}
+          accessibilityRole="button"
+          accessibilityLabel={`이 손상 사진 ${index + 1} 삭제`}
+          disabled={isBusy}
+          onPress={() =>
+            handlePatch({
+              images: injury.images?.filter((_, i) => i !== index),
+            })
+          }
+          className="mb-2 rounded-lg border border-memoLine bg-white px-4 py-3"
+        >
+          <Text className="text-body font-suitMedium text-black">
+            사진 {index + 1} · 삭제
+          </Text>
+        </TouchableOpacity>
+      ))}
+      {injury.audio ? (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="이 손상 음성 삭제"
+          disabled={isBusy}
+          onPress={() => handlePatch({ audio: null })}
+          className="mb-3 rounded-lg border border-memoLine bg-white px-4 py-3"
+        >
+          <Text className="text-body font-suitMedium text-black">
+            녹음 첨부됨 · 삭제
+          </Text>
+        </TouchableOpacity>
+      ) : state.compoundDraft.injuries.some(item => item.audio) ? (
+        <Text className="mb-3 text-caption font-suitMedium text-gray">
+          다른 손상에 음성이 첨부되어 있습니다.
+        </Text>
+      ) : (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={
+            isRecording ? '이 손상 녹음 완료' : '이 손상 음성 녹음'
+          }
+          disabled={isBusy && !isRecording}
+          onPress={handleAudio}
+          className="mb-3 rounded-lg border border-memoLine bg-white px-4 py-3"
+        >
+          <Text className="text-body font-suitMedium text-black">
+            {isRecording ? '녹음 완료' : '음성 녹음'}
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

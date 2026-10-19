@@ -8,12 +8,14 @@ type Props = {
   assessment: EmergencyGuideAssessment | null;
   onClose: () => void;
   onNewRequest: () => void;
+  onConfirmCompound?: () => void;
 };
 
 export function AssessmentOnlyModal({
   assessment,
   onClose,
   onNewRequest,
+  onConfirmCompound,
 }: Props): React.JSX.Element {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -31,10 +33,14 @@ export function AssessmentOnlyModal({
               <Text className="text-coment font-suitBold text-gray">추가 확인 필요</Text>
             </View>
             <Text accessibilityRole="header" className="text-title2 font-suitBold text-black">
-              증상 정보가 더 필요해요
+              {onConfirmCompound
+                ? '추가 정보 입력'
+                : '증상 정보가 더 필요해요'}
             </Text>
             <Text className="mt-3 text-body font-suitRegular leading-6 text-gray">
-              현재 정보만으로는 처치 안내를 제공하기 어렵습니다. 증상 정보를 보완해 새 문진을 시작해 주세요.
+              {onConfirmCompound
+                ? '처치 안내에 필요한 정보가 부족합니다. 이어지는 질문에 답해 주세요.'
+                : '현재 정보만으로는 처치 안내를 제공하기 어렵습니다. 증상 정보를 보완해 새 문진을 시작해 주세요.'}
             </Text>
             <View className="mt-5 rounded-2xl bg-background p-4">
               <Text className="text-body font-suitBold text-black">판단 요약</Text>
@@ -62,7 +68,9 @@ export function AssessmentOnlyModal({
                       {'\u2022'}
                     </Text>
                     <Text className="flex-1 text-body font-suitRegular leading-6 text-gray">
-                      {input}
+                      {input === 'MULTIPLE_CATEGORIES_REQUIRE_COMPOUND'
+                        ? '처치 안내를 위해 손상 정보를 추가로 확인해야 합니다.'
+                        : input}
                     </Text>
                   </View>
                 ))}
@@ -70,12 +78,16 @@ export function AssessmentOnlyModal({
             ) : null}
           </ScrollView>
           <TouchableOpacity
-            accessibilityLabel="새 문진 시작"
+            accessibilityLabel={
+              onConfirmCompound ? '추가 정보 입력' : '새 문진 시작'
+            }
             accessibilityRole="button"
             className="mt-6 h-12 items-center justify-center rounded-xl bg-red"
-            onPress={onNewRequest}
+            onPress={onConfirmCompound ?? onNewRequest}
           >
-            <Text className="text-body font-suitBold text-white">새 문진 시작</Text>
+            <Text className="text-body font-suitBold text-white">
+              {onConfirmCompound ? '추가 정보 입력' : '새 문진 시작'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             accessibilityLabel="닫기"

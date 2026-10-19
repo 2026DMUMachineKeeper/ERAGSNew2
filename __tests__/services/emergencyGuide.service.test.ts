@@ -59,6 +59,108 @@ describe('emergencyGuide.service', () => {
     consoleWarnMock.mockRestore();
   });
 
+  it('긴 음성 원문과 사진별 분석 전체를 세션별 조각 로그로 남기고 응답을 보존한다', async () => {
+    const voice = {
+      status: 'SUCCEEDED',
+      transcript: '왼쪽 팔에서 피가 나고 모양이 변했습니다. '.repeat(100),
+      modelVersion: 'voice-test',
+    };
+    const images = [
+      {
+        imageId: 'image-0',
+        status: 'SUCCEEDED',
+        visibleBloodScore: 0.91,
+        classifiers: [{ label: 'BLEEDING', score: 0.88 }],
+        modelVersion: 'image-test',
+      },
+      {
+        imageId: 'image-1',
+        status: 'FAILED',
+        error: { code: 'SM_UNAVAILABLE', message: '분석 실패' },
+      },
+    ];
+    const data = {
+      ...createGuidePayload('evidence-session'),
+      evidence: { voice, images, questionnaire: null },
+    };
+    fetchMock.mockResolvedValue(createMockResponse(200, { success: true, data }));
+    await expect(createEmergencyGuide(new FormData())).resolves.toEqual(data);
+    const voiceLogs = consoleWarnMock.mock.calls.filter(
+      ([tag]) => tag === '[EmergencyGuide API][Voice Evidence]',
+    );
+    expect(voiceLogs.length).toBeGreaterThan(1);
+    expect(
+      JSON.parse(voiceLogs.map((call) => call[2] as string).join('')),
+    ).toEqual(voice);
+    voiceLogs.forEach((call, index) => {
+      expect(JSON.parse(call[1] as string)).toEqual({
+        sessionId: 'evidence-session',
+        requestId: 'manual-001',
+        chunk: index + 1,
+        chunks: voiceLogs.length,
+      });
+      expect((call[2] as string).length).toBeLessThanOrEqual(800);
+    });
+    const imageLogs = consoleWarnMock.mock.calls.filter(
+      ([tag]) => tag === '[EmergencyGuide API][Image Evidence]',
+    );
+    expect(imageLogs).toHaveLength(2);
+    imageLogs.forEach((call, index) => {
+      expect(JSON.parse(call[1] as string)).toMatchObject({ imageIndex: index });
+      expect(JSON.parse(call[2] as string)).toEqual(images[index]);
+    });
+  });
+
+  it('복합 손상의 음성·사진 결과는 대상 손상 ID와 함께 기록한다', async () => {
+    const voice = { status: 'SUCCEEDED', transcript: '왼쪽 팔이 다쳤습니다.' };
+    const image = {
+      imageId: 'image-0',
+      status: 'SUCCEEDED',
+      visibleBloodScore: 0.7,
+    };
+    const data = {
+      ...createGuidePayload('compound-evidence'),
+      evidenceByInjury: {
+        'injury-1': { voice, images: null },
+        'injury-2': { voice: null, images: [image] },
+      },
+    };
+    fetchMock.mockResolvedValue(createMockResponse(200, { success: true, data }));
+    await createEmergencyGuide(new FormData());
+    const voiceLog = consoleWarnMock.mock.calls.find(
+      ([tag]) => tag === '[EmergencyGuide API][Voice Evidence]',
+    )!;
+    const imageLog = consoleWarnMock.mock.calls.find(
+      ([tag]) => tag === '[EmergencyGuide API][Image Evidence]',
+    )!;
+    expect(JSON.parse(voiceLog[1] as string)).toMatchObject({
+      injuryId: 'injury-1',
+    });
+    expect(JSON.parse(voiceLog[2] as string)).toEqual(voice);
+    expect(JSON.parse(imageLog[1] as string)).toMatchObject({
+      injuryId: 'injury-2',
+      imageIndex: 0,
+    });
+    expect(JSON.parse(imageLog[2] as string)).toEqual(image);
+  });
+
+  it('음성·사진 결과가 없는 응답에는 근거 상세 로그를 추가하지 않는다', async () => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: createGuidePayload('manual-session'),
+      }),
+    );
+    await createEmergencyGuide(new FormData());
+    expect(
+      consoleWarnMock.mock.calls.some(
+        ([tag]) =>
+          tag === '[EmergencyGuide API][Voice Evidence]' ||
+          tag === '[EmergencyGuide API][Image Evidence]',
+      ),
+    ).toBe(false);
+  });
+
   it('서버 내부 이미지 주소를 프론트 API 주소로 보정한다', (): void => {
     expect(
       getEmergencyGuideImageUrl(

@@ -17,9 +17,17 @@ export const useEmergencyQuestionnaireRequest = () => {
     compoundDraft?: CompoundQuestionnaireDraft,
   ) => {
     if ((answers.visibleSymptoms ?? []).length > 1) {
-      const content = JSON.stringify(
-        toCompoundGuideRequest(answers, '', compoundDraft),
-      );
+      const media = {
+        images:
+          compoundDraft?.injuries.flatMap(injury => injury.images ?? []) ?? [],
+        audio:
+          compoundDraft?.injuries.find(injury => injury.audio)?.audio ??
+          undefined,
+      };
+      const content = JSON.stringify({
+        request: toCompoundGuideRequest(answers, '', compoundDraft),
+        media,
+      });
       // 동일 내용의 통신 재시도는 같은 ID를 사용해 중복 세션 생성을 피합니다.
       if (compoundRequestRef.current?.content !== content) {
         compoundRequestRef.current = {
@@ -36,6 +44,7 @@ export const useEmergencyQuestionnaireRequest = () => {
           compoundDraft,
         ),
         signal,
+        media,
       );
     }
     const formData = new FormData();
