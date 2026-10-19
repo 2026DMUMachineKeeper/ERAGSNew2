@@ -19,6 +19,39 @@ const TEST_GUIDE: EmergencyGuideResponse = {
 };
 
 describe('useEmergencyGuideStore', () => {
+  it('차감 기록은 같은 세션 재조회에서 유지하고 새 가이드와 초기화에서 비운다', () => {
+    const store = useEmergencyGuideStore.getState();
+    store.startGuide({ guide: TEST_GUIDE, source: 'manual' });
+    store.recordMedicineUse(1, 2);
+    store.setGuide({ ...TEST_GUIDE });
+    expect(useEmergencyGuideStore.getState().usedMedicineQuantities).toEqual({ 1: 2 });
+    store.setGuide({ ...TEST_GUIDE, sessionId: 'session-2' });
+    expect(useEmergencyGuideStore.getState().usedMedicineQuantities).toEqual({});
+    store.recordMedicineUse(1, 1);
+    store.setIsCompletingSingleGuide(true);
+    store.startGuide({ guide: TEST_GUIDE, source: 'manual' });
+    expect(useEmergencyGuideStore.getState()).toMatchObject({
+      usedMedicineQuantities: {}, isCompletingSingleGuide: false,
+    });
+    store.recordMedicineUse(1, 1);
+    store.resetGuide();
+    expect(useEmergencyGuideStore.getState().usedMedicineQuantities).toEqual({});
+  });
+
+  it('추가 문진용 원본은 같은 요청에 보관하고 새 요청과 초기화에서 비운다', () => {
+    const input = { media: { images: [], audio: {
+      uri: 'file:///original.m4a', name: 'original.m4a', type: 'audio/mp4',
+    } } };
+    const store = useEmergencyGuideStore.getState();
+    store.startGuide({ guide: TEST_GUIDE, source: 'voice', input });
+    store.setGuide({ ...TEST_GUIDE, status: 'ASSESSMENT_ONLY' });
+    expect(useEmergencyGuideStore.getState().input).toEqual(input);
+    store.startGuide({ guide: TEST_GUIDE, source: 'manual' });
+    expect(useEmergencyGuideStore.getState().input).toBeNull();
+    store.startGuide({ guide: TEST_GUIDE, source: 'voice', input });
+    store.resetGuide();
+    expect(useEmergencyGuideStore.getState().input).toBeNull();
+  });
   afterEach((): void => {
     useEmergencyGuideStore.getState().resetGuide();
   });

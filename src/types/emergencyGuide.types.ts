@@ -242,6 +242,7 @@ export type EmergencyWasteGuideDangerLevel = 'HIGH' | 'LOW';
 export interface EmergencyWasteGuideItem {
   itemName: string;
   wasteCategory: string;
+  displayTitle: string;
   disposalMethod: string;
   dangerLevel: EmergencyWasteGuideDangerLevel;
 }

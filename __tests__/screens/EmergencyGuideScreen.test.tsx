@@ -12,6 +12,13 @@ import { requestTtsVoiceDataInstallation, retryEmergencyGuide, speakTts } from '
 import type { EmergencyGuideResponse } from '@/types';
 
 import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
+import { HELD_COMPOUND_SNAPSHOT } from '../../testSupport/compoundGuide';
+import { readCompoundGuideSession } from '@/services';
+import { postMedicineUse } from '@/services/medicineApi';
+import { invalidateMedicines } from '@/query';
+
+jest.mock('@/services/medicineApi', () => ({ postMedicineUse: jest.fn(async () => ({})) }));
+jest.mock('@/query', () => ({ invalidateMedicines: jest.fn() }));
 
 jest.mock('@/assets', () => ({ BackIcon: (): null => null, FirstAidGuideIcon: (): null => null }));
 jest.mock('@/services', () => ({
@@ -20,6 +27,7 @@ jest.mock('@/services', () => ({
   stopTts: jest.fn(async () => {}),
   requestTtsVoiceDataInstallation: jest.fn(async () => {}),
   retryEmergencyGuide: jest.fn(),
+  readCompoundGuideSession: jest.fn(),
 }));
 
 const GUIDE: EmergencyGuideResponse = {
@@ -96,6 +104,24 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     await act(async () => button?.props.onPress());
   };
 
+  const startGuideWithSupplies = async (): Promise<void> => {
+    await act(async () => useEmergencyGuideStore.getState().setGuide({
+      ...GUIDE,
+      treatment: { ...GUIDE.treatment, steps: GUIDE.treatment.steps.map((step, index) => ({
+        ...step,
+        requiredItemId: index === 2 ? 2 : 1,
+        requiredQuantity: index === 1 ? 2 : 1,
+      })) },
+    }));
+  };
+
+  const completeFirstTwoSteps = async (): Promise<void> => {
+    for (let index = 0; index < 2; index += 1) {
+      await pressNext();
+      await answerCompletion('완료했어요');
+    }
+  };
+
   beforeEach(async (): Promise<void> => {
     jest.useFakeTimers();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
@@ -120,6 +146,47 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  it('복합 보류 화면에서 저장 결과 재조회 대신 질문 화면을 연다', async () => {
+    jest.mocked(readCompoundGuideSession).mockResolvedValue(HELD_COMPOUND_SNAPSHOT);
+    await act(async () => {
+      useEmergencyGuideStore.getState().setGuide({
+        ...GUIDE,
+        sessionId: HELD_COMPOUND_SNAPSHOT.sessionId,
+        status: 'ASSESSMENT_ONLY',
+        compound: HELD_COMPOUND_SNAPSHOT.compound,
+        treatment: { ...GUIDE.treatment, steps: [] },
+      });
+    });
+    const readsBefore = jest.mocked(readCompoundGuideSession).mock.calls.length;
+    await pressButton('질문으로 돌아가기');
+    expect(navigation.replace).toHaveBeenCalledWith('FirstAidDetail', {
+      isCompoundIntake: true,
+    });
+    expect(navigation.popTo).not.toHaveBeenCalled();
+    expect(readCompoundGuideSession).toHaveBeenCalledTimes(readsBefore);
+    expect(useEmergencyGuideStore.getState().guide).toBeNull();
+  });
+
+  it('음성·사진 평가 후 추가 질문으로 이동할 때 원본을 전달하고 새 문진과 구분한다', async () => {
+    const input = { media: {
+      images: [{ uri: 'file:///original.jpg', name: 'original.jpg', type: 'image/jpeg' }],
+      audio: { uri: 'file:///original.m4a', name: 'original.m4a', type: 'audio/mp4' },
+    } };
+    await act(async () => {
+      useEmergencyGuideStore.getState().startGuide({
+        guide: { ...GUIDE, status: 'ASSESSMENT_ONLY', assessment: CALL_ASSESSMENT,
+          treatment: { ...GUIDE.treatment, steps: [] } },
+        source: 'image', input,
+      });
+    });
+    await pressButton('추가 정보 입력');
+    expect(navigation.replace).toHaveBeenCalledWith('FirstAidDetail', {
+      mainId: 'bleeding', continuation: { ...input, mainId: 'bleeding' },
+    });
+    expect(useEmergencyGuideStore.getState().input).toBeNull();
+    expect(retryEmergencyGuide).not.toHaveBeenCalled();
   });
 
   it.each([true, false])('단일 처치 화면은 서버의 119 필요 여부(%s)에 따라 전화 버튼을 표시한다', async isCall119Required => {
@@ -633,6 +700,7 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
         handoverStatus: 'IN_PROGRESS',
       });
       expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+      expect(postMedicineUse).not.toHaveBeenCalled();
     },
   );
 
@@ -720,5 +788,106 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
       handoverStatus: 'COMPLETED',
     });
     expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+    expect(postMedicineUse).not.toHaveBeenCalled();
+  });
+
+  it('마지막 완료 확인에서 물품별 사용량을 합산하고 차감 후 QR로 이동한다', async () => {
+    await startGuideWithSupplies();
+    await completeFirstTwoSteps();
+    expect(postMedicineUse).not.toHaveBeenCalled();
+    await pressNext();
+    await answerCompletion('아직 안 했어요');
+    expect(postMedicineUse).not.toHaveBeenCalled();
+
+    await pressNext();
+    await answerCompletion('완료했어요');
+
+    expect(jest.mocked(postMedicineUse).mock.calls).toEqual([
+      [{ id: 1, quantityToUse: 3 }], [{ id: 2, quantityToUse: 1 }],
+    ]);
+    expect(invalidateMedicines).toHaveBeenCalledTimes(2);
+    expect(useEmergencyGuideStore.getState().handoverStatus).toBe('COMPLETED');
+    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+  });
+
+  it('차감 응답 전에는 중복 완료 요청과 이전 단계 이동을 막는다', async () => {
+    await startGuideWithSupplies();
+    await completeFirstTwoSteps();
+    let resolveUse!: (result: Record<string, unknown>) => void;
+    jest.mocked(postMedicineUse).mockImplementationOnce(() => new Promise(resolve => {
+      resolveUse = resolve;
+    }));
+    await pressNext();
+    const handleConfirm = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2]
+      ?.find(button => button.text === '완료했어요')?.onPress;
+    await act(async () => {
+      handleConfirm?.();
+      handleConfirm?.();
+    });
+    expect(postMedicineUse).toHaveBeenCalledTimes(1);
+    expect(renderer.root.findByType(GuideNextButton).props.isDisabled).toBe(true);
+    expect(navigation.replace).not.toHaveBeenCalled();
+    await act(async () => renderer.root.findByType(GuideHeader).props.onBackPress());
+    expect(useEmergencyGuideStore.getState().currentStepIndex).toBe(2);
+
+    await act(async () => resolveUse({}));
+    expect(postMedicineUse).toHaveBeenCalledTimes(2);
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('일부 차감 후 실패하면 화면을 다시 열어도 성공한 물품은 재차감하지 않는다', async () => {
+    await startGuideWithSupplies();
+    await completeFirstTwoSteps();
+    jest.mocked(postMedicineUse)
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new TypeError('network'));
+    await pressNext();
+    await answerCompletion('완료했어요');
+
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(useEmergencyGuideStore.getState()).toMatchObject({
+      usedMedicineQuantities: { 1: 3 },
+      handoverStatus: null,
+      isCompletingSingleGuide: false,
+    });
+    expect(Alert.alert).toHaveBeenLastCalledWith('재고 차감 실패', expect.any(String));
+
+    await act(async () => {
+      renderer.unmount();
+      renderer = create(
+        <EmergencyGuideScreen navigation={navigation as never} route={{} as never} />,
+      );
+    });
+    await pressNext();
+    expect(jest.mocked(postMedicineUse).mock.calls).toEqual([
+      [{ id: 1, quantityToUse: 3 }],
+      [{ id: 2, quantityToUse: 1 }],
+      [{ id: 2, quantityToUse: 1 }],
+    ]);
+    expect(navigation.replace).toHaveBeenCalledWith('QRCode');
+  });
+
+  it('차감 중 새 가이드가 시작되면 이전 응답이 새 진행 상태를 변경하지 않는다', async () => {
+    await startGuideWithSupplies();
+    await completeFirstTwoSteps();
+    let resolveUse!: (result: Record<string, unknown>) => void;
+    jest.mocked(postMedicineUse).mockImplementationOnce(() => new Promise(resolve => {
+      resolveUse = resolve;
+    }));
+    await pressNext();
+    const handleConfirm = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2]
+      ?.find(button => button.text === '완료했어요')?.onPress;
+    await act(async () => { handleConfirm?.(); });
+    await act(async () => useEmergencyGuideStore.getState().startGuide({
+      guide: { ...GUIDE, sessionId: 'session-2' }, source: 'manual',
+    }));
+    await act(async () => resolveUse({}));
+
+    expect(postMedicineUse).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(useEmergencyGuideStore.getState()).toMatchObject({
+      usedMedicineQuantities: {}, isCompletingSingleGuide: false, handoverStatus: null,
+      guide: { sessionId: 'session-2' },
+    });
   });
 });

@@ -69,11 +69,47 @@ export const QA_FACT_IDS = [
   'FRACTURE_MANUAL_SUPPORT_REQUIRED',
   'OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT',
   'HELP_CALL_DEVICE_READY',
+  'BLEEDING_CONTROLLED_WITH_PRESSURE',
+  'BLEEDING_DRESSING_ALREADY_APPLIED',
+  'BLEEDING_BANDAGE_AVAILABLE',
+  'CONTINUOUS_PRESSURE_HELPER_READY',
+  'BURN_NONADHERENT_GAUZE_CONFIRMED',
+  'BURN_BLISTERS_INTACT',
 ] as const;
 export const QA_FACT_QUESTIONS: ReadonlyArray<{
   id: QaFactId;
   prompt: string;
 }> = [
+  {
+    id: 'BLEEDING_CONTROLLED_WITH_PRESSURE',
+    prompt:
+      '손으로 누르는 동안 출혈이 조절되고 있나요? 확인하려고 손을 떼지 마세요. 계속 흐르거나 빠르게 젖거나 분출하면 아니요입니다.',
+  },
+  {
+    id: 'BLEEDING_DRESSING_ALREADY_APPLIED',
+    prompt:
+      '출혈 부위에 이미 거즈·드레싱·붕대 등을 대었나요? 예라면 기존 것을 떼지 말고 그대로 답해 주세요. 맨손으로 누르기만 한 경우는 아니요입니다.',
+  },
+  {
+    id: 'BLEEDING_BANDAGE_AVAILABLE',
+    prompt:
+      '거즈를 고정할 압박 붕대가 실제로 있나요? 구급함 밖의 준비물도 포함하며, 확인하지 못했다면 확인 어려움입니다.',
+  },
+  {
+    id: 'CONTINUOUS_PRESSURE_HELPER_READY',
+    prompt:
+      '한 사람은 출혈 압박을 끊지 않고 계속하고, 다른 사람은 환자·상처를 옮기지 않고 화상을 식히고 덮을 수 있나요? 의료진에게 인계할 때까지 압박을 유지할 사람과 이동 도움도 실제로 확보되어 있어야 합니다.',
+  },
+  {
+    id: 'BURN_NONADHERENT_GAUZE_CONFIRMED',
+    prompt:
+      '출혈용과 별개의 거즈가 있으며, 화상용 거즈가 깨끗하고 마른 비점착성 제품임을 포장·제품 표시로 확인했나요? 일반 거즈이거나 확인하지 못했다면 예가 아닙니다.',
+  },
+  {
+    id: 'BURN_BLISTERS_INTACT',
+    prompt:
+      '화상의 물집이 터지지 않았고 피부 벗겨짐이나 열린 상처가 없나요? 만지거나 터뜨려 확인하지 마세요.',
+  },
   { id: 'SURFACES_OVERLAP', prompt: '두 손상의 상처 표면이 서로 겹치나요?' },
   { id: 'SEVERE_SWELLING', prompt: '다친 부위에 심한 부기가 있나요?' },
   { id: 'CAN_SWALLOW', prompt: '환자가 물을 삼킬 수 있나요?' },

@@ -12,7 +12,11 @@ import {
   getInjuryDetailSteps,
   updateQuestionnaireAnswer,
 } from '@/utils/compoundQuestionnaire';
-import { pruneQaFacts, relevantQaFacts } from '@/utils/compoundQuestionFacts';
+import {
+  isFractureSkinAnswerRequired,
+  pruneQaFacts,
+  relevantQaFacts,
+} from '@/utils/compoundQuestionFacts';
 import { useCompoundInjuryEvidence } from '@/hooks/useCompoundInjuryEvidence';
 
 export const IntakeChoice = ({
@@ -51,6 +55,9 @@ export const CompoundInjuryPanel = ({
   injuryId,
   onChange,
 }: Props): React.JSX.Element | null => {
+  const [expandedInjuryId, setExpandedInjuryId] = React.useState<string | null>(
+    null,
+  );
   const injury = state.compoundDraft.injuries.find(
     item => item.injuryId === injuryId,
   );
@@ -59,6 +66,9 @@ export const CompoundInjuryPanel = ({
   if (!injury) {
     return null;
   }
+  const isBurn = injury.categoryCode === 'BURN';
+  const isAdditionalExpanded = !isBurn || expandedInjuryId === injuryId;
+  const questions = relevantQaFacts(state.compoundDraft, injury);
   const handlePatch = (change: Partial<CompoundQuestionnaireInjury>): void => {
     onChange(current => ({
       ...current,
@@ -94,13 +104,39 @@ export const CompoundInjuryPanel = ({
           ))}
         </View>
       ))}
-      <Text className="mb-3 text-body font-suitBold text-black">추가 확인</Text>
-      <Text className="mb-4 text-caption font-suitMedium text-gray">
-        확인한 내용만 선택해 주세요. 확인하지 못한 항목은 비워 두거나 ‘잘
-        모르겠음’을 선택할 수 있습니다.
+      <Text className="mb-3 text-body font-suitBold text-black">
+        {isBurn ? '추가 확인 · 선택' : '추가 확인 · 필수'}
       </Text>
+      <Text className="mb-4 text-caption font-suitMedium text-gray">
+        {isBurn
+          ? '화상 기본 질문은 위의 2개입니다. 아래 추가 확인은 선택 사항이며, 답변이 부족하면 안내가 보류될 수 있습니다.'
+          : '각 질문에 답해야 다음으로 이동할 수 있습니다. 확인한 내용대로 선택하고, 확인하기 어려운 항목은 모름을 선택해 주세요. 답변에 따라 안내가 보류될 수 있습니다.'}
+      </Text>
+      {isBurn && questions.length > 0 ? (
+        <TouchableOpacity
+          testID="burn-additional-toggle"
+          accessibilityRole="button"
+          accessibilityLabel="화상 추가 확인 펼치기 또는 접기"
+          accessibilityState={{ expanded: isAdditionalExpanded }}
+          onPress={() =>
+            setExpandedInjuryId(isAdditionalExpanded ? null : injuryId)
+          }
+          className="mb-4 min-h-12 justify-center rounded-lg border border-memoLine px-4 py-3"
+        >
+          <Text className="text-body font-suitMedium text-black">
+            {isAdditionalExpanded
+              ? '추가 확인 접기'
+              : `추가 확인 ${questions.length}개 보기 · 선택`}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
       {injury.categoryCode === 'FRACTURE_BRUISE' ? (
         <View className="mb-5">
+          {isFractureSkinAnswerRequired(injury) ? (
+            <Text className="mb-2 text-coment font-suitBold text-red">
+              필수 확인 · 확인할 수 없다면 모름을 선택해 주세요.
+            </Text>
+          ) : null}
           <Text className="mb-3 text-body font-suitBold text-black">
             {fractureSkinFollowup.question}
           </Text>
@@ -122,7 +158,7 @@ export const CompoundInjuryPanel = ({
           ))}
         </View>
       ) : null}
-      {relevantQaFacts(state.compoundDraft, injury).map(question => (
+      {(isAdditionalExpanded ? questions : []).map(question => (
         <View key={question.id} className="mb-5">
           <Text className="mb-3 text-body font-suitBold text-black">
             {question.prompt}
@@ -131,7 +167,7 @@ export const CompoundInjuryPanel = ({
             [
               { id: 'YES', label: '예' },
               { id: 'NO', label: '아니요' },
-              { id: 'UNKNOWN', label: '잘 모르겠음' },
+              { id: 'UNKNOWN', label: '확인 어려움' },
             ] as const
           ).map(option => (
             <IntakeChoice
@@ -141,11 +177,7 @@ export const CompoundInjuryPanel = ({
               isSelected={injury.qaFacts?.[question.id] === option.id}
               onPress={() => {
                 const qaFacts = { ...injury.qaFacts };
-                if (qaFacts[question.id] === option.id) {
-                  delete qaFacts[question.id];
-                } else {
-                  qaFacts[question.id] = option.id as QaFactAnswer;
-                }
+                qaFacts[question.id] = option.id as QaFactAnswer;
                 handlePatch({ qaFacts });
               }}
             />

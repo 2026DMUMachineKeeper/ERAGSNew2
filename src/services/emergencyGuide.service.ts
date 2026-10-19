@@ -127,6 +127,10 @@ const EMERGENCY_GUIDE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
     '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
   SM_UNAVAILABLE:
     '응급 가이드 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.',
+  SM_EVIDENCE_UNAVAILABLE:
+    '사진·음성 분석 서버에 연결하지 못했습니다. 잠시 후 다시 시도하거나 사고 유형을 직접 선택해 주세요.',
+  SM_EVIDENCE_INVALID_RESPONSE:
+    '사진·음성 분석 결과를 확인하지 못했습니다. 잠시 후 다시 시도하거나 사고 유형을 직접 선택해 주세요.',
 };
 
 const EMERGENCY_GUIDE_STATUS_MESSAGES: Readonly<Record<number, string>> = {
@@ -902,6 +906,7 @@ const isEmergencyWasteGuideItem = (
   isRecord(value) &&
   typeof value.itemName === 'string' &&
   typeof value.wasteCategory === 'string' &&
+  typeof value.displayTitle === 'string' &&
   typeof value.disposalMethod === 'string' &&
   (value.dangerLevel === 'HIGH' || value.dangerLevel === 'LOW');
 
@@ -934,12 +939,19 @@ const readEmergencyWasteGuideResponse = async (
     (response.status === 404
       ? 'WASTE_GUIDE_HANDOVER_NOT_FOUND'
       : 'REQUEST_FAILED');
+  const hasRequestError =
+    !response.ok || !payloadRecord || payloadRecord.success !== true;
+  const data = payloadRecord?.data;
+  const hasValidData =
+    Array.isArray(data) && data.every(isEmergencyWasteGuideItem);
 
   console.warn('[EmergencyGuide API][Response]', {
     requestUrl,
     status: response.status,
     ok: response.ok,
-    errorCode: code,
+    errorCode: hasRequestError ? code : hasValidData ? null : 'INVALID_RESPONSE',
+    success: payloadRecord?.success ?? null,
+    itemCount: hasValidData ? data.length : null,
   });
 
   if (!response.ok || !payloadRecord || payloadRecord.success !== true) {

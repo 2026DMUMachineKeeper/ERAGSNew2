@@ -31,7 +31,7 @@ it('작은 상처의 10개 QA 확인은 조건을 충족할 때만 원본 순서
     'WOUND_INFECTION_SIGNS',
     'INDEPENDENT_CARE_POSSIBLE',
   ]);
-  expect(QA_FACT_QUESTIONS).toHaveLength(67);
+  expect(QA_FACT_QUESTIONS).toHaveLength(73);
 });
 it('비워 둔 사실과 잘 모르겠음은 각각 미전송·UNKNOWN으로 구분한다', () => {
   const state = qa19State(QA19_CASES[0].request);

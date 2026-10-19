@@ -70,11 +70,11 @@ describe('복합 안내 보류 화면', () => {
     expect(text()).toContain('화상');
     expect(text()).toContain('안내를 보류한 이유');
     expect(text()).not.toContain('COMPOUND_DISABLED');
-    await press('새 문진 시작');
-    await press('저장된 복합 가이드 다시 조회');
+    await press('질문으로 돌아가기');
+    expect(text()).not.toContain('다시 확인');
     await press('닫기');
     expect(handleNewRequest).toHaveBeenCalledTimes(1);
-    expect(handleRefresh).toHaveBeenCalledTimes(1);
+    expect(handleRefresh).not.toHaveBeenCalled();
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
@@ -125,6 +125,120 @@ describe('복합 안내 보류 화면', () => {
         .findAllByType(TouchableOpacity)
         .some(node => node.props.accessibilityLabel === '119 전화'),
     ).toBe(false);
+  });
+
+  it.each([
+    {
+      code: 'fractureType',
+      status: '추가 확인 필요',
+      message: '다친 부위 전체의 피부 상태',
+    },
+    {
+      code: 'FRACTURE_DISTAL_STATE_UNCONFIRMED',
+      status: '추가 확인 필요',
+      message: '손·발의 감각·색·온도·움직임',
+    },
+    {
+      code: 'temperatureC',
+      status: '추가 확인 필요',
+      message: '측정한 체온 구간',
+    },
+    {
+      code: 'WOUND_CARE_SCOPE_UNCONFIRMED',
+      status: '추가 확인 필요',
+      message: '모름을 유지',
+    },
+    {
+      code: 'WOUND_CARE_SCOPE_REVIEW_REQUIRED',
+      status: '별도 평가 필요',
+      message: '별도 상처 평가가 필요',
+    },
+    {
+      code: 'RASH_CARE_SCOPE_REVIEW_REQUIRED',
+      status: '별도 평가 필요',
+      message: '현재 국소 발진 가이드로 안내할 수 없어요',
+    },
+    {
+      code: 'QA_FACT_EVIDENCE_CONFLICT',
+      status: '입력 불일치',
+      message: '추가 확인 답변과 관찰·음성 내용이 서로 달라요',
+    },
+    {
+      code: 'DB_SUBTYPE_RISK_UNCONFIRMED',
+      status: '서버 확인 필요',
+      message: '서비스 운영자의 확인이 필요',
+    },
+    {
+      code: 'DB_SUBTYPE_RISK_UNAVAILABLE',
+      status: '서버 확인 필요',
+      message: '답변 부족으로 생긴 문제가 아니에요',
+    },
+  ])(
+    '$code를 손상별 원인과 보완 안내로 구분한다',
+    async ({ code, status, message }) => {
+      const base = HELD_COMPOUND_SNAPSHOT.compound;
+      const compound: CompoundGuideResult = {
+        ...base,
+        blockedReasons: ['ASSESSMENT_INCOMPLETE'],
+        injuries: base.injuries.map((injury, index) => ({
+          ...injury,
+          assessment: {
+            ...injury.assessment,
+            missingInputs: index === 0 ? [code] : [],
+            display: undefined,
+          },
+        })),
+      };
+      const before = JSON.stringify(compound);
+      await mount({ compound });
+      expect(text()).toContain(status);
+      expect(text()).toContain(message);
+      expect(text()).toContain('질문 화면으로 돌아가 손상 상태와 추가 확인에 답한 뒤 새 안내를');
+      expect(text()).not.toContain(code);
+      if (status !== '추가 확인 필요')
+        expect(text()).not.toContain('추가 확인 필요');
+      expect(JSON.stringify(compound)).toBe(before);
+      expect(renderer.root.findAllByType(GuideNextButton)).toHaveLength(0);
+      await press('질문으로 돌아가기');
+      expect(handleRefresh).not.toHaveBeenCalled();
+      expect(handleNewRequest).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('서로 다른 손상의 입력 부족과 서버 오류를 해당 손상 카드에 유지한다', async () => {
+    const base = HELD_COMPOUND_SNAPSHOT.compound;
+    await mount({
+      compound: {
+        ...base,
+        blockedReasons: ['ASSESSMENT_INCOMPLETE'],
+        call119Required: true,
+        injuries: base.injuries.map((injury, index) => ({
+          ...injury,
+          assessment: {
+            ...injury.assessment,
+            display: undefined,
+            missingInputs:
+              index === 0 ? ['bleedingLevel'] : ['DB_SUBTYPE_RISK_UNAVAILABLE'],
+          },
+        })),
+      },
+    });
+    const cardText = (injuryId: string) =>
+      JSON.stringify(
+        renderer.root
+          .findByProps({ testID: `compound-injury-status-${injuryId}` })
+          .findAllByType(Text)
+          .map(item => item.props.children),
+      );
+    const bleeding = cardText(base.injuries[0].injuryId);
+    const burn = cardText(base.injuries[1].injuryId);
+    expect(bleeding).toContain('출혈');
+    expect(bleeding).toContain('출혈 양상과 상처 상태를 확인해 주세요.');
+    expect(bleeding).not.toContain('서버 확인 필요');
+    expect(burn).toContain('화상');
+    expect(burn).toContain('답변 부족으로 생긴 문제가 아니에요');
+    expect(burn).not.toContain('추가 확인 필요');
+    expect(text()).toContain('119 신고가 필요합니다.');
   });
 
   it('최초 로딩 중에는 보류나 완료 결과를 먼저 보여주지 않는다', async () => {

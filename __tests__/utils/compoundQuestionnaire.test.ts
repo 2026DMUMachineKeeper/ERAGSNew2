@@ -79,6 +79,64 @@ const complete = (
 };
 
 describe('단일·복합 문진 분기와 요청 연결', () => {
+  it('골절 의심 소견은 피부 확인을 빠뜨리면 다음 질문과 제출을 막는다', () => {
+    const state = select(complete(), 'injury-1:injuryState', 'DEFORMITY');
+    const step = steps(state).find(item => item.id === 'injury-1:injury')!;
+    expect(canContinueQuestionnaireStep(step, state)).toBe(false);
+    expect(
+      getCompoundQuestionnaireError(state.questionAnswers, state.compoundDraft),
+    ).toContain('피부');
+    expect(() =>
+      toCompoundGuideRequest(
+        state.questionAnswers,
+        'skin-missing',
+        state.compoundDraft,
+      ),
+    ).toThrow('피부');
+  });
+
+  it.each(['INTACT', 'OPEN_WOUND', 'UNKNOWN'] as const)(
+    '피부 확인 %s는 실제 답변대로 전송하며 정상으로 바꾸지 않는다',
+    fractureSkinAnswer => {
+      const selected = select(complete(), 'injury-1:injuryState', 'DEFORMITY');
+      const state: QuestionnaireState = {
+        ...selected,
+        compoundDraft: {
+          ...selected.compoundDraft,
+          injuries: selected.compoundDraft.injuries.map((injury, index) =>
+            index === 1 ? { ...injury, fractureSkinAnswer } : injury,
+          ),
+        },
+      };
+      const step = steps(state).find(item => item.id === 'injury-1:injury')!;
+      expect(canContinueQuestionnaireStep(step, state)).toBe(true);
+      const request = toCompoundGuideRequest(
+        state.questionAnswers,
+        'skin-answered',
+        state.compoundDraft,
+      );
+      expect(request.injuries[1].observations).toEqual([
+        fractureSkinAnswer === 'INTACT'
+          ? '다친 부위 전체의 피부가 온전합니다.'
+          : fractureSkinAnswer === 'OPEN_WOUND'
+          ? '다친 부위에 열린 상처가 있습니다.'
+          : '다친 부위 전체의 피부 상태를 확인하지 못했습니다.',
+      ]);
+    },
+  );
+
+  it.each(['MINOR_BRUISE', 'OPEN_FRACTURE'])(
+    '%s는 골절 의심 피부 확인을 새 필수 조건으로 추가하지 않는다',
+    answer => {
+      const state =
+        answer === 'MINOR_BRUISE'
+          ? complete()
+          : select(complete(), 'injury-1:injuryState', answer);
+      const step = steps(state).find(item => item.id === 'injury-1:injury')!;
+      expect(canContinueQuestionnaireStep(step, state)).toBe(true);
+    },
+  );
+
   it('국소 출혈+골절의 상세와 추가 확인은 손상별 화면으로 묶는다', () => {
     const state = complete();
     expect(steps(state).map(step => step.id)).toEqual([

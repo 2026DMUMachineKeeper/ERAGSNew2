@@ -47,7 +47,9 @@ const isSmallWound = (injury: CompoundQuestionnaireInjury): boolean =>
       'SHOCK_SIGNS',
     ],
   );
-const isClosedInjury = (injury: CompoundQuestionnaireInjury): boolean =>
+export const isFractureSkinAnswerRequired = (
+  injury: CompoundQuestionnaireInjury,
+): boolean =>
   injury.categoryCode === 'FRACTURE_BRUISE' &&
   hasAnswers(
     injury,
@@ -98,14 +100,15 @@ export function relevantQaFacts(
         'CRUSH_INJURY',
       ],
     );
-  const isSuspectedClosedInjury = isClosedInjury(injury);
+  const isSuspectedClosedInjury = isFractureSkinAnswerRequired(injury);
   // C 경로를 앱에서 확정하지 않고, 서버가 판단할 때 필요한 관찰만 추가로 수집합니다.
   const hasCQuestionContext =
     draft.relation === 'DIFFERENT' &&
     draft.injuries.every(item => item.location.scope === 'LOCALIZED') &&
     draft.injuries.some(item => item.categoryCode === 'BLEEDING') &&
     draft.injuries.some(
-      item => item.categoryCode === 'BURN' || isClosedInjury(item),
+      item =>
+        item.categoryCode === 'BURN' || isFractureSkinAnswerRequired(item),
     );
   if (hasCQuestionContext) {
     ids.add('GUIDE_ACTIONS_ALREADY_PERFORMED');
@@ -313,6 +316,23 @@ export function relevantQaFacts(
   if (injury.location.scope === 'LOCALIZED') {
     ids.add('CLEAN_WATER_AVAILABLE');
     ids.add('CLEAN_CLOTH_AVAILABLE');
+  }
+  const hasPressureBurnQuestionContext =
+    hasCQuestionContext &&
+    draft.injuries.some(
+      item =>
+        item.categoryCode === 'BURN' &&
+        item.answers.burnSkinState?.includes('BLISTER'),
+    );
+  // 출혈·화상 조합의 관찰 항목만 수집하며, 중증도와 실행 경로는 서버가 판단합니다.
+  if (hasPressureBurnQuestionContext) {
+    ids.add('SYMPTOMS_WORSENING');
+    if (injury.categoryCode === 'BLEEDING') {
+      ids.add('BLEEDING_CONTROLLED_WITH_PRESSURE');
+      ids.add('BLEEDING_DRESSING_ALREADY_APPLIED');
+      ids.add('BLEEDING_BANDAGE_AVAILABLE');
+      ids.add('CONTINUOUS_PRESSURE_HELPER_READY');
+    }
   }
   if (
     injury.injuryId === draft.injuries[0].injuryId &&

@@ -14,6 +14,7 @@ import {
   SERVER_SYMPTOM_ID_BY_CATEGORY,
 } from '@/constants';
 import type { CompoundGuideProgress, CompoundGuideResult } from '@/types';
+import { getCompoundAssessmentIssues } from '@/utils/compoundAssessmentPresentation';
 import tailwindConfig from '../../../../tailwind.config';
 
 const { colors } = tailwindConfig;
@@ -36,7 +37,7 @@ const REASON_MESSAGES: Readonly<Record<string, string>> = {
   SITE_RELATION_UNKNOWN:
     '두 손상이 같은 부위인지, 다른 부위인지 확인이 필요해요.',
   ASSESSMENT_INCOMPLETE:
-    '처치 순서를 정하기 위해 손상 상태를 더 확인해야 해요.',
+    '손상별 평가에서 안내를 보류한 항목이 있어요. 아래에 표시된 사유를 확인해 주세요.',
   NO_FEASIBLE_REVIEWED_VARIANT:
     '현재 손상 상태와 준비된 물품에 맞는 복합 처치 안내를 찾지 못했어요.',
   COMPOUND_DISABLED:
@@ -60,6 +61,11 @@ export const CompoundGuideStatus = ({
   progress,
   children,
 }: Props): React.JSX.Element => {
+  const shouldReturnToQuestions =
+    !isCompleted &&
+    canStartNewRequest &&
+    (compound.status === 'ASSESSMENT_ONLY' ||
+      compound.status === 'GUIDE_PENDING');
   const shouldCall119 =
     compound.call119Required ||
     compound.injuries.some(injury => injury.assessment?.call119Required);
@@ -85,7 +91,7 @@ export const CompoundGuideStatus = ({
   const description = isLoading
     ? '두 손상의 평가와 저장된 진행 상태를 확인하고 있어요.'
     : errorMessage
-    ? '연결 상태를 확인한 뒤 다시 확인해 주세요.'
+    ? '연결 상태를 확인해 주세요.'
     : isCompleted
     ? '모든 단계의 완료가 기록되었습니다.'
     : '두 손상을 함께 고려한 처치 안내가 필요해요.\n아래 사유와 손상별 상태를 확인해 주세요.';
@@ -212,19 +218,14 @@ export const CompoundGuideStatus = ({
                       injury.categoryCode,
                   )?.label ??
                   '손상 상태';
-                const missing = [
-                  ...new Set(
-                    injury.assessment?.missingInputs.map(
-                      code =>
-                        injury.assessment?.display?.missingInputs?.find(
-                          input => input.code === code && input.label !== code,
-                        )?.label ?? '손상 상태를 추가로 확인해 주세요.',
-                    ) ?? [],
-                  ),
-                ];
+                const issues = getCompoundAssessmentIssues(injury.assessment);
+                const issueStatus = [
+                  ...new Set(issues.map(issue => issue.status)),
+                ].join(' · ');
                 return (
                   <View
                     key={injury.injuryId}
+                    testID={`compound-injury-status-${injury.injuryId}`}
                     className="mb-3 rounded-2xl bg-white p-4"
                   >
                     <View className="flex-row items-center">
@@ -242,8 +243,8 @@ export const CompoundGuideStatus = ({
                             ? '손상 안내 보류'
                             : isCompleted || hasCompletedInjury
                             ? '처치 기록 완료'
-                            : missing.length
-                            ? '추가 확인 필요'
+                            : issues.length
+                            ? issueStatus
                             : '선택한 손상'}
                         </Text>
                       </View>
@@ -253,12 +254,12 @@ export const CompoundGuideStatus = ({
                         {injury.assessment.display.subtype}
                       </Text>
                     ) : null}
-                    {missing.map(label => (
+                    {issues.map(issue => (
                       <Text
-                        key={label}
+                        key={issue.message}
                         className="mt-3 text-body font-suitMedium leading-6 text-gray"
                       >
-                        {label}
+                        {issue.message}
                       </Text>
                     ))}
                   </View>
@@ -279,20 +280,28 @@ export const CompoundGuideStatus = ({
       </ScrollView>
       <View className="border-t border-memoLine bg-white px-5 pb-4 pt-4">
         <View className="w-full max-w-[600px] self-center">
+          {!isLoading && shouldReturnToQuestions ? (
+            <Text className="mb-3 text-coment font-suitRegular leading-5 text-gray">
+              질문 화면으로 돌아가 손상 상태와 추가 확인에 답한 뒤 새 안내를
+              요청해 주세요.
+            </Text>
+          ) : null}
           {canStartNewRequest && !isLoading ? (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="새 문진 시작"
+              accessibilityLabel={
+                shouldReturnToQuestions ? '질문으로 돌아가기' : '새 문진 시작'
+              }
               className="min-h-[52px] items-center justify-center rounded-xl bg-red px-5 py-3"
               onPress={onNewRequest}
               disabled={isBusy}
             >
               <Text className="text-body font-suitBold text-white">
-                새 문진 시작
+                {shouldReturnToQuestions ? '질문으로 돌아가기' : '새 문진 시작'}
               </Text>
             </TouchableOpacity>
           ) : null}
-          {onRefresh && !isLoading ? (
+          {onRefresh && !isLoading && !shouldReturnToQuestions ? (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="저장된 복합 가이드 다시 조회"

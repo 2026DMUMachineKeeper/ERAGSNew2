@@ -554,6 +554,7 @@ describe('emergencyGuide.service', () => {
           {
             itemName: '거즈',
             wasteCategory: 'GENERAL',
+            displayTitle: '일반 배출',
             disposalMethod: '일반 쓰레기로 배출하세요.',
             dangerLevel: 'LOW',
           },
@@ -564,6 +565,17 @@ describe('emergencyGuide.service', () => {
     const response = await getEmergencyWasteGuide('session/1');
 
     expect(response.data[0]?.itemName).toBe('거즈');
+    expect(response.data[0]?.displayTitle).toBe('일반 배출');
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      '[EmergencyGuide API][Response]',
+      expect.objectContaining({
+        status: 200,
+        ok: true,
+        errorCode: null,
+        success: true,
+        itemCount: 1,
+      }),
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       'test-api-base-url/api/v2/emergency-guide-sessions/session%2F1/waste-guide',
       expect.objectContaining({
@@ -623,6 +635,67 @@ describe('emergencyGuide.service', () => {
     },
   );
 
+  it('다회용 도구와 잔량 보관 안내를 서버 문자열 그대로 반환한다', async () => {
+    const items = [
+      {
+        itemName: '소독 핀셋',
+        wasteCategory: 'REUSABLE',
+        displayTitle: '소독 후 보관',
+        disposalMethod: '소독 후 구급함에 보관하세요. 파손된 경우에만 배출하세요.',
+        dangerLevel: 'LOW',
+      },
+      {
+        itemName: '후시딘 연고',
+        wasteCategory: 'KEEP',
+        displayTitle: '잔량 보관',
+        disposalMethod: '아직 재고(1개)가 남아있습니다. 뚜껑을 잘 닫아 보관하세요.',
+        dangerLevel: 'LOW',
+      },
+    ];
+    fetchMock.mockResolvedValue(createMockResponse(200, { success: true, data: items }));
+
+    await expect(getEmergencyWasteGuide('session-1')).resolves.toMatchObject({ data: items });
+  });
+
+  it.each([undefined, null, 123])('폐기 안내 제목이 문자열이 아니면(%s) 잘못된 응답으로 처리한다', async displayTitle => {
+    fetchMock.mockResolvedValue(createMockResponse(200, {
+      success: true,
+      data: [{
+        itemName: '소독 핀셋',
+        wasteCategory: 'REUSABLE',
+        displayTitle,
+        disposalMethod: '소독 후 보관하세요.',
+        dangerLevel: 'LOW',
+      }],
+    }));
+
+    await expect(getEmergencyWasteGuide('session-1')).rejects.toMatchObject({
+      status: 200,
+      code: 'INVALID_RESPONSE',
+    });
+  });
+
+  it('HTTP 200이어도 잘못된 폐기 안내 데이터는 성공 로그로 표시하지 않는다', async () => {
+    fetchMock.mockResolvedValue(
+      createMockResponse(200, {
+        success: true,
+        data: [{ itemName: '반창고', dangerLevel: 'LOW' }],
+      }),
+    );
+    await expect(getEmergencyWasteGuide('session-1')).rejects.toMatchObject({
+      status: 200,
+      code: 'INVALID_RESPONSE',
+    });
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      '[EmergencyGuide API][Response]',
+      expect.objectContaining({
+        status: 200,
+        errorCode: 'INVALID_RESPONSE',
+        itemCount: null,
+      }),
+    );
+  });
+
   it.each(['handover', 'waste'] as const)(
     '%s 요청은 갱신 후에도 401이면 추가 재시도 없이 세션 만료를 알린다',
     async operation => {
@@ -662,6 +735,14 @@ describe('emergencyGuide.service', () => {
       code: 'WASTE_GUIDE_HANDOVER_NOT_FOUND',
       message: '해당 세션의 처치 완료 기록(인계장)이 없습니다.',
     });
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      '[EmergencyGuide API][Response]',
+      expect.objectContaining({
+        status: 404,
+        errorCode: 'WASTE_GUIDE_HANDOVER_NOT_FOUND',
+        itemCount: null,
+      }),
+    );
   });
 
   it.each(['<html>Forbidden</html>', ''])(
@@ -841,6 +922,8 @@ describe('emergencyGuide.service', () => {
     [413, 'AUDIO_TOO_LARGE', '음성 파일 용량이 너무 큽니다(최대 25MB)'],
     [415, 'UNSUPPORTED_IMAGE_TYPE', '지원하지 않는 이미지 형식입니다.'],
     [503, 'SM_UNAVAILABLE', '응급 가이드 서버에 일시적인 문제가 있습니다.'],
+    [502, 'SM_EVIDENCE_UNAVAILABLE', '사진·음성 분석 서버에 연결하지 못했습니다.'],
+    [502, 'SM_EVIDENCE_INVALID_RESPONSE', '사진·음성 분석 결과를 확인하지 못했습니다.'],
   ] as const)(
     '%i %s 오류에 맞는 사용자 안내를 반환한다',
     (status, code, expectedMessage): void => {
@@ -854,6 +937,39 @@ describe('emergencyGuide.service', () => {
 
       expect(getEmergencyGuideErrorMessage(error)).toContain(expectedMessage);
       expect(error.details).toEqual(['detail']);
+    },
+  );
+
+  it.each(['audio', 'images'] as const)(
+    '%s 근거 수집의 502 오류를 보존하고 자동 재전송하지 않는다',
+    async (source): Promise<void> => {
+      const details = [`${source}:SM_EVIDENCE_UNAVAILABLE`];
+      fetchMock.mockResolvedValue(
+        createMockResponse(502, {
+          success: false,
+          error: {
+            code: 'SM_EVIDENCE_UNAVAILABLE',
+            message: '판단에 사용할 입력 근거를 수집하지 못했습니다.',
+            details,
+          },
+        }),
+      );
+
+      const formData = new FormData();
+      const error: unknown = await createEmergencyGuide(formData).catch(
+        (requestError: unknown): unknown => requestError,
+      );
+
+      expect(error).toMatchObject<Partial<EmergencyGuideRequestError>>({
+        status: 502,
+        code: 'SM_EVIDENCE_UNAVAILABLE',
+        message: '판단에 사용할 입력 근거를 수집하지 못했습니다.',
+        details,
+      });
+      expect(getEmergencyGuideErrorMessage(error)).toContain(
+        '사고 유형을 직접 선택해 주세요.',
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     },
   );
 

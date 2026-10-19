@@ -1,4 +1,8 @@
-import { pruneQaFacts } from './compoundQuestionFacts';
+import {
+  isFractureSkinAnswerRequired,
+  pruneQaFacts,
+} from './compoundQuestionFacts';
+import { fractureSkinFollowup } from '@/constants/compoundQaData';
 import {
   FIRST_AID_CATEGORIES,
   SERVER_SYMPTOM_ID_BY_CATEGORY,
@@ -207,9 +211,13 @@ export const canContinueQuestionnaireStep = (
     return true;
   }
   if (step.kind === 'injury') {
+    const injury = state.compoundDraft.injuries.find(
+      item => item.injuryId === step.injuryId,
+    );
     if (
-      state.compoundDraft.injuries.find(item => item.injuryId === step.injuryId)
-        ?.isEvidenceBusy
+      !injury ||
+      injury.isEvidenceBusy ||
+      (isFractureSkinAnswerRequired(injury) && !injury.fractureSkinAnswer)
     ) {
       return false;
     }
@@ -425,6 +433,18 @@ export const getCompoundQuestionnaireError = (
     step => !canContinueQuestionnaireStep(step, state),
   );
   if (missing) {
+    if (missing.kind === 'injury') {
+      const injury = draft.injuries.find(
+        item => item.injuryId === missing.injuryId,
+      );
+      if (
+        injury &&
+        isFractureSkinAnswerRequired(injury) &&
+        !injury.fractureSkinAnswer
+      ) {
+        return `${missing.sectionLabel} · ${fractureSkinFollowup.question} 확인이 어렵다면 모름을 선택해 주세요.`;
+      }
+    }
     return `${missing.sectionLabel ?? '공통'} · ${missing.prompt}`;
   }
   return isCompoundRelationValid(draft)

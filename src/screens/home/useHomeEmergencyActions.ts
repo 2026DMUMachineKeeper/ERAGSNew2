@@ -14,7 +14,11 @@ import {
   startAudioRecording,
   stopAudioRecording,
 } from '@/services';
-import type { EmergencyGuideMediaFile, EmergencyGuideResponse } from '@/types';
+import type {
+  EmergencyGuideMediaFile,
+  EmergencyGuidePhotoRequest,
+  EmergencyGuideResponse,
+} from '@/types';
 import {
   showEmergencyEvidenceFailureNotice,
   showLocationPermissionPrompt,
@@ -61,6 +65,7 @@ export type PhotoInputStep = 'options' | 'text' | 'voice' | null;
 type HandleGuideCreated = (
   source: GuideSource,
   guide: EmergencyGuideResponse,
+  media: EmergencyGuidePhotoRequest,
 ) => void;
 
 const requestAndroidPermission = async (
@@ -306,7 +311,10 @@ export const useHomeEmergencyActions = (
           setPhotoAssets([]);
           setPhotoAdditionalText('');
           showEmergencyEvidenceFailureNotice(createdGuide);
-          onGuideCreated('image', createdGuide);
+          onGuideCreated('image', createdGuide, {
+            images: photoAssets,
+            ...addition,
+          });
         }
       } catch (error) {
         if (requestController?.signal.aborted || !isFocusedRef.current) {
@@ -503,7 +511,7 @@ export const useHomeEmergencyActions = (
         );
         if (isMountedRef.current && isFocusedRef.current) {
           showEmergencyEvidenceFailureNotice(createdGuide);
-          onGuideCreated('voice', createdGuide);
+          onGuideCreated('voice', createdGuide, { images: [], audio: audioFile });
         }
         return;
       }

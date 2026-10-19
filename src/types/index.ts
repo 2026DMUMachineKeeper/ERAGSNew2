@@ -6,4 +6,5 @@ export * from './medicine.types';
 export * from './settings.types';
 export * from './emergencyQuestionnaire.types';
 export * from './compoundQuestionnaire.types';
+export * from './emergencyGuideInput.types';
 export * from './signUp.types';

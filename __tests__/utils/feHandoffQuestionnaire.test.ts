@@ -11,7 +11,7 @@ import {
 import { toCompoundGuideRequest } from '@/utils/emergencyQuestionnaire';
 
 it('전달 자료 67문항의 ID·문구·순서를 그대로 사용한다', () => {
-  expect(QA_FACT_QUESTIONS).toEqual(
+  expect(QA_FACT_QUESTIONS.filter(question => questions.some(q => q.id === question.id))).toEqual(
     questions.map(({ id, prompt }) => ({ id, prompt })),
   );
 });
