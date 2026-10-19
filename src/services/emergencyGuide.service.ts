@@ -234,6 +234,50 @@ const getHandoverEnvelopeValidationIssue = (
   return null;
 };
 
+const logGuideEvidence = (data: Record<string, unknown>): void => {
+  const logPart = (
+    source: 'Voice' | 'Image',
+    value: unknown,
+    injuryId?: string,
+    imageIndex?: number,
+  ): void => {
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) return;
+    // 긴 transcript와 사진 후보 목록이 Android의 한 줄 제한으로 잘리지 않게 나눕니다.
+    const chunkSize = 800;
+    const chunkCount = Math.max(1, Math.ceil(serialized.length / chunkSize));
+    for (let index = 0; index < chunkCount; index += 1) {
+      console.warn(
+        `[EmergencyGuide API][${source} Evidence]`,
+        JSON.stringify({
+          sessionId: data.sessionId ?? null,
+          requestId: data.requestId ?? null,
+          injuryId,
+          imageIndex,
+          chunk: index + 1,
+          chunks: chunkCount,
+        }),
+        serialized.slice(index * chunkSize, (index + 1) * chunkSize),
+      );
+    }
+  };
+  const logEvidence = (evidence: unknown, injuryId?: string): void => {
+    if (!isRecord(evidence)) return;
+    if (evidence.voice != null) logPart('Voice', evidence.voice, injuryId);
+    if (Array.isArray(evidence.images)) {
+      evidence.images.forEach((image, index) =>
+        logPart('Image', image, injuryId, index),
+      );
+    }
+  };
+  logEvidence(data.evidence);
+  if (isRecord(data.evidenceByInjury)) {
+    Object.entries(data.evidenceByInjury).forEach(([injuryId, evidence]) =>
+      logEvidence(evidence, injuryId),
+    );
+  }
+};
+
 const readEmergencyGuideResponse = async (
   response: Response,
   requestUrl: string,
@@ -290,6 +334,8 @@ const readEmergencyGuideResponse = async (
       requestUrl,
     );
   }
+
+  logGuideEvidence(payload.data);
 
   if (payload.data.compound != null) {
     logCompoundGuideDiagnostics(payload.data, { operation: 'CREATE', httpStatus: response.status });
@@ -474,12 +520,36 @@ export const createEmergencyGuide = async (
 export const createCompoundGuide = async (
   request: CompoundGuideRequest,
   signal?: AbortSignal,
+  media?: Pick<EmergencyGuidePhotoRequest, 'images' | 'audio'>,
 ): Promise<EmergencyGuideResponse> => {
   if (signal?.aborted) {
     throw createAbortError();
   }
   const formData = new FormData();
+  const images = media?.images ?? [];
+  const bindings = request.evidenceBindings;
+  if (
+    images.length > 5 ||
+    images.length !== (bindings?.images?.length ?? 0) ||
+    images.some((_, index) => {
+      const binding = bindings?.images?.[index];
+      return (
+        binding?.imageIndex !== index ||
+        !request.injuries.some(injury => injury.injuryId === binding?.injuryId)
+      );
+    }) ||
+    !!media?.audio !== !!bindings?.audio ||
+    (bindings?.audio &&
+      !request.injuries.some(injury => injury.injuryId === bindings.audio))
+  ) {
+    throw new Error('첨부 자료의 대상 손상을 다시 확인해 주세요.');
+  }
+  assertMediaFilesWithinLimits(images, media?.audio);
   formData.append('request', JSON.stringify(request));
+  images.forEach(file => formData.append('images', file as unknown as Blob));
+  if (media?.audio) {
+    formData.append('audio', media.audio as unknown as Blob);
+  }
   const requestUrl = `${getEmergencyGuideBaseUrl()}${EMERGENCY_GUIDE_SESSIONS_PATH}`;
   logRequest(requestUrl);
   console.warn('[EmergencyGuide API][Compound Request]', JSON.stringify(request));

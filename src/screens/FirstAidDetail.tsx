@@ -36,6 +36,7 @@ import {
   getQuestionnaireSteps,
   getSelectedCategories,
   isSupportedCompoundSelection,
+  setCompoundInjuryCount,
   updateQuestionnaireAnswer,
   updateQuestionnaireDescription,
 } from '@/utils/compoundQuestionnaire';
@@ -55,14 +56,35 @@ export const FirstAidDetail = ({
   const { handleCreateGuide } = useEmergencyQuestionnaireRequest();
   const startGuide = useEmergencyGuideStore(state => state.startGuide);
   const isFocused = useIsFocused();
-  const category = FIRST_AID_CATEGORIES.find(
-    item => item.id === route.params?.mainId,
-  );
+  const category =
+    FIRST_AID_CATEGORIES.find(item => item.id === route.params?.mainId) ??
+    (route.params?.isCompoundIntake ? FIRST_AID_CATEGORIES[0] : undefined);
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
-  const [questionnaire, setQuestionnaire] = React.useState<QuestionnaireState>({
-    questionAnswers: {},
-    compoundDraft: { injuries: [], relation: null },
-  });
+  const [questionnaire, setQuestionnaire] = React.useState<QuestionnaireState>(
+    () => {
+      const initial: QuestionnaireState = {
+        questionAnswers: {},
+        compoundDraft: { injuries: [], relation: null },
+      };
+      // 복합 확인 요청에는 원래 음성을 복제하지 않고 손상별 답변을 새로 받습니다.
+      if (!route.params?.isCompoundIntake || !category) return initial;
+      const compound = setCompoundInjuryCount(
+        initial,
+        2,
+        SERVER_SYMPTOM_ID_BY_CATEGORY[category.id],
+      );
+      return {
+        ...compound,
+        compoundDraft: {
+          ...compound.compoundDraft,
+          injuries: compound.compoundDraft.injuries.map(injury => ({
+            ...injury,
+            hasSelectedCategory: false,
+          })),
+        },
+      };
+    },
+  );
   const { questionAnswers, compoundDraft } = questionnaire;
   const questions = React.useMemo(
     () =>
@@ -388,6 +410,7 @@ export const FirstAidDetail = ({
           <CompoundInjurySelection
             state={questionnaire}
             initialCategory={SERVER_SYMPTOM_ID_BY_CATEGORY[category.id]}
+            canChangeInjuryCount={!route.params?.isCompoundIntake}
             onChange={setQuestionnaire}
           />
         ) : null}
@@ -410,6 +433,29 @@ export const FirstAidDetail = ({
             onPress={() => handleOptionPress(option.id)}
           />
         ))}
+        {currentQuestion.id === 'immediateDanger' ? (
+          <IntakeChoice
+            label="판단하기 어려움"
+            testID="immediate-danger-unknown"
+            isSelected={
+              questionAnswers.immediateDangerUnknown?.[0] === 'UNKNOWN'
+            }
+            onPress={() =>
+              setQuestionnaire(current => ({
+                ...current,
+                questionAnswers: {
+                  ...current.questionAnswers,
+                  immediateDanger: [],
+                  immediateDangerUnknown:
+                    current.questionAnswers.immediateDangerUnknown?.[0] ===
+                    'UNKNOWN'
+                      ? []
+                      : ['UNKNOWN'],
+                },
+              }))
+            }
+          />
+        ) : null}
         {currentQuestion.id === 'ageGroup' && isCompound ? (
           <View className="mt-5">
             <Text className="mb-3 text-body font-suitBold text-black">

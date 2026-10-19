@@ -13,19 +13,22 @@ import { IntakeChoice } from './CompoundInjuryPanel';
 interface Props {
   state: QuestionnaireState;
   initialCategory: CompoundCategoryCode;
+  canChangeInjuryCount?: boolean;
   onChange: React.Dispatch<React.SetStateAction<QuestionnaireState>>;
 }
 export const CompoundInjurySelection = ({
   state,
   initialCategory,
+  canChangeInjuryCount = true,
   onChange,
 }: Props): React.JSX.Element => {
   const { compoundDraft } = state;
   const isCompound = compoundDraft.injuries.length === 2;
+  const counts: readonly (1 | 2)[] = canChangeInjuryCount ? [1, 2] : [2];
   return (
     <View className="mb-5">
       <Text className="mb-3 text-body font-suitBold text-black">손상 수</Text>
-      {([1, 2] as const).map(count => (
+      {counts.map(count => (
         <IntakeChoice
           key={count}
           testID={`injury-count-${count}`}
@@ -52,8 +55,9 @@ export const CompoundInjurySelection = ({
                   }`}
                   label={item.label}
                   isSelected={
+                    injury.hasSelectedCategory !== false &&
                     injury.categoryCode ===
-                    SERVER_SYMPTOM_ID_BY_CATEGORY[item.id]
+                      SERVER_SYMPTOM_ID_BY_CATEGORY[item.id]
                   }
                   onPress={() =>
                     onChange(current =>
@@ -66,24 +70,30 @@ export const CompoundInjurySelection = ({
                   }
                 />
               ))}
-              <IntakeChoice
-                label="이 손상 유형을 직접 확인했습니다"
-                testID={`confirm-injury-${index}`}
-                isSelected={injury.isConfirmed !== false}
-                onPress={() =>
-                  onChange(current => ({
-                    ...current,
-                    compoundDraft: {
-                      ...current.compoundDraft,
-                      injuries: current.compoundDraft.injuries.map((item, i) =>
-                        i === index
-                          ? { ...item, isConfirmed: item.isConfirmed === false }
-                          : item,
-                      ),
-                    },
-                  }))
-                }
-              />
+              {injury.hasSelectedCategory !== false ? (
+                <IntakeChoice
+                  label="이 손상 유형을 직접 확인했습니다"
+                  testID={`confirm-injury-${index}`}
+                  isSelected={injury.isConfirmed !== false}
+                  onPress={() =>
+                    onChange(current => ({
+                      ...current,
+                      compoundDraft: {
+                        ...current.compoundDraft,
+                        injuries: current.compoundDraft.injuries.map(
+                          (item, i) =>
+                            i === index
+                              ? {
+                                  ...item,
+                                  isConfirmed: item.isConfirmed === false,
+                                }
+                              : item,
+                        ),
+                      },
+                    }))
+                  }
+                />
+              ) : null}
             </View>
           ))
         : null}

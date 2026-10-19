@@ -94,7 +94,7 @@ it('미선택은 누락으로 표시하고 UNKNOWN과 반대 답변은 원래 �
   );
 });
 
-it('관계·피부 상태·유형 변경으로 적용되지 않는 C 답변을 재사용하지 않는다', () => {
+it('관계·유형 변경으로 적용되지 않는 C 답변을 지우고 화상 피부 상태만으로 C 질문을 숨기지 않는다', () => {
   const state = stateFor(samples[0].request);
   const same = pruneQaFacts({ ...state.compoundDraft, relation: 'SAME' });
   expect(same.injuries[0].qaFacts?.BURN_MEDICINES_AVAILABLE).toBeUndefined();
@@ -109,7 +109,7 @@ it('관계·피부 상태·유형 변경으로 적용되지 않는 C 답변을 �
           },
     ),
   });
-  expect(blister.injuries[0].qaFacts?.BURN_COOLING_STARTED).toBeUndefined();
+  expect(blister.injuries[0].qaFacts?.BURN_COOLING_STARTED).toBe('NO');
   const changed = setCompoundInjuryCategory(state, 0, 'ALLERGY_RASH');
   expect(changed.compoundDraft.injuries[0].qaFacts).toEqual({});
   expect(
@@ -146,7 +146,7 @@ it('다른 손상의 상세 답변을 기다리지 않고 현재 손상의 C 질
 });
 
 it.each(samples)(
-  '$name: 첨부 JSON의 C 확인 항목만 표시하고 일반 경로의 빈 질문을 섞지 않는다',
+  '$name: COMPLETE 예시의 C 확인 항목과 조건에 맞는 일반 질문을 함께 표시한다',
   ({ request }) => {
     const state = stateFor(request);
     const first = state.compoundDraft.injuries[0];
@@ -155,8 +155,13 @@ it.each(samples)(
       return match ? [match[1]] : [];
     });
     const questions = relevantQaFacts(state.compoundDraft, first);
-    expect(questions.map(question => question.id).sort()).toEqual(
-      [...expected].sort(),
+    expect(questions.map(question => question.id)).toEqual(
+      expect.arrayContaining(expected),
+    );
+    expect(questions.map(question => question.id)).toContain(
+      first.categoryCode === 'BURN'
+        ? 'BURN_CAN_REMAIN_CLEAN'
+        : 'SEVERE_SWELLING',
     );
     if (first.categoryCode === 'FRACTURE_BRUISE')
       expect(questions[0].id).toBe('SPLINT_AVAILABLE');
@@ -188,10 +193,10 @@ it('C 자료에 없는 질문이라도 이미 확인한 관찰은 표시와 전�
   );
 });
 
-it('부목이 있다고 답하면 기존 골절 자원 확인도 이어서 표시한다', () => {
+it('부목 응답과 관계없이 조건에 맞는 골절 자원 질문을 표시한다', () => {
   const state = stateFor(samples[1].request);
   const first = state.compoundDraft.injuries[0];
-  first.qaFacts = { ...first.qaFacts, SPLINT_AVAILABLE: 'YES' };
+  first.qaFacts = { ...first.qaFacts, SPLINT_AVAILABLE: 'NO' };
   expect(
     relevantQaFacts(state.compoundDraft, first).map(question => question.id),
   ).toContain('SPLINT_TRAINED_HELPER');

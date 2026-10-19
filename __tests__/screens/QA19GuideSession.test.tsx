@@ -12,6 +12,7 @@ import { useEmergencyGuideStore } from '@/store';
 import { parseCompoundGuideSnapshot } from '@/utils/compoundGuide';
 import type { EmergencyGuideResponse } from '@/types';
 import { QA19_CASES } from '../../testSupport/qa19';
+import { FE_HANDOFF_CASES } from '../../testSupport/feHandoff';
 jest.mock('@/assets', () => ({ BackIcon: () => null }));
 jest.mock('@/services', () => ({
   ApiRequestError: jest.requireActual('@/services/apiError.service')
@@ -34,7 +35,7 @@ beforeEach(() => {
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   useEmergencyGuideStore.getState().resetGuide();
 });
-it.each(QA19_CASES)(
+it.each([...QA19_CASES, ...FE_HANDOFF_CASES])(
   'QA $request.requestId: 단일과 같은 화면에 $count단계 중 현재 단계만 표시한다',
   async sample => {
     const guide = sample.response.data as unknown as EmergencyGuideResponse;

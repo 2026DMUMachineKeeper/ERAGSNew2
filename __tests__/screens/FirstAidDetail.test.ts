@@ -370,6 +370,97 @@ const fillCompoundToAge = async (
 };
 
 describe('FirstAidDetail 응급 평가 보존', () => {
+  it('복합 확인으로 진입하면 두 손상을 직접 확인한 뒤 원래 음성 없이 V2 요청을 보낸다', async () => {
+    jest.mocked(createCompoundGuide).mockResolvedValue(PENDING_GUIDE);
+    const navigation = createNavigation();
+    let renderer!: ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = create(
+          React.createElement(FirstAidDetail, {
+            navigation: navigation as never,
+            route: {
+              params: { isCompoundIntake: true },
+            } as never,
+          }),
+        );
+      });
+      await selectCurrentAnswer(renderer, 'NONE');
+      await act(async () => findAction(renderer, '다음 질문').props.onPress());
+      expect(getCurrentStep(renderer).id).toBe('visibleSymptoms');
+      expect(
+        renderer.root.findAllByProps({ testID: 'injury-count-1' }),
+      ).toHaveLength(0);
+      expect(
+        renderer.root.findByProps({ testID: 'injury-count-2' }).props.isSelected,
+      ).toBe(true);
+      expect(findAction(renderer, '다음 질문').props.disabled).toBe(true);
+      for (const index of [0, 1]) {
+        expect(
+          renderer.root.findByProps({ testID: `category-${index}-BLEEDING` })
+            .props.isSelected,
+        ).toBe(false);
+        expect(
+          renderer.root.findAllByProps({ testID: `confirm-injury-${index}` }),
+        ).toHaveLength(0);
+      }
+      await act(async () =>
+        renderer.root
+          .findByProps({ testID: 'category-0-BLEEDING' })
+          .props.onPress(),
+      );
+      await act(async () =>
+        renderer.root.findByProps({ testID: 'category-1-BURN' }).props.onPress(),
+      );
+      for (const index of [0, 1]) {
+        await act(async () =>
+          renderer.root
+            .findByProps({ testID: `confirm-injury-${index}` })
+            .props.onPress(),
+        );
+      }
+      await act(async () => findAction(renderer, '다음 질문').props.onPress());
+      await fillCompoundToAge(renderer);
+      await act(async () =>
+        findAction(renderer, '응급처치 가이드 시작').props.onPress(),
+      );
+      expect(createEmergencyGuide).not.toHaveBeenCalled();
+      const [request, , media] = jest.mocked(createCompoundGuide).mock.calls[0];
+      expect(request.schemaVersion).toBe('2');
+      expect(request.injuries.map((injury) => injury.categoryCode)).toEqual([
+        'BLEEDING',
+        'BURN',
+      ]);
+      expect(
+        request.injuries.map((injury) => injury.location.description),
+      ).toEqual(['왼손 손바닥', '오른쪽 정강이']);
+      expect(
+        request.injuries.every(
+          (injury) => injury.confirmed && injury.observations.length === 0,
+        ),
+      ).toBe(true);
+      expect(request.relations[0]).toMatchObject({
+        relation: 'DIFFERENT',
+        confirmed: true,
+      });
+      expect(
+        request.injuries[0].questionnaire.some(
+          (q) => q.questionId === 'B1_BLEEDING_PATTERN',
+        ),
+      ).toBe(true);
+      expect(
+        request.injuries[1].questionnaire.some(
+          (q) => q.questionId === 'U2_BURN_SKIN_STATE',
+        ),
+      ).toBe(true);
+      expect(request.evidenceBindings).toBeUndefined();
+      expect(media).toEqual({ images: [], audio: undefined });
+      expect(navigation.replace).toHaveBeenCalledWith('EmergencyGuide');
+    } finally {
+      await act(async () => renderer?.unmount());
+    }
+  });
+
   it('같은 출혈 두 개도 직접 확인 후 독립 문진을 보내고 QA 공통 답변만 공유한다', async () => {
     jest.mocked(createCompoundGuide).mockResolvedValue(PENDING_GUIDE);
     const renderer = await renderFirstAidDetail(createNavigation());
