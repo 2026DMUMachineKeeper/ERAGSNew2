@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, AppState, Linking, Modal, Text, TouchableOpacity } from 'react-native';
+import { Alert, AppState, Image, Linking, Modal, Text, TouchableOpacity } from 'react-native';
 import type { AppStateStatus } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { CommonActions, StackActions, StackRouter } from '@react-navigation/routers';
@@ -8,7 +8,7 @@ import { GuideHeader } from '@/components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '@/components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '@/components/EmergencyGuide/StepDetail';
 import { useEmergencyGuideStore } from '@/store';
-import { requestTtsVoiceDataInstallation, retryEmergencyGuide, speakTts } from '@/services';
+import { getEmergencyGuideImageUrl, requestTtsVoiceDataInstallation, retryEmergencyGuide, speakTts } from '@/services';
 import type { EmergencyGuideResponse } from '@/types';
 
 import { EmergencyGuideScreen } from '@/screens/EmergencyGuideScreen';
@@ -146,6 +146,32 @@ describe('EmergencyGuideScreen 처치 완료 확인', () => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  it('단일 가이드의 다음 두 이미지를 준비하고 타이머 갱신에는 다시 요청하지 않는다', async () => {
+    const prefetch = jest.spyOn(Image, 'prefetch').mockResolvedValue(true);
+    jest.mocked(getEmergencyGuideImageUrl).mockImplementation(
+      (_url, resource) => resource ?? '',
+    );
+    try {
+      await act(async () => useEmergencyGuideStore.getState().setGuide({
+        ...GUIDE,
+        treatment: {
+          ...GUIDE.treatment,
+          steps: GUIDE.treatment.steps.map((step, index) => ({
+            ...step, imageResource: `/step-${index}.png`,
+          })),
+        },
+      }));
+      expect(prefetch.mock.calls.map(call => call[0])).toEqual([
+        '/step-1.png', '/step-2.png',
+      ]);
+      expect(renderer.root.findByType(Image).props.source.uri).toBe('/step-0.png');
+      await act(async () => { jest.advanceTimersByTime(2000); });
+      expect(prefetch).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.mocked(getEmergencyGuideImageUrl).mockReturnValue('');
+    }
   });
 
   it('복합 보류 화면에서 저장 결과 재조회 대신 질문 화면을 연다', async () => {

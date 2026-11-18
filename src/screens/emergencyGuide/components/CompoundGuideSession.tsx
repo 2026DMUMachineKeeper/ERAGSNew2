@@ -12,9 +12,12 @@ import { GuideHeader } from '@/components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '@/components/EmergencyGuide/GuideNextButton';
 import { useCompoundGuideSession } from '@/hooks/useCompoundGuideSession';
 import { useEmergencyGuideTts } from '@/hooks/useEmergencyGuideTts';
+import { useGuideImagePrefetch } from '@/hooks/useGuideImagePrefetch';
+import { getEmergencyGuideImageUrl } from '@/services';
 import { useEmergencyGuideStore } from '@/store';
 import type { CompoundGuideResult } from '@/types';
 import { isCompoundTreatmentCompleted } from '@/utils/compoundHandover';
+import { getCompoundStepPresentation } from '@/utils/compoundGuidePresentation';
 import { CompoundGuideStep } from './CompoundGuideStep';
 import { CompoundGuideStatus } from './CompoundGuideStatus';
 
@@ -97,6 +100,23 @@ export const CompoundGuideSession = ({
       : currentIndex;
   const displayed =
     displayedIndex >= 0 ? plan?.execution[displayedIndex] : undefined;
+  const upcomingImageUrls = React.useMemo(
+    () =>
+      !plan || displayedIndex < 0
+        ? []
+        : plan.execution
+            .slice(displayedIndex + 1, displayedIndex + 3)
+            .flatMap(step =>
+              getCompoundStepPresentation(plan, step).sources.map(source =>
+                getEmergencyGuideImageUrl(
+                  source.step.imageUrl ?? null,
+                  source.step.imageResource,
+                ),
+              ),
+            ),
+    [plan, displayedIndex],
+  );
+  useGuideImagePrefetch(upcomingImageUrls);
   const isReviewing =
     !!displayed && displayed.executionStepId !== current?.executionStepId;
   const isDisplayedCompleted =

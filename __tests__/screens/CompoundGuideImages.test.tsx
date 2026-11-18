@@ -95,6 +95,19 @@ it('결과 요약보다 먼저 서버 현재 단계와 그 손상의 이미지�
   );
   expect(image.props.accessibilityLabel).toContain('손상 2');
 });
+it('현재 이미지는 그대로 표시하면서 다음 실행 단계의 원본 이미지를 미리 받는다', async () => {
+  const prefetch = jest.spyOn(Image, 'prefetch').mockResolvedValue(true);
+  await mount();
+  expect(renderer.root.findByType(Image).props.source.uri).toContain(
+    'frac_mild_rest.png',
+  );
+  expect(prefetch).toHaveBeenCalledWith(
+    'test-api-base-url/images/bleed_mild_clean.png',
+  );
+  expect(prefetch).not.toHaveBeenCalledWith(
+    'test-api-base-url/images/frac_mild_rest.png',
+  );
+});
 it('완료 확인 전에는 그대로 있고 서버가 다음 단계를 반환하면 이미지도 함께 바뀐다', async () => {
   await mount();
   const next: CompoundGuideSnapshot = {
