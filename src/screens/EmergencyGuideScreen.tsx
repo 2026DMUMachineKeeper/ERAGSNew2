@@ -30,6 +30,7 @@ import {
 } from '../services';
 import { useEmergencyGuideStore } from '../store';
 import { useEmergencyGuideTts } from '@/hooks/useEmergencyGuideTts';
+import { useGuideImagePrefetch } from '@/hooks/useGuideImagePrefetch';
 import { useSingleGuideCompletion } from '@/hooks/useSingleGuideCompletion';
 import { FIRST_AID_CATEGORIES, SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/constants';
 import type { EmergencyGuideTreatmentStep } from '../types';
@@ -136,6 +137,18 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
       ? []
       : guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
   const steps = guide ? serverSteps : fallbackSteps;
+  const upcomingImageUrls = React.useMemo(
+    () =>
+      !guide || guide.compound || guide.status === 'ASSESSMENT_ONLY'
+        ? []
+        : guide.treatment.steps
+            .slice(currentStepIndex + 1, currentStepIndex + 3)
+            .map(step =>
+              getEmergencyGuideImageUrl(step.imageUrl, step.imageResource),
+            ),
+    [guide, currentStepIndex],
+  );
+  useGuideImagePrefetch(upcomingImageUrls);
 
   React.useEffect(() => {
     syncElapsedSeconds();

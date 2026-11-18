@@ -186,6 +186,7 @@ ${apiDomainConfig}
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">daumcdn.net</domain>
         <domain includeSubdomains="true">kakao.com</domain>
+        <domain includeSubdomains="true">kakaocdn.net</domain>
     </domain-config>
 </network-security-config>
 """
