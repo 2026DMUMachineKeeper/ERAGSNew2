@@ -1,0 +1,593 @@
+{
+  "success": true,
+  "data": {
+    "sessionId": "e202d2f4-9d3c-42d2-89d2-e091e3234976",
+    "requestId": "SYNTHETIC_REVIEWED_RULE-03-false-false",
+    "status": "COMPLETE",
+    "patientContext": {
+      "consciousness": "CONSCIOUS",
+      "ageGroup": "ADULT",
+      "redFlags": [],
+      "call119Required": false,
+      "display": {
+        "locale": "ko-KR",
+        "consciousness": "의식 있음",
+        "ageGroup": "성인",
+        "redFlags": []
+      }
+    },
+    "assessment": {
+      "assessmentId": "b1e75d05-926b-45cb-b004-88cc310bb62b",
+      "categoryCode": "FRACTURE_BRUISE",
+      "subtypeCode": "FRACTURE_MILD",
+      "severityCode": "LOW",
+      "confidence": 0.5,
+      "redFlags": [],
+      "call119Required": false,
+      "reasons": [
+        "유형은 확인된 손상 입력을 사용했습니다.",
+        "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+      ],
+      "missingInputs": [],
+      "display": {
+        "locale": "ko-KR",
+        "category": "골절 및 타박상",
+        "subtype": "경미한 타박상",
+        "severity": "경증",
+        "redFlags": [],
+        "missingInputs": [],
+        "reasons": [
+          "유형은 확인된 손상 입력을 사용했습니다.",
+          "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+        ]
+      }
+    },
+    "treatment": {
+      "routeCode": "A",
+      "modelVersion": null,
+      "steps": []
+    },
+    "compound": {
+      "schemaVersion": "2",
+      "requestId": "SYNTHETIC_REVIEWED_RULE-03-false-false",
+      "relations": [
+        {
+          "injuryIds": [
+            "left-small-wound",
+            "right-small-wound"
+          ],
+          "relation": "DIFFERENT",
+          "confirmed": true
+        }
+      ],
+      "sessionId": "e202d2f4-9d3c-42d2-89d2-e091e3234976",
+      "injuries": [
+        {
+          "injuryId": "left-small-wound",
+          "categoryCode": "BLEEDING",
+          "confirmed": true,
+          "location": {
+            "scope": "LOCALIZED",
+            "description": "Synthetic distinct site 0"
+          },
+          "observations": [
+            "QA_FACT_V1:PRESSURE_REQUIRED=NO",
+            "QA_FACT_V1:HELPER_AVAILABLE=YES",
+            "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+            "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+            "QA_FACT_V1:BLEEDING_STOPPED=YES",
+            "QA_FACT_V1:SMALL_SUPERFICIAL_WOUND=YES",
+            "QA_FACT_V1:WOUND_BITE=NO",
+            "QA_FACT_V1:WOUND_CONTAMINATION=NO",
+            "QA_FACT_V1:WOUND_INFECTION_SIGNS=NO",
+            "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES"
+          ],
+          "questionnaire": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "B1_BLEEDING_PATTERN",
+              "answerIds": [
+                "BLEEDING_OOZING"
+              ]
+            },
+            {
+              "questionId": "B2_BLEEDING_RISKS",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ],
+          "sourceCodes": {
+            "categoryCode": "BLEEDING",
+            "subtypeCode": "BLEEDING_MILD"
+          },
+          "assessment": {
+            "assessmentId": "48248856-ed68-4c07-af4c-84cf06e24fbe",
+            "categoryCode": "BLEEDING",
+            "subtypeCode": "BLEEDING_MILD",
+            "severityCode": "LOW",
+            "confidence": 0.5,
+            "redFlags": [],
+            "call119Required": false,
+            "reasons": [
+              "유형은 확인된 손상 입력을 사용했습니다.",
+              "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+            ],
+            "missingInputs": [],
+            "display": {
+              "locale": "ko-KR",
+              "category": "출혈",
+              "subtype": "경증 출혈",
+              "severity": "경증",
+              "redFlags": [],
+              "missingInputs": [],
+              "reasons": [
+                "유형은 확인된 손상 입력을 사용했습니다.",
+                "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+              ]
+            }
+          },
+          "guide": {
+            "categoryCode": "BLEEDING",
+            "dbSubtypeCode": "BLEEDING_MILD",
+            "routeCode": null,
+            "call119Required": false,
+            "redFlags": [],
+            "steps": [
+              {
+                "stepId": 1,
+                "stepNo": 1,
+                "instruction": "흐르는 깨끗한 물이나 생리식염수로 상처 부위의 이물질을 깨끗하게 씻어내세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "bleed_mild_clean.png",
+                "imageUrl": "http://REDACTED_HOST:4000/images/bleed_mild_clean.png"
+              },
+              {
+                "stepId": 2,
+                "stepNo": 2,
+                "instruction": "물기를 깨끗하게 닦아낸 후 구급함의 [반창고]를 상처 부위에 알맞게 부착하세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": 5,
+                "requiredItemName": "반창고",
+                "requiredQuantity": 1,
+                "requiredSlotId": null,
+                "imageResource": "bleed_mild_band.png",
+                "imageUrl": "http://REDACTED_HOST:4000/images/bleed_mild_band.png"
+              }
+            ],
+            "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",
+            "status": "APPROVED",
+            "display": {
+              "locale": "ko-KR",
+              "category": "출혈",
+              "subtype": "경증 출혈",
+              "status": "검토 승인",
+              "redFlags": []
+            }
+          },
+          "disposition": "ACTIVE",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "category": "출혈",
+            "disposition": "실행 계획에 포함"
+          }
+        },
+        {
+          "injuryId": "right-small-wound",
+          "categoryCode": "FRACTURE_BRUISE",
+          "confirmed": true,
+          "location": {
+            "scope": "LOCALIZED",
+            "description": "Synthetic distinct site 1"
+          },
+          "observations": [
+            "QA_FACT_V1:SEVERE_SWELLING=NO",
+            "QA_FACT_V1:HELPER_AVAILABLE=YES",
+            "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+            "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+            "QA_FACT_V1:COOLING_TOOL_AVAILABLE=YES",
+            "QA_FACT_V1:SPLINT_AVAILABLE=YES",
+            "QA_FACT_V1:LIMB_ONLY=YES",
+            "QA_FACT_V1:BRUISE_SKIN_INTACT=YES",
+            "QA_FACT_V1:COMPRESSION_FEASIBLE=YES",
+            "QA_FACT_V1:ELEVATION_FEASIBLE=YES",
+            "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+            "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES"
+          ],
+          "questionnaire": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "F1_INJURY_STATE",
+              "answerIds": [
+                "MINOR_BRUISE"
+              ]
+            },
+            {
+              "questionId": "F2_DISTAL_STATE",
+              "answerIds": [
+                "NORMAL_DISTAL"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ],
+          "sourceCodes": {
+            "categoryCode": "FRACTURE_BRUISE",
+            "subtypeCode": "FRACTURE_MILD"
+          },
+          "assessment": {
+            "assessmentId": "b1e75d05-926b-45cb-b004-88cc310bb62b",
+            "categoryCode": "FRACTURE_BRUISE",
+            "subtypeCode": "FRACTURE_MILD",
+            "severityCode": "LOW",
+            "confidence": 0.5,
+            "redFlags": [],
+            "call119Required": false,
+            "reasons": [
+              "유형은 확인된 손상 입력을 사용했습니다.",
+              "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+            ],
+            "missingInputs": [],
+            "display": {
+              "locale": "ko-KR",
+              "category": "골절 및 타박상",
+              "subtype": "경미한 타박상",
+              "severity": "경증",
+              "redFlags": [],
+              "missingInputs": [],
+              "reasons": [
+                "유형은 확인된 손상 입력을 사용했습니다.",
+                "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+              ]
+            }
+          },
+          "guide": {
+            "categoryCode": "FRACTURE_BRUISE",
+            "dbSubtypeCode": "FRACTURE_MILD",
+            "routeCode": "A",
+            "call119Required": false,
+            "redFlags": [],
+            "steps": [
+              {
+                "stepId": 44,
+                "stepNo": 1,
+                "instruction": "다친 부위를 움직이지 않고 편안한 자세로 휴식을 취하세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "frac_mild_rest.png",
+                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_rest.png"
+              },
+              {
+                "stepId": 45,
+                "stepNo": 2,
+                "instruction": "수건에 싼 얼음이나 쿨팩을 15~20분간 대어 부기와 통증을 가라앉힙니다.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "frac_mild_ice.png",
+                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_ice.png"
+              },
+              {
+                "stepId": 46,
+                "stepNo": 3,
+                "instruction": "구급함의 [압박붕대]를 이용해 다친 부위를 가볍게 감아줍니다. 세게 감지 마세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": 1,
+                "requiredItemName": "압박붕대",
+                "requiredQuantity": 1,
+                "requiredSlotId": null,
+                "imageResource": "frac_mild_a_bandage.png",
+                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_a_bandage.png"
+              },
+              {
+                "stepId": 47,
+                "stepNo": 4,
+                "instruction": "다친 부위를 심장보다 높은 곳에 올려두어 부기가 심해지는 것을 방지하세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "frac_mild_a_elevate.png",
+                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_a_elevate.png"
+              }
+            ],
+            "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",
+            "status": "APPROVED",
+            "display": {
+              "locale": "ko-KR",
+              "category": "골절 및 타박상",
+              "subtype": "경미한 타박상",
+              "status": "검토 승인",
+              "redFlags": []
+            }
+          },
+          "disposition": "ACTIVE",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "category": "골절 및 타박상",
+            "disposition": "실행 계획에 포함"
+          }
+        }
+      ],
+      "patientContext": {
+        "consciousness": "CONSCIOUS",
+        "ageGroup": "ADULT",
+        "redFlags": [],
+        "call119Required": false,
+        "display": {
+          "locale": "ko-KR",
+          "consciousness": "의식 있음",
+          "ageGroup": "성인",
+          "redFlags": []
+        }
+      },
+      "planId": "a1f9cd2a-ba69-43c2-8151-1677504c5141",
+      "status": "COMPLETE",
+      "authority": "BACKEND",
+      "inventoryConsumptionOwner": "BACKEND",
+      "inventorySnapshotId": "90ca885f-f1af-4748-964e-7336e4417501",
+      "redFlags": [],
+      "call119Required": false,
+      "policy": {
+        "policyId": "DRAFT_LOW_BLEEDING_MILD_FRACTURE_MILD",
+        "version": "draft-10",
+        "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",
+        "variantId": "DRAFT_LOW_BLEEDING_MILD_FRACTURE_MILD"
+      },
+      "execution": [
+        {
+          "executionStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-1-step-1\"]",
+          "instruction": "다친 부위를 움직이지 않고 편안한 자세로 휴식을 취하세요.",
+          "sources": [
+            {
+              "injuryId": "right-small-wound",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 44
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-0-step-1\"]",
+          "instruction": "흐르는 깨끗한 물이나 생리식염수로 상처 부위의 이물질을 깨끗하게 씻어내세요.",
+          "sources": [
+            {
+              "injuryId": "left-small-wound",
+              "categoryCode": "BLEEDING",
+              "stepId": 1
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-0-step-2\"]",
+          "instruction": "물기를 깨끗하게 닦아낸 후 구급함의 [반창고]를 상처 부위에 알맞게 부착하세요.",
+          "sources": [
+            {
+              "injuryId": "left-small-wound",
+              "categoryCode": "BLEEDING",
+              "stepId": 2
+            }
+          ],
+          "consumptionUnits": [
+            {
+              "unitId": "role-0-step-2-supply",
+              "itemId": 5,
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "executionStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-1-step-2\"]",
+          "instruction": "수건에 싼 얼음이나 쿨팩을 15~20분간 대어 부기와 통증을 가라앉힙니다.",
+          "sources": [
+            {
+              "injuryId": "right-small-wound",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 45
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-1-step-3\"]",
+          "instruction": "구급함의 [압박붕대]를 이용해 다친 부위를 가볍게 감아줍니다. 세게 감지 마세요.",
+          "sources": [
+            {
+              "injuryId": "right-small-wound",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 46
+            }
+          ],
+          "consumptionUnits": [
+            {
+              "unitId": "role-1-step-3-supply",
+              "itemId": 1,
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "executionStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-1-step-4\"]",
+          "instruction": "다친 부위를 심장보다 높은 곳에 올려두어 부기가 심해지는 것을 방지하세요.",
+          "sources": [
+            {
+              "injuryId": "right-small-wound",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 47
+            }
+          ],
+          "consumptionUnits": []
+        }
+      ],
+      "excludedSteps": [],
+      "allocations": [
+        {
+          "itemId": 5,
+          "quantity": 1
+        },
+        {
+          "itemId": 1,
+          "quantity": 1
+        }
+      ],
+      "blockedReasons": [],
+      "display": {
+        "locale": "ko-KR",
+        "status": "가이드 생성 완료",
+        "redFlags": [],
+        "blockedReasons": []
+      }
+    },
+    "schemaVersion": "2",
+    "generatedAt": "2026-10-16T01:18:48.903Z",
+    "progress": {
+      "revision": 0,
+      "status": "IN_PROGRESS",
+      "currentStepId": "[\"a1f9cd2a-ba69-43c2-8151-1677504c5141\",\"role-1-step-1\"]",
+      "completedStepIds": [],
+      "blockedReason": null,
+      "injuries": [
+        {
+          "injuryId": "left-small-wound",
+          "status": "WAITING",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "status": "처치 대기"
+          }
+        },
+        {
+          "injuryId": "right-small-wound",
+          "status": "IN_PROGRESS",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "status": "처치 진행 중"
+          }
+        }
+      ],
+      "display": {
+        "locale": "ko-KR",
+        "status": "처치 진행 중"
+      }
+    },
+    "usedSupplies": [],
+    "evidenceByInjury": {
+      "left-small-wound": {
+        "voice": null,
+        "image": null,
+        "images": null,
+        "questionnaire": {
+          "answers": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "B1_BLEEDING_PATTERN",
+              "answerIds": [
+                "BLEEDING_OOZING"
+              ]
+            },
+            {
+              "questionId": "B2_BLEEDING_RISKS",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ]
+        },
+        "errors": [],
+        "questionnaireValidation": {
+          "source": "SM",
+          "schemaVersion": "1.2.0"
+        }
+      },
+      "right-small-wound": {
+        "voice": null,
+        "image": null,
+        "images": null,
+        "questionnaire": {
+          "answers": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "F1_INJURY_STATE",
+              "answerIds": [
+                "MINOR_BRUISE"
+              ]
+            },
+            {
+              "questionId": "F2_DISTAL_STATE",
+              "answerIds": [
+                "NORMAL_DISTAL"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ]
+        },
+        "errors": [],
+        "questionnaireValidation": {
+          "source": "SM",
+          "schemaVersion": "1.2.0"
+        }
+      }
+    },
+    "evidence": null,
+    "error": null,
+    "display": {
+      "locale": "ko-KR",
+      "status": "가이드 생성 완료"
+    }
+  }
+}

@@ -17,6 +17,7 @@ import { WasteGuideScreen } from '@/screens/WasteGuideScreen';
 import { LoginScreen } from '@/screens/auth/LoginScreen';
 import { SignUpScreen } from '@/screens/auth/SignUpScreen';
 import { useAuthStore } from '@/store';
+import type { EmergencyGuideInput } from '@/types';
 
 import { MainTabNavigator, type MainTabParamList } from './MainTabNavigator';
 
@@ -29,7 +30,12 @@ export type RootStackParamList = {
   MedicineManualInput: undefined;
   PasswordReset: undefined;
   FirstAid: undefined;
-  FirstAidDetail: { mainId?: string; mainLabel?: string } | undefined;
+  FirstAidDetail: {
+    mainId?: string;
+    mainLabel?: string;
+    isCompoundIntake?: boolean;
+    continuation?: EmergencyGuideInput;
+  } | undefined;
   EmergencyGuide: undefined;
   QRCode: undefined;
   WasteGuide: undefined;

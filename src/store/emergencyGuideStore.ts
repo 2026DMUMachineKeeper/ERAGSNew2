@@ -1,14 +1,18 @@
 import { create } from 'zustand';
 
 import type {
+  CompoundCompletionAttempt,
+  CompoundGuideSnapshot,
   EmergencyGuideHandoverStatus,
   EmergencyGuideResponse,
+  EmergencyGuideInput,
   EmergencyWasteGuideItem,
 } from '@/types';
 
 export type EmergencyGuideSource = 'manual' | 'machine' | 'voice' | 'image';
 
 interface StartEmergencyGuideParams {
+  input?: EmergencyGuideInput;
   guide: EmergencyGuideResponse;
   mainLabel?: string;
   source: EmergencyGuideSource;
@@ -16,7 +20,16 @@ interface StartEmergencyGuideParams {
 }
 
 interface EmergencyGuideState {
+  input: EmergencyGuideInput | null;
+  compoundSnapshot: CompoundGuideSnapshot | null;
+  compoundPendingCompletion: CompoundCompletionAttempt | null;
+  applyCompoundSnapshot: (snapshot: CompoundGuideSnapshot) => void;
+  setCompoundPendingCompletion: (attempt: CompoundCompletionAttempt | null) => void;
   completedStepIds: number[];
+  isCompletingSingleGuide: boolean;
+  usedMedicineQuantities: Readonly<Record<number, number>>;
+  setIsCompletingSingleGuide: (isCompleting: boolean) => void;
+  recordMedicineUse: (id: number, quantity: number) => void;
   currentStepIndex: number;
   elapsedSeconds: number;
   // 경과 시간 계산 기준 시각(ms)입니다.
@@ -43,7 +56,12 @@ interface EmergencyGuideState {
 }
 
 const INITIAL_EMERGENCY_GUIDE_STATE = {
+  input: null,
+  compoundSnapshot: null,
+  compoundPendingCompletion: null,
   completedStepIds: [] as number[],
+  isCompletingSingleGuide: false,
+  usedMedicineQuantities: {} as Readonly<Record<number, number>>,
   currentStepIndex: 0,
   elapsedSeconds: 0,
   elapsedStartedAt: null,
@@ -59,6 +77,44 @@ const INITIAL_EMERGENCY_GUIDE_STATE = {
 
 export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
   ...INITIAL_EMERGENCY_GUIDE_STATE,
+
+  setIsCompletingSingleGuide: (isCompleting): void => {
+    set({ isCompletingSingleGuide: isCompleting });
+  },
+
+  recordMedicineUse: (id, quantity): void => {
+    set(state => ({
+      usedMedicineQuantities: {
+        ...state.usedMedicineQuantities,
+        [id]: (state.usedMedicineQuantities[id] ?? 0) + quantity,
+      },
+    }));
+  },
+
+  applyCompoundSnapshot: (snapshot): void => {
+    set(state => {
+      if (!state.guide?.compound || state.guide.sessionId !== snapshot.sessionId ||
+        (state.compoundSnapshot?.sessionId === snapshot.sessionId &&
+          (state.compoundSnapshot.progress?.revision ?? 0) > (snapshot.progress?.revision ?? 0))) {
+        return state;
+      }
+      return {
+        compoundSnapshot: snapshot,
+        guide: {
+          ...state.guide,
+          compound: snapshot.compound,
+          status: snapshot.compound.status === 'PARTIAL' ? 'GUIDE_PENDING' : snapshot.compound.status,
+          progress: snapshot.progress,
+          usedSupplies: snapshot.usedSupplies,
+        },
+      };
+    });
+  },
+
+  setCompoundPendingCompletion: (attempt): void => {
+    set(state => attempt && state.guide?.sessionId !== attempt.sessionId ? state :
+      { compoundPendingCompletion: attempt });
+  },
 
   // 1초씩 더하면 앱이 백그라운드에 있는 동안(119 통화 등) 멈추므로 시작 시각 기준으로 계산합니다.
   syncElapsedSeconds: (): void => {
@@ -109,7 +165,16 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
   },
 
   setGuide: (guide: EmergencyGuideResponse): void => {
-    set({
+    set(state => ({
+      isCompletingSingleGuide:
+        state.guide === guide ? state.isCompletingSingleGuide : false,
+      usedMedicineQuantities:
+        state.guide === guide ||
+        (guide.sessionId !== null && state.guide?.sessionId === guide.sessionId)
+          ? state.usedMedicineQuantities
+          : {},
+      compoundSnapshot: null,
+      compoundPendingCompletion: null,
       guide,
       currentStepIndex: 0,
       completedStepIds: [],
@@ -117,7 +182,7 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
       isWasteGuideLoading: false,
       wasteGuide: null,
       wasteGuideError: null,
-    });
+    }));
   },
 
   setHandoverStatus: (status: EmergencyGuideHandoverStatus): void => {
@@ -148,13 +213,19 @@ export const useEmergencyGuideStore = create<EmergencyGuideState>()(set => ({
   },
 
   startGuide: ({
+    input,
     guide,
     mainLabel = '응급',
     source,
     subtypeLabel = '',
   }: StartEmergencyGuideParams): void => {
     set({
+      input: input ?? null,
+      compoundSnapshot: null,
+      compoundPendingCompletion: null,
       completedStepIds: [],
+      isCompletingSingleGuide: false,
+      usedMedicineQuantities: {},
       currentStepIndex: 0,
       elapsedSeconds: 0,
       elapsedStartedAt: Date.now(),

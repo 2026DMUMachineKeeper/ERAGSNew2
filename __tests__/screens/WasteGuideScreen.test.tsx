@@ -1,9 +1,11 @@
 import React from 'react';
+import { processColor, StyleSheet, Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 
 import { WasteGuideScreen } from '@/screens/WasteGuideScreen';
 import { useEmergencyGuideStore } from '@/store';
-import type { EmergencyGuideResponse } from '@/types';
+import type { EmergencyGuideResponse, EmergencyWasteGuideItem } from '@/types';
+import tailwindConfig from '../../tailwind.config';
 
 jest.mock('@/assets', () => ({ BackIcon: (): null => null }));
 
@@ -32,17 +34,46 @@ describe('WasteGuideScreen', () => {
     jest.clearAllMocks();
   });
 
-  it('폐기물 안내 항목과 배출 방법을 표시하고 분류는 표시하지 않는다', async (): Promise<void> => {
+  it.each<EmergencyWasteGuideItem>([
+    {
+      itemName: '거즈',
+      wasteCategory: 'GENERAL',
+      displayTitle: '일반 배출',
+      disposalMethod: '일반 쓰레기로 배출하세요.',
+      dangerLevel: 'LOW',
+    },
+    {
+      itemName: '소독 핀셋',
+      wasteCategory: 'REUSABLE',
+      displayTitle: '소독 후 보관',
+      disposalMethod: '사용 후 알코올이나 소독약으로 소독한 뒤 구급함에 보관하세요.',
+      dangerLevel: 'LOW',
+    },
+    {
+      itemName: '후시딘 연고',
+      wasteCategory: 'KEEP',
+      displayTitle: '잔량 보관',
+      disposalMethod: '아직 재고(1개)가 남아있습니다. 뚜껑을 잘 닫아 보관하세요.',
+      dangerLevel: 'LOW',
+    },
+    {
+      itemName: '다 쓴 포비돈 소독약',
+      wasteCategory: 'PHARMACEUTICAL',
+      displayTitle: '수거함 배출',
+      disposalMethod: '약국, 보건소의 폐의약품 수거함에 배출하세요.',
+      dangerLevel: 'LOW',
+    },
+    {
+      itemName: '주사바늘',
+      wasteCategory: 'SHARPS',
+      displayTitle: '위험 배출',
+      disposalMethod: '단단한 통에 넣어 배출하세요.',
+      dangerLevel: 'HIGH',
+    },
+  ])('$itemName의 서버 제목·상세 안내와 위험도 색상을 표시한다', async item => {
     const store = useEmergencyGuideStore.getState();
     store.startGuide({ guide: GUIDE, source: 'manual' });
-    store.setWasteGuide([
-      {
-        itemName: '거즈',
-        wasteCategory: 'GENERAL',
-        disposalMethod: '일반 쓰레기로 배출하세요.',
-        dangerLevel: 'LOW',
-      },
-    ]);
+    store.setWasteGuide([item]);
 
     await ReactTestRenderer.act(async () => {
       renderer = ReactTestRenderer.create(
@@ -58,9 +89,21 @@ describe('WasteGuideScreen', () => {
     }
 
     const rendered = JSON.stringify(renderer.toJSON());
-    expect(rendered).toContain('거즈');
-    expect(rendered).toContain('일반 쓰레기로 배출하세요.');
+    expect(rendered).toContain(item.itemName);
+    expect(rendered).toContain(item.displayTitle);
+    expect(rendered).toContain(item.disposalMethod);
     expect(rendered).not.toContain('분류:');
+    const badge = renderer.root.findAllByType(Text)
+      .find(node => node.props.children === item.displayTitle);
+    expect(badge).toBeDefined();
+    expect(processColor(StyleSheet.flatten(badge?.props.style)?.color)).toBe(
+      processColor(item.dangerLevel === 'HIGH'
+        ? tailwindConfig.colors.red
+        : tailwindConfig.colors.textDim),
+    );
+    if (item.wasteCategory !== 'GENERAL') {
+      expect(rendered).not.toContain('일반 배출');
+    }
   });
 
   it('기존 뒤로가기 아이콘 버튼으로 이전 화면으로 이동한다', async (): Promise<void> => {

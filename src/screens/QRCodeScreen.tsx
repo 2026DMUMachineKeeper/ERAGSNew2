@@ -9,10 +9,10 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 import { useEmergencyHandoverQr } from '@/hooks/useEmergencyHandoverQr';
 import { useEmergencyGuideStore } from '@/store';
 import type {
-  EmergencyGuideHandoverCompletedTreatment,
   EmergencyGuideHandoverUsedSupply,
   EmergencyGuideTreatmentStep,
 } from '@/types';
+import { getCompoundHandoverSummary } from '@/utils/compoundHandover';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'QRCode'>;
 
@@ -43,6 +43,19 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
     state => state.completedStepIds,
   );
   const handoverStatus = useEmergencyGuideStore(state => state.handoverStatus);
+  const savedCompoundSnapshot = useEmergencyGuideStore(
+    state => state.compoundSnapshot,
+  );
+  const isCompound = guide?.compound?.schemaVersion === '2';
+  const compoundSnapshot =
+    isCompound && savedCompoundSnapshot?.sessionId === guide?.sessionId
+      ? savedCompoundSnapshot
+      : null;
+  const compoundSummary = React.useMemo(
+    () =>
+      compoundSnapshot ? getCompoundHandoverSummary(compoundSnapshot) : null,
+    [compoundSnapshot],
+  );
   const resetGuide = useEmergencyGuideStore(state => state.resetGuide);
   const {
     handover,
@@ -55,6 +68,8 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
     sessionId: guide?.sessionId,
     completedStepIds,
     handoverStatus,
+    compoundSnapshot,
+    isCompound,
   });
   const completedStepIdSet = React.useMemo(
     () => new Set(completedStepIds),
@@ -69,9 +84,30 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
   );
 
   const snapshot = handover?.snapshot;
-  const assessment = snapshot?.assessment ?? guide?.assessment;
-  const patientContext = guide?.patientContext;
-  const completedTreatments: EmergencyGuideHandoverCompletedTreatment[] =
+  const assessment = compoundSnapshot
+    ? {
+        categoryCode: mainLabel,
+        severityCode: 'UNKNOWN' as const,
+        call119Required:
+          compoundSnapshot.compound.call119Required ||
+          compoundSnapshot.compound.injuries.some(
+            injury => injury.assessment.call119Required,
+          ),
+        redFlags: [
+          ...new Set([
+            ...compoundSnapshot.compound.redFlags,
+            ...compoundSnapshot.compound.injuries.flatMap(
+              injury => injury.assessment.redFlags,
+            ),
+          ]),
+        ],
+        summary: '',
+      }
+    : snapshot?.assessment ?? guide?.assessment;
+  const patientContext =
+    compoundSnapshot?.compound.patientContext ?? guide?.patientContext;
+  const completedTreatments =
+    compoundSummary?.completedTreatments ??
     snapshot?.completedTreatments ??
     localCompletedSteps.map(step => ({
       stepId: step.stepId as number,
@@ -79,7 +115,9 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
       instruction: step.instruction,
     }));
   const usedSupplies =
-    snapshot?.usedSupplies ?? createLocalUsedSupplies(localCompletedSteps);
+    compoundSummary?.usedSupplies ??
+    snapshot?.usedSupplies ??
+    createLocalUsedSupplies(localCompletedSteps);
   const consciousness =
     snapshot?.assessment.consciousness ??
     patientContext?.consciousness ??
@@ -104,11 +142,30 @@ export function QRCodeScreen({ navigation }: Props): React.JSX.Element {
 
           <HandoverSummary
             assessment={assessment}
-            mainLabel={mainLabel}
+            mainLabel={
+              mainLabel ||
+              compoundSnapshot?.compound.injuries
+                .map(injury => injury.display?.category ?? injury.categoryCode)
+                .join(' · ') ||
+              ''
+            }
             consciousness={consciousness}
             ageGroup={ageGroup}
             completedTreatments={completedTreatments}
             usedSupplies={usedSupplies}
+            injurySummaries={compoundSnapshot?.compound.injuries.map(
+              injury =>
+                `${injury.display?.category ?? injury.categoryCode} · ${
+                  injury.location.description ?? ''
+                }: ${
+                  injury.assessment.display?.subtype ??
+                  injury.assessment.subtypeCode ??
+                  ''
+                } · ${
+                  injury.assessment.display?.severity ??
+                  injury.assessment.severityCode
+                }`,
+            )}
           />
           <HandoverQrCard
             isIssuingQr={isIssuingQr}

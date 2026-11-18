@@ -193,7 +193,6 @@ export const KakaoMapScreen = ({
   const isLocatingRef = React.useRef(false);
   const hasRedirectedForExpiredSession = React.useRef(false);
   const [isAedGuideVisible, setIsAedGuideVisible] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedMedicalFilter, setSelectedMedicalFilter] =
     React.useState<MedicalFilter>('all');
   const [selectedMedicalLocation, setSelectedMedicalLocation] =
@@ -228,9 +227,9 @@ export const KakaoMapScreen = ({
       getNearbyMedicalLocations(
         medicalLocations,
         selectedMedicalFilter,
-        searchQuery,
+        '',
       ),
-    [medicalLocations, searchQuery, selectedMedicalFilter],
+    [medicalLocations, selectedMedicalFilter],
   );
   const mapSource = React.useMemo(
     () => ({
@@ -335,9 +334,9 @@ export const KakaoMapScreen = ({
     }
 
     mapWebViewRef.current?.injectJavaScript(
-      createMedicalFilterScript(selectedMedicalFilter, searchQuery),
+      createMedicalFilterScript(selectedMedicalFilter, ''),
     );
-  }, [isMapReady, searchQuery, selectedMedicalFilter]);
+  }, [isMapReady, selectedMedicalFilter]);
 
   const handleMapLayout = (event: LayoutChangeEvent): void => {
     setMapHeight(event.nativeEvent.layout.height);
@@ -502,11 +501,8 @@ export const KakaoMapScreen = ({
           <KakaoMapHeader
             isStackScreen={isStackScreen}
             onBackPress={() => navigation.goBack()}
-            onClearSearch={() => setSearchQuery('')}
             onFilterChange={setSelectedMedicalFilter}
             onOpenAedGuide={() => setIsAedGuideVisible(true)}
-            onSearchQueryChange={setSearchQuery}
-            searchQuery={searchQuery}
             selectedMedicalFilter={selectedMedicalFilter}
           />
           <MedicalPlacesSheet
@@ -521,7 +517,7 @@ export const KakaoMapScreen = ({
               onRetry: retryHospitals,
             }}
             hasLoaded={hasAedLoaded && hasHospitalLoaded}
-            hasSearchConditions={!!searchQuery.trim() || selectedMedicalFilter !== 'all'}
+            hasSearchConditions={selectedMedicalFilter !== 'all'}
             isAuthRedirecting={isAuthRedirecting}
             locationLoadState={locationLoadState}
             floatingControl={
@@ -563,7 +559,7 @@ export const KakaoMapScreen = ({
             onDirectionsPress={handleDirectionsPress}
             onLocationPress={handleMedicalLocationPress}
             ref={placesSheetRef}
-            searchQuery={searchQuery}
+            searchQuery=""
             selectedLocation={selectedMedicalLocation}
           />
         </View>

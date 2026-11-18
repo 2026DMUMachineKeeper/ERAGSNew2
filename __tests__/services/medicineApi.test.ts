@@ -5,6 +5,7 @@ import {
   fetchMedicineAlerts,
   postMedicineVision,
   postMedicineManual,
+  postMedicineUse,
   updateMedicine,
 } from '@/services/medicineApi';
 import { ApiRequestError } from '@/services/apiError.service';
@@ -34,6 +35,43 @@ const createMockResponse = ({
 
 const fetchMock = jest.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+describe('postMedicineUse', () => {
+  beforeEach(() => fetchMock.mockReset());
+
+  it('숫자 ID와 사용 수량만 인증된 POST 요청으로 보낸다', async () => {
+    fetchMock.mockResolvedValue(createMockResponse({
+      ok: true, status: 204, text: jest.fn(),
+    }));
+
+    await expect(postMedicineUse({ id: 1, quantityToUse: 2 })).resolves.toEqual({});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'test-api-base-url/api/medicines/use',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ id: 1, quantityToUse: 2 }),
+      }),
+    );
+  });
+
+  it('차감 실패 시 서버 상태와 에러 정보를 유지한다', async () => {
+    fetchMock.mockResolvedValue(createMockResponse({
+      ok: false, status: 409,
+      text: jest.fn(async () => JSON.stringify({ error: {
+        code: 'INSUFFICIENT_STOCK', message: '재고 부족', details: [1],
+      } })),
+    }));
+
+    await expect(postMedicineUse({ id: 1, quantityToUse: 2 })).rejects.toMatchObject({
+      status: 409, code: 'INSUFFICIENT_STOCK', message: '재고 부족', details: [1],
+    });
+  });
+});
 
 describe('deleteMedicine', () => {
   beforeEach((): void => {

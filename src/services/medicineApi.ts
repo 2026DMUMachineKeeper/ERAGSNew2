@@ -300,9 +300,8 @@ export type MedicineUpdateParams = {
 };
 
 export type MedicineUseParams = {
-  id?: string;
-  medicineId?: string;
-  quantityToUse?: number;
+  id: number;
+  quantityToUse: number;
 };
 
 export type MedicineMutationResult = {
@@ -452,8 +451,7 @@ export async function postMedicineUse(
 ): Promise<MedicineMutationResult> {
   const body = {
     id: params.id,
-    medicineId: params.medicineId,
-    quantityToUse: params.quantityToUse ?? 1,
+    quantityToUse: params.quantityToUse,
   };
 
   const response = await authenticatedMedicineFetch(

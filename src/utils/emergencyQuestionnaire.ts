@@ -1,5 +1,20 @@
-import type { QuestionAnswers, EmergencyGuideQuestionnaireAnswer } from '@/types';
-import type { EmergencyCategoryId } from '@/constants';
+import { encodedQaFacts, pruneQaFacts } from './compoundQuestionFacts';
+import { fractureSkinFollowup } from '@/constants/compoundQaData';
+import type {
+  QuestionAnswers,
+  EmergencyGuideQuestionnaireAnswer,
+  CompoundCategoryCode,
+  CompoundGuideRequest,
+  CompoundQuestionnaireDraft,
+} from '@/types';
+import {
+  getEmergencyQuestions,
+  SERVER_SYMPTOM_ID_BY_CATEGORY,
+  type EmergencyCategoryId,
+} from '@/constants';
+import { getCompoundQuestionnaireError } from './compoundQuestionnaire';
+
+export { SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/constants';
 
 const SERVER_QUESTION_ID_BY_SCREEN_ID: Record<string, string> = {
   immediateDanger: 'Q1_IMMEDIATE_DANGER',
@@ -33,15 +48,6 @@ const SCREEN_QUESTION_IDS_IN_ORDER = [
   'ageGroup',
 ] as const;
 
-export const SERVER_SYMPTOM_ID_BY_CATEGORY: Record<EmergencyCategoryId, string> = {
-  bleeding: 'BLEEDING',
-  burn: 'BURN',
-  fractureBruise: 'FRACTURE_BRUISE',
-  fever: 'FEVER_NEUROLOGIC',
-  skinRash: 'ALLERGY_RASH',
-  airwayObstruction: 'AIRWAY_OBSTRUCTION',
-};
-
 export const toEmergencyGuideQuestionnaire = (
   questionAnswers: QuestionAnswers,
 ): EmergencyGuideQuestionnaireAnswer[] =>
@@ -53,3 +59,133 @@ export const toEmergencyGuideQuestionnaire = (
       ? [{ questionId: serverQuestionId, answerIds }]
       : [];
   });
+
+export const toCompoundGuideRequest = (
+  answers: QuestionAnswers,
+  requestId: string,
+  draft?: CompoundQuestionnaireDraft,
+): CompoundGuideRequest => {
+  const symptoms = answers.visibleSymptoms ?? [];
+  const entries = Object.entries(SERVER_SYMPTOM_ID_BY_CATEGORY) as [
+    EmergencyCategoryId,
+    CompoundCategoryCode,
+  ][];
+  const categories = symptoms.map(code =>
+    entries.find(([, value]) => value === code),
+  );
+  if (symptoms.length !== 2 || categories.some(category => !category)) {
+    throw new Error('복합 요청은 확인된 증상 2개만 지원합니다.');
+  }
+  if (draft) {
+    const error = getCompoundQuestionnaireError(answers, draft);
+    if (error) {
+      throw new Error(error);
+    }
+  }
+  const prunedDraft = draft ? pruneQaFacts(draft) : undefined;
+  const injuries = categories.flatMap((entry, index) => {
+    if (!entry) {
+      return [];
+    }
+    const [categoryId, categoryCode] = entry;
+    const injury = prunedDraft?.injuries[index];
+    const detailAnswers = injury?.answers ?? answers;
+    const injuryAnswers: QuestionAnswers = {
+      immediateDanger: answers.immediateDanger ?? [],
+      ...(draft ? {} : { visibleSymptoms: [categoryCode] }),
+      ageGroup: answers.ageGroup ?? [],
+    };
+    for (const question of getEmergencyQuestions(categoryId)) {
+      if (
+        !['immediateDanger', 'visibleSymptoms', 'ageGroup'].includes(
+          question.id,
+        ) &&
+        detailAnswers[question.id]?.length
+      ) {
+        injuryAnswers[question.id] = detailAnswers[question.id];
+      }
+    }
+    return [
+      {
+        injuryId: injury?.injuryId ?? `injury-${index}`,
+        categoryCode,
+        confirmed: true as const,
+        location: {
+          scope: injury?.location.scope ?? 'UNKNOWN',
+          description: injury?.location.description.trim() || null,
+        },
+        observations:
+          injury && prunedDraft
+            ? [
+                ...fractureSkinFollowup.options.flatMap(option =>
+                  categoryCode === 'FRACTURE_BRUISE' &&
+                  injury.fractureSkinAnswer === option.value
+                    ? [option.observation]
+                    : [],
+                ),
+                ...encodedQaFacts(prunedDraft, injury),
+                ...(injury.observationText?.trim()
+                  ? [injury.observationText.trim()]
+                  : []),
+              ]
+            : [],
+        questionnaire: toEmergencyGuideQuestionnaire(injuryAnswers),
+      },
+    ];
+  });
+  const ageGroup = answers.ageGroup?.[0];
+  const imageInjuries =
+    prunedDraft?.injuries.flatMap(injury =>
+      (injury.images ?? []).map(() => injury.injuryId),
+    ) ?? [];
+  const audioInjuries =
+    prunedDraft?.injuries.filter(injury => injury.audio) ?? [];
+  if (imageInjuries.length > 5 || audioInjuries.length > 1) {
+    throw new Error('사진은 합계 5장, 음성은 1개까지 첨부할 수 있습니다.');
+  }
+  return {
+    schemaVersion: '2',
+    requestId,
+    language: 'ko-KR',
+    ...(imageInjuries.length || audioInjuries.length
+      ? {
+          evidenceBindings: {
+            ...(imageInjuries.length
+              ? {
+                  images: imageInjuries.map((injuryId, imageIndex) => ({
+                    imageIndex,
+                    injuryId,
+                  })),
+                }
+              : {}),
+            ...(audioInjuries[0] ? { audio: audioInjuries[0].injuryId } : {}),
+          },
+        }
+      : {}),
+    patientContext: {
+      consciousness:
+        answers.immediateDanger?.includes('UNCONSCIOUS') ||
+        draft?.injuries.some(injury =>
+          injury.answers.speakOrCough?.includes('UNCONSCIOUS'),
+        )
+          ? 'UNCONSCIOUS'
+          : answers.consciousness?.[0] === 'CONSCIOUS'
+          ? 'CONSCIOUS'
+          : answers.consciousness?.[0] === 'UNCONSCIOUS'
+          ? 'UNCONSCIOUS'
+          : 'UNKNOWN',
+      ageGroup:
+        ageGroup === 'CHILD' || ageGroup === 'ADULT' || ageGroup === 'ELDERLY'
+          ? ageGroup
+          : 'UNKNOWN',
+    },
+    injuries: [injuries[0], injuries[1]],
+    relations: [
+      {
+        injuryIds: [injuries[0].injuryId, injuries[1].injuryId],
+        relation: draft?.relation ?? 'UNKNOWN',
+        confirmed: !!draft?.relation && draft.relation !== 'UNKNOWN',
+      },
+    ],
+  };
+};
