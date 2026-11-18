@@ -155,7 +155,7 @@
                 "requiredQuantity": 0,
                 "requiredSlotId": null,
                 "imageResource": "bleed_mild_clean.png",
-                "imageUrl": "http://REDACTED_HOST:4000/images/bleed_mild_clean.png"
+                "imageUrl": "http://api.example.com/images/bleed_mild_clean.png"
               },
               {
                 "stepId": 2,
@@ -167,7 +167,7 @@
                 "requiredQuantity": 1,
                 "requiredSlotId": null,
                 "imageResource": "bleed_mild_band.png",
-                "imageUrl": "http://REDACTED_HOST:4000/images/bleed_mild_band.png"
+                "imageUrl": "http://api.example.com/images/bleed_mild_band.png"
               }
             ],
             "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",
@@ -283,7 +283,7 @@
                 "requiredQuantity": 0,
                 "requiredSlotId": null,
                 "imageResource": "frac_mild_rest.png",
-                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_rest.png"
+                "imageUrl": "http://api.example.com/images/frac_mild_rest.png"
               },
               {
                 "stepId": 45,
@@ -295,7 +295,7 @@
                 "requiredQuantity": 0,
                 "requiredSlotId": null,
                 "imageResource": "frac_mild_ice.png",
-                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_ice.png"
+                "imageUrl": "http://api.example.com/images/frac_mild_ice.png"
               },
               {
                 "stepId": 46,
@@ -307,7 +307,7 @@
                 "requiredQuantity": 1,
                 "requiredSlotId": null,
                 "imageResource": "frac_mild_a_bandage.png",
-                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_a_bandage.png"
+                "imageUrl": "http://api.example.com/images/frac_mild_a_bandage.png"
               },
               {
                 "stepId": 47,
@@ -319,7 +319,7 @@
                 "requiredQuantity": 0,
                 "requiredSlotId": null,
                 "imageResource": "frac_mild_a_elevate.png",
-                "imageUrl": "http://REDACTED_HOST:4000/images/frac_mild_a_elevate.png"
+                "imageUrl": "http://api.example.com/images/frac_mild_a_elevate.png"
               }
             ],
             "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",
