@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { BackIcon } from '@/assets/icons';
 
@@ -7,13 +7,10 @@ export type MedicalFilter = 'all' | 'aed' | 'hospital';
 
 type KakaoMapHeaderProps = {
   isStackScreen: boolean;
-  searchQuery: string;
   selectedMedicalFilter: MedicalFilter;
   onBackPress: () => void;
-  onClearSearch: () => void;
   onFilterChange: (filter: MedicalFilter) => void;
   onOpenAedGuide: () => void;
-  onSearchQueryChange: (query: string) => void;
 };
 
 const MEDICAL_FILTERS: ReadonlyArray<{
@@ -27,13 +24,10 @@ const MEDICAL_FILTERS: ReadonlyArray<{
 
 export const KakaoMapHeader = ({
   isStackScreen,
-  searchQuery,
   selectedMedicalFilter,
   onBackPress,
-  onClearSearch,
   onFilterChange,
   onOpenAedGuide,
-  onSearchQueryChange,
 }: KakaoMapHeaderProps): React.JSX.Element => (
   <View
     className="absolute left-0 right-0 top-0 z-10 px-4 pb-3 pt-2"
@@ -70,31 +64,6 @@ export const KakaoMapHeader = ({
           </Pressable>
         </View>
       </View>
-    </View>
-
-    <View className="mt-2 min-h-[52px] flex-row items-center rounded-2xl border border-authInputBorder bg-white px-4 shadow-sm">
-      <View className="h-4 w-4 rounded-full border-2 border-gray">
-        <View className="absolute -bottom-1 -right-1 h-2 w-0.5 rotate-[-45deg] rounded-full bg-gray" />
-      </View>
-      <TextInput
-        accessibilityLabel="AED와 병원 검색"
-        className="ml-3 flex-1 py-0 text-body font-suitRegular text-black"
-        onChangeText={onSearchQueryChange}
-        placeholder="주변 장소명·주소로 검색"
-        placeholderTextColor="#7F8389"
-        returnKeyType="search"
-        value={searchQuery}
-      />
-      {searchQuery ? (
-        <Pressable
-          accessibilityLabel="검색어 지우기"
-          accessibilityRole="button"
-          className="h-11 w-11 items-center justify-center"
-          onPress={onClearSearch}
-        >
-          <Text className="text-[24px] text-gray">×</Text>
-        </Pressable>
-      ) : null}
     </View>
 
     <View className="mt-2 flex-row">

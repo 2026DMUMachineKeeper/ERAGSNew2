@@ -19,16 +19,19 @@ import { GuideHeader } from '../components/EmergencyGuide/GuideHeader';
 import { GuideNextButton } from '../components/EmergencyGuide/GuideNextButton';
 import { StepDetail } from '../components/EmergencyGuide/StepDetail';
 import { AssessmentOnlyModal } from './emergencyGuide/components/AssessmentOnlyModal';
+import { CompoundGuideStatus } from './emergencyGuide/components/CompoundGuideStatus';
+import { CompoundGuideSession } from './emergencyGuide/components/CompoundGuideSession';
+import { EmergencyCallNotice } from './emergencyGuide/components/EmergencyCallNotice';
 import {
   EmergencyGuideRequestError,
   getEmergencyGuideErrorMessage,
   getEmergencyGuideImageUrl,
   retryEmergencyGuide,
-  requestTtsVoiceDataInstallation,
-  speakTts,
-  stopTts,
 } from '../services';
 import { useEmergencyGuideStore } from '../store';
+import { useEmergencyGuideTts } from '@/hooks/useEmergencyGuideTts';
+import { useSingleGuideCompletion } from '@/hooks/useSingleGuideCompletion';
+import { FIRST_AID_CATEGORIES, SERVER_SYMPTOM_ID_BY_CATEGORY } from '@/constants';
 import type { EmergencyGuideTreatmentStep } from '../types';
 
 type EmergencyGuideProps = NativeStackScreenProps<
@@ -82,6 +85,7 @@ const toServerGuideRuntimeStep = (
 
 export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const storedGuide = useEmergencyGuideStore(state => state.guide);
+  const storedInput = useEmergencyGuideStore(state => state.input);
   const storedMainLabel = useEmergencyGuideStore(state => state.mainLabel);
   const storedSubtypeLabel = useEmergencyGuideStore(
     state => state.subtypeLabel,
@@ -111,14 +115,9 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   const guide = storedGuide;
   const mainLabel = storedMainLabel;
   const subtypeLabel = storedSubtypeLabel;
-  const lastSpokenMessageRef = React.useRef('');
   const isStartingNewRequestRef = React.useRef(false);
-  const shouldRetryTtsAfterInstallationRef = React.useRef(false);
-  // 음성 재생에 한 번 실패하면 단계마다 같은 안내 창이 뜨지 않도록 자동 재생을 멈춥니다.
-  const isTtsUnavailableRef = React.useRef(false);
-  const hasShownTtsErrorAlertRef = React.useRef(false);
-  const [ttsRetryCount, setTtsRetryCount] = React.useState(0);
   const [isRetrying, setIsRetrying] = React.useState(false);
+  const { isCompleting, handleComplete } = useSingleGuideCompletion(navigation);
   // 진행 중인 재시도 요청입니다. 연타를 막고 화면을 떠날 때 취소하는 데 씁니다.
   const retryControllerRef = React.useRef<AbortController | null>(null);
 
@@ -133,7 +132,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     .slice(0, visibleStepCount)
     .map(toGuideRuntimeStep);
   const serverSteps =
-    guide?.status === 'ASSESSMENT_ONLY'
+    guide?.compound || guide?.status === 'ASSESSMENT_ONLY'
       ? []
       : guide?.treatment.steps.map(toServerGuideRuntimeStep) ?? [];
   const steps = guide ? serverSteps : fallbackSteps;
@@ -162,91 +161,15 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     completedStepIds.includes(currentStep.stepId);
   const currentInstruction = currentStep?.instruction?.trim() ?? '';
 
-  React.useEffect(() => {
-    const subscription = AppState.addEventListener('change', state => {
-      if (state === 'active' && shouldRetryTtsAfterInstallationRef.current) {
-        shouldRetryTtsAfterInstallationRef.current = false;
-        isTtsUnavailableRef.current = false;
-        lastSpokenMessageRef.current = '';
-        setTtsRetryCount(count => count + 1);
-      }
-    });
-    return () => subscription.remove();
-  }, []);
-
-  React.useEffect(() => {
-    if (
-      isStartingNewRequestRef.current ||
-      isTtsUnavailableRef.current ||
-      !currentInstruction ||
-      lastSpokenMessageRef.current === currentInstruction
-    ) {
-      return undefined;
-    }
-
-    lastSpokenMessageRef.current = currentInstruction;
-    const speechController = new AbortController();
-
-    const speakCurrentStep = async (): Promise<void> => {
-      try {
-        await speakTts(currentInstruction, speechController.signal);
-      } catch (error) {
-        if (speechController.signal.aborted) {
-          return;
-        }
-        console.error('[EmergencyGuideScreen] TTS 자동 재생 실패:', error);
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === 'lang_missing_data'
-        ) {
-          // 음성 데이터가 없으면 설치 전까지는 실패가 반복되므로 자동 재생을 멈춥니다.
-          isTtsUnavailableRef.current = true;
-          Alert.alert(
-            '한국어 음성 데이터가 필요해요',
-            '한국어 음성 데이터를 설치한 뒤 돌아오면 음성 안내를 다시 시도합니다. 설치 전에도 화면의 처치 안내를 계속 확인할 수 있습니다.',
-            [
-              { text: '텍스트로 계속', style: 'cancel' },
-              {
-                text: '음성 데이터 설치',
-                onPress: async (): Promise<void> => {
-                  shouldRetryTtsAfterInstallationRef.current = true;
-                  try {
-                    await requestTtsVoiceDataInstallation();
-                  } catch (installationError) {
-                    shouldRetryTtsAfterInstallationRef.current = false;
-                    console.warn('[EmergencyGuideScreen] 음성 데이터 설치 화면 열기 실패:', installationError);
-                    Alert.alert(
-                      '음성 데이터 설치 안내',
-                      '설치 화면을 열지 못했습니다. 기기의 설정에서 텍스트 음성 변환을 찾아 한국어 음성 데이터를 설치해 주세요.',
-                    );
-                  }
-                },
-              },
-            ],
-          );
-          return;
-        }
-        // 일시적 오류(오디오 포커스 등)는 다음 단계에서 다시 시도하되, 안내 창은 한 번만 띄웁니다.
-        if (!hasShownTtsErrorAlertRef.current) {
-          hasShownTtsErrorAlertRef.current = true;
-          Alert.alert('음성 재생 실패', '기기의 음성 합성 설정을 확인해 주세요.');
-        }
-      }
-    };
-
-    speakCurrentStep();
-
-    return () => {
-      speechController.abort();
-      stopTts().catch(error => {
-        console.warn('[EmergencyGuideScreen] TTS 정지 실패:', error);
-      });
-    };
-  }, [currentInstruction, ttsRetryCount]);
+  useEmergencyGuideTts({
+    instruction: currentInstruction,
+    shouldSkipRef: isStartingNewRequestRef,
+  });
 
   const handleStopPress = (hasCompletedCurrentStep: boolean): void => {
+    if (useEmergencyGuideStore.getState().isCompletingSingleGuide) {
+      return;
+    }
     if (!hasCompletedCurrentStep && completedStepIds.length === 0) {
       resetGuide();
       navigation.reset({
@@ -265,11 +188,14 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleNextStep = (): void => {
-    if (!currentStep) {
+    if (
+      !currentStep ||
+      useEmergencyGuideStore.getState().isCompletingSingleGuide
+    ) {
       return;
     }
 
-    const handleConfirmCompletion = (): void => {
+    const handleConfirmCompletion = async (): Promise<void> => {
       markStepCompleted(currentStep.stepId);
 
       if (!isLastStep) {
@@ -277,8 +203,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         return;
       }
 
-      setHandoverStatus('COMPLETED');
-      navigation.replace('QRCode');
+      await handleComplete();
     };
 
     if (isCurrentStepCompleted) {
@@ -298,7 +223,10 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
   };
 
   const handleBackStep = () => {
-    if (currentStepIndex > 0) {
+    if (
+      currentStepIndex > 0 &&
+      !useEmergencyGuideStore.getState().isCompletingSingleGuide
+    ) {
       moveToPreviousStep();
     }
   };
@@ -355,14 +283,108 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
     resetGuide();
     navigation.popTo('FirstAid');
   };
+  const handleContinueQuestionsPress = (): void => {
+    const input = useEmergencyGuideStore.getState().input;
+    if (!input) {
+      handleNewRequestPress();
+      return;
+    }
+    const mainId = input.mainId ?? FIRST_AID_CATEGORIES.find(
+      item => SERVER_SYMPTOM_ID_BY_CATEGORY[item.id] === guide?.assessment?.categoryCode,
+    )?.id ?? FIRST_AID_CATEGORIES[0].id;
+    isStartingNewRequestRef.current = true;
+    resetGuide();
+    navigation.replace('FirstAidDetail', {
+      mainId,
+      continuation: { ...input, mainId },
+    });
+  };
 
-  if (guide?.status === 'ASSESSMENT_ONLY') {
+  const shouldConfirmCompound =
+    guide?.status !== 'COMPLETE' &&
+    !guide?.compound &&
+    guide?.treatment.steps.length === 0 &&
+    !!guide.assessment?.missingInputs.includes(
+      'MULTIPLE_CATEGORIES_REQUIRE_COMPOUND',
+    );
+  const handleConfirmCompoundPress = (): void => {
+    const input = useEmergencyGuideStore.getState().input;
+    isStartingNewRequestRef.current = true;
+    resetGuide();
+    navigation.replace('FirstAidDetail', {
+      isCompoundIntake: true,
+      ...(input ? { continuation: input } : {}),
+    });
+  };
+
+  if (guide?.compound) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
+        {guide.compound.schemaVersion === '2' && guide.sessionId ? (
+          <CompoundGuideSession
+            key={guide.sessionId}
+            sessionId={guide.sessionId}
+            compound={guide.compound}
+            onStopped={() => {
+              const saved = useEmergencyGuideStore.getState();
+              if (saved.guide?.sessionId !== guide.sessionId) {
+                return;
+              }
+              if (!saved.compoundSnapshot?.progress?.completedStepIds.length) {
+                resetGuide();
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }],
+                });
+                return;
+              }
+              setHandoverStatus('IN_PROGRESS');
+              navigation.replace('QRCode');
+            }}
+            onFinished={() => {
+              if (
+                useEmergencyGuideStore.getState().guide?.sessionId ===
+                guide.sessionId
+              ) {
+                setHandoverStatus('COMPLETED');
+                navigation.replace('QRCode');
+              }
+            }}
+            onNewRequest={
+              guide.compound.status === 'ASSESSMENT_ONLY' ||
+              guide.compound.status === 'GUIDE_PENDING'
+                ? handleConfirmCompoundPress
+                : handleNewRequestPress
+            }
+            onClose={() => navigation.goBack()}
+          />
+        ) : (
+          <CompoundGuideStatus
+            compound={guide.compound}
+            onNewRequest={
+              guide.compound.status === 'ASSESSMENT_ONLY' ||
+              guide.compound.status === 'GUIDE_PENDING'
+                ? handleConfirmCompoundPress
+                : handleNewRequestPress
+            }
+            onClose={() => navigation.goBack()}
+          />
+        )}
+      </SafeAreaView>
+    );
+  }
+
+  if (guide?.status === 'ASSESSMENT_ONLY' || shouldConfirmCompound) {
     return (
       <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
         <AssessmentOnlyModal
           assessment={guide.assessment}
           onClose={() => navigation.goBack()}
-          onNewRequest={handleNewRequestPress}
+          onNewRequest={handleContinueQuestionsPress}
+          onContinueQuestions={storedInput ? handleContinueQuestionsPress : undefined}
+          onConfirmCompound={
+            shouldConfirmCompound ? handleConfirmCompoundPress : undefined
+          }
         />
       </SafeAreaView>
     );
@@ -381,6 +403,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         />
 
         <View className="flex-1 items-center justify-center px-6">
+          <EmergencyCallNotice assessment={guide.assessment} variant="status" />
           <Text className="text-center text-title2 font-suitBold text-black">
             {guide.assessment?.summary ?? '응급처치 안내를 준비하고 있습니다.'}
           </Text>
@@ -427,6 +450,7 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
         className="flex-1 px-4 pt-4"
         showsVerticalScrollIndicator={false}
       >
+        <EmergencyCallNotice assessment={guide?.assessment ?? null} />
         <View className="pb-4">
           <StepDetail
             step={currentStep}
@@ -438,7 +462,8 @@ export function EmergencyGuideScreen({ navigation }: EmergencyGuideProps) {
 
       <View className="bg-background px-5 pb-5">
         <GuideNextButton
-          title={isLastStep ? '완료' : '다음 단계'}
+          title={isCompleting ? '완료 처리 중' : isLastStep ? '완료' : '다음 단계'}
+          isDisabled={isCompleting}
           onPress={handleNextStep}
         />
       </View>

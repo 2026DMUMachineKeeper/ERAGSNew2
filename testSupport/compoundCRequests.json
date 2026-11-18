@@ -1,0 +1,208 @@
+{
+  "burn": {
+    "requestId": "TEST_ONLY_C_qr-burn",
+    "schemaVersion": "2",
+    "language": "ko-KR",
+    "patientContext": {
+      "consciousness": "CONSCIOUS",
+      "ageGroup": "ADULT"
+    },
+    "injuries": [
+      {
+        "injuryId": "injury-1",
+        "categoryCode": "BURN",
+        "confirmed": true,
+        "location": {
+          "scope": "LOCALIZED",
+          "description": "TEST_ONLY_FIRST_SITE"
+        },
+        "observations": [
+          "QA_FACT_V1:HELPER_AVAILABLE=YES",
+          "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+          "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+          "QA_FACT_V1:THERMAL_CAUSE=YES",
+          "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+          "QA_FACT_V1:BURN_COOLING_COMPLETED=NO",
+          "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+          "QA_FACT_V1:BURN_MEDICINES_AVAILABLE=NO",
+          "QA_FACT_V1:FLOWING_COOL_WATER_READY=YES",
+          "QA_FACT_V1:BURN_COOLING_STARTED=NO",
+          "QA_FACT_V1:BURN_SKIN_INTACT=YES",
+          "QA_FACT_V1:BURN_HIGH_RISK_CONTEXT=NO",
+          "QA_FACT_V1:BURN_MEDICAL_EVALUATION_PLANNED=YES",
+          "QA_FACT_V1:BURN_PROTECTIVE_CLOTH_SUITABLE=YES",
+          "QA_FACT_V1:HEAT_SOURCE_OR_CONSTRICTING_ITEMS_REMAIN=NO",
+          "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO"
+        ],
+        "questionnaire": [
+          {
+            "questionId": "Q1_IMMEDIATE_DANGER",
+            "answerIds": ["NONE"]
+          },
+          {
+            "questionId": "U1_BURN_LOCATION_CAUSE",
+            "answerIds": ["BURN_SMALL_AREA"]
+          },
+          {
+            "questionId": "U2_BURN_SKIN_STATE",
+            "answerIds": ["RED_PAINFUL"]
+          },
+          {
+            "questionId": "C1_AGE_GROUP",
+            "answerIds": ["ADULT"]
+          }
+        ]
+      },
+      {
+        "injuryId": "injury-2",
+        "categoryCode": "BLEEDING",
+        "confirmed": true,
+        "location": {
+          "scope": "LOCALIZED",
+          "description": "TEST_ONLY_SECOND_SITE"
+        },
+        "observations": [
+          "QA_FACT_V1:PRESSURE_REQUIRED=NO",
+          "QA_FACT_V1:HELPER_AVAILABLE=YES",
+          "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+          "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+          "QA_FACT_V1:BLEEDING_STOPPED=YES",
+          "QA_FACT_V1:SMALL_SUPERFICIAL_WOUND=YES",
+          "QA_FACT_V1:WOUND_BITE=NO",
+          "QA_FACT_V1:WOUND_CONTAMINATION=NO",
+          "QA_FACT_V1:WOUND_INFECTION_SIGNS=NO",
+          "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+          "QA_FACT_V1:WOUND_CARE_STARTED=NO",
+          "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO"
+        ],
+        "questionnaire": [
+          {
+            "questionId": "Q1_IMMEDIATE_DANGER",
+            "answerIds": ["NONE"]
+          },
+          {
+            "questionId": "B1_BLEEDING_PATTERN",
+            "answerIds": ["BLEEDING_OOZING"]
+          },
+          {
+            "questionId": "B2_BLEEDING_RISKS",
+            "answerIds": ["NONE"]
+          },
+          {
+            "questionId": "C1_AGE_GROUP",
+            "answerIds": ["ADULT"]
+          }
+        ]
+      }
+    ],
+    "relations": [
+      {
+        "injuryIds": ["injury-1", "injury-2"],
+        "relation": "DIFFERENT",
+        "confirmed": true
+      }
+    ],
+    "evidenceBindings": {}
+  },
+  "fracture": {
+    "requestId": "TEST_ONLY_C_qr-fracture",
+    "schemaVersion": "2",
+    "language": "ko-KR",
+    "patientContext": {
+      "consciousness": "CONSCIOUS",
+      "ageGroup": "ADULT"
+    },
+    "injuries": [
+      {
+        "injuryId": "injury-1",
+        "categoryCode": "FRACTURE_BRUISE",
+        "confirmed": true,
+        "location": {
+          "scope": "LOCALIZED",
+          "description": "TEST_ONLY_FIRST_SITE"
+        },
+        "observations": [
+          "다친 부위 전체의 피부가 온전합니다.",
+          "QA_FACT_V1:HELPER_AVAILABLE=YES",
+          "QA_FACT_V1:SPLINT_AVAILABLE=NO",
+          "QA_FACT_V1:LIMB_ONLY=YES",
+          "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+          "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+          "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO",
+          "QA_FACT_V1:FIXATION_TOOLS_AVAILABLE=NO",
+          "QA_FACT_V1:FRACTURE_REST_POSITION_CONFIRMED=YES",
+          "QA_FACT_V1:FRACTURE_MANUAL_SUPPORT_REQUIRED=NO",
+          "QA_FACT_V1:OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT=YES",
+          "QA_FACT_V1:HELP_CALL_DEVICE_READY=YES"
+        ],
+        "questionnaire": [
+          {
+            "questionId": "Q1_IMMEDIATE_DANGER",
+            "answerIds": ["NONE"]
+          },
+          {
+            "questionId": "F1_INJURY_STATE",
+            "answerIds": ["DEFORMITY"]
+          },
+          {
+            "questionId": "F2_DISTAL_STATE",
+            "answerIds": ["NORMAL_DISTAL"]
+          },
+          {
+            "questionId": "C1_AGE_GROUP",
+            "answerIds": ["ADULT"]
+          }
+        ]
+      },
+      {
+        "injuryId": "injury-2",
+        "categoryCode": "BLEEDING",
+        "confirmed": true,
+        "location": {
+          "scope": "LOCALIZED",
+          "description": "TEST_ONLY_SECOND_SITE"
+        },
+        "observations": [
+          "QA_FACT_V1:PRESSURE_REQUIRED=NO",
+          "QA_FACT_V1:HELPER_AVAILABLE=YES",
+          "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+          "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+          "QA_FACT_V1:BLEEDING_STOPPED=YES",
+          "QA_FACT_V1:SMALL_SUPERFICIAL_WOUND=YES",
+          "QA_FACT_V1:WOUND_BITE=NO",
+          "QA_FACT_V1:WOUND_CONTAMINATION=NO",
+          "QA_FACT_V1:WOUND_INFECTION_SIGNS=NO",
+          "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+          "QA_FACT_V1:WOUND_CARE_STARTED=NO",
+          "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO"
+        ],
+        "questionnaire": [
+          {
+            "questionId": "Q1_IMMEDIATE_DANGER",
+            "answerIds": ["NONE"]
+          },
+          {
+            "questionId": "B1_BLEEDING_PATTERN",
+            "answerIds": ["BLEEDING_OOZING"]
+          },
+          {
+            "questionId": "B2_BLEEDING_RISKS",
+            "answerIds": ["NONE"]
+          },
+          {
+            "questionId": "C1_AGE_GROUP",
+            "answerIds": ["ADULT"]
+          }
+        ]
+      }
+    ],
+    "relations": [
+      {
+        "injuryIds": ["injury-1", "injury-2"],
+        "relation": "DIFFERENT",
+        "confirmed": true
+      }
+    ],
+    "evidenceBindings": {}
+  }
+}

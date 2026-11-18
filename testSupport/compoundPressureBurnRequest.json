@@ -1,0 +1,105 @@
+{
+  "requestId": "pressure-burn-positive",
+  "schemaVersion": "2",
+  "language": "ko-KR",
+  "patientContext": {
+    "consciousness": "CONSCIOUS",
+    "ageGroup": "ADULT"
+  },
+  "injuries": [
+    {
+      "injuryId": "injury-1",
+      "categoryCode": "BLEEDING",
+      "confirmed": true,
+      "location": {
+        "scope": "LOCALIZED",
+        "description": "왼쪽 전완"
+      },
+      "observations": [
+        "QA_FACT_V1:BLEEDING_CONTROLLED_WITH_PRESSURE=YES",
+        "QA_FACT_V1:BLEEDING_DRESSING_ALREADY_APPLIED=NO",
+        "QA_FACT_V1:BLEEDING_BANDAGE_AVAILABLE=NO",
+        "QA_FACT_V1:CONTINUOUS_PRESSURE_HELPER_READY=YES",
+        "QA_FACT_V1:PRESSURE_REQUIRED=YES",
+        "QA_FACT_V1:HELPER_AVAILABLE=YES",
+        "QA_FACT_V1:WOUND_BITE=NO",
+        "QA_FACT_V1:WOUND_CONTAMINATION=NO",
+        "QA_FACT_V1:WOUND_INFECTION_SIGNS=NO",
+        "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+        "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+        "QA_FACT_V1:WOUND_CARE_STARTED=NO",
+        "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO"
+      ],
+      "questionnaire": [
+        {
+          "questionId": "Q1_IMMEDIATE_DANGER",
+          "answerIds": ["NONE"]
+        },
+        {
+          "questionId": "B1_BLEEDING_PATTERN",
+          "answerIds": ["BLEEDING_OOZING"]
+        },
+        {
+          "questionId": "B2_BLEEDING_RISKS",
+          "answerIds": ["NONE"]
+        },
+        {
+          "questionId": "C1_AGE_GROUP",
+          "answerIds": ["ADULT"]
+        }
+      ]
+    },
+    {
+      "injuryId": "injury-2",
+      "categoryCode": "BURN",
+      "confirmed": true,
+      "location": {
+        "scope": "LOCALIZED",
+        "description": "오른팔"
+      },
+      "observations": [
+        "QA_FACT_V1:BURN_NONADHERENT_GAUZE_CONFIRMED=YES",
+        "QA_FACT_V1:BURN_BLISTERS_INTACT=YES",
+        "QA_FACT_V1:HELPER_AVAILABLE=YES",
+        "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+        "QA_FACT_V1:THERMAL_CAUSE=YES",
+        "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+        "QA_FACT_V1:BURN_COOLING_COMPLETED=NO",
+        "QA_FACT_V1:SAFE_IMMEDIATE_TRANSPORT_AVAILABLE=YES",
+        "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+        "QA_FACT_V1:BURN_MEDICINES_AVAILABLE=NO",
+        "QA_FACT_V1:FLOWING_COOL_WATER_READY=YES",
+        "QA_FACT_V1:BURN_COOLING_STARTED=NO",
+        "QA_FACT_V1:BURN_HIGH_RISK_CONTEXT=NO",
+        "QA_FACT_V1:BURN_MEDICAL_EVALUATION_PLANNED=YES",
+        "QA_FACT_V1:HEAT_SOURCE_OR_CONSTRICTING_ITEMS_REMAIN=NO",
+        "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO"
+      ],
+      "questionnaire": [
+        {
+          "questionId": "Q1_IMMEDIATE_DANGER",
+          "answerIds": ["NONE"]
+        },
+        {
+          "questionId": "U1_BURN_LOCATION_CAUSE",
+          "answerIds": ["BURN_SMALL_AREA"]
+        },
+        {
+          "questionId": "U2_BURN_SKIN_STATE",
+          "answerIds": ["BLISTER"]
+        },
+        {
+          "questionId": "C1_AGE_GROUP",
+          "answerIds": ["ADULT"]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "injuryIds": ["injury-1", "injury-2"],
+      "relation": "DIFFERENT",
+      "confirmed": true
+    }
+  ]
+}

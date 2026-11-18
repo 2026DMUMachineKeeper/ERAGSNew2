@@ -1,0 +1,565 @@
+{
+  "success": true,
+  "data": {
+    "sessionId": "aabc8784-0e7a-47ba-8c16-9686e6698f20",
+    "requestId": "LOCAL_FE_HANDOFF_2026_10_19_03-closed-fracture-and-wound",
+    "status": "COMPLETE",
+    "patientContext": {
+      "consciousness": "CONSCIOUS",
+      "ageGroup": "ADULT",
+      "redFlags": [],
+      "call119Required": false,
+      "display": {
+        "locale": "ko-KR",
+        "consciousness": "의식 있음",
+        "ageGroup": "성인",
+        "redFlags": []
+      }
+    },
+    "assessment": {
+      "assessmentId": "3ab217cc-f1de-4bb9-aa75-e80ec1481b6b",
+      "categoryCode": "FRACTURE_BRUISE",
+      "subtypeCode": "FRACTURE_CLOSED",
+      "severityCode": "MEDIUM",
+      "confidence": 0.5,
+      "redFlags": [],
+      "call119Required": true,
+      "reasons": [
+        "유형은 확인된 손상 입력을 사용했습니다.",
+        "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다.",
+        "다친 부위 전체의 피부가 온전하다는 확인과 골절 의심 소견을 기존 폐쇄성 골절 의심 경로로 분류했습니다. 골절 확진이 아니며 실행 조건은 별도로 확인합니다."
+      ],
+      "missingInputs": [],
+      "display": {
+        "locale": "ko-KR",
+        "category": "골절 및 타박상",
+        "subtype": "폐쇄성 골절",
+        "severity": "중등도",
+        "redFlags": [],
+        "missingInputs": [],
+        "reasons": [
+          "유형은 확인된 손상 입력을 사용했습니다.",
+          "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다.",
+          "다친 부위 전체의 피부가 온전하다는 확인과 골절 의심 소견을 기존 폐쇄성 골절 의심 경로로 분류했습니다. 골절 확진이 아니며 실행 조건은 별도로 확인합니다."
+        ]
+      }
+    },
+    "treatment": {
+      "routeCode": "C",
+      "modelVersion": null,
+      "steps": []
+    },
+    "compound": {
+      "schemaVersion": "2",
+      "requestId": "LOCAL_FE_HANDOFF_2026_10_19_03-closed-fracture-and-wound",
+      "relations": [
+        {
+          "injuryIds": [
+            "injury-1",
+            "injury-2"
+          ],
+          "relation": "DIFFERENT",
+          "confirmed": true
+        }
+      ],
+      "sessionId": "aabc8784-0e7a-47ba-8c16-9686e6698f20",
+      "injuries": [
+        {
+          "injuryId": "injury-1",
+          "categoryCode": "FRACTURE_BRUISE",
+          "confirmed": true,
+          "location": {
+            "scope": "LOCALIZED",
+            "description": "왼쪽 팔의 별도 손상 부위"
+          },
+          "observations": [
+            "다친 부위 전체의 피부가 온전합니다.",
+            "QA_FACT_V1:HELPER_AVAILABLE=YES",
+            "QA_FACT_V1:SPLINT_AVAILABLE=NO",
+            "QA_FACT_V1:LIMB_ONLY=YES",
+            "QA_FACT_V1:SYMPTOMS_WORSENING=NO",
+            "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+            "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO",
+            "QA_FACT_V1:FIXATION_TOOLS_AVAILABLE=NO",
+            "QA_FACT_V1:FRACTURE_REST_POSITION_CONFIRMED=YES",
+            "QA_FACT_V1:FRACTURE_MANUAL_SUPPORT_REQUIRED=NO",
+            "QA_FACT_V1:OTHER_WOUND_ACCESSIBLE_WITHOUT_MOVEMENT=YES",
+            "QA_FACT_V1:HELP_CALL_DEVICE_READY=YES"
+          ],
+          "questionnaire": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "F1_INJURY_STATE",
+              "answerIds": [
+                "DEFORMITY"
+              ]
+            },
+            {
+              "questionId": "F2_DISTAL_STATE",
+              "answerIds": [
+                "NORMAL_DISTAL"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ],
+          "sourceCodes": {
+            "categoryCode": "FRACTURE_BRUISE",
+            "subtypeCode": "FRACTURE_CLOSED"
+          },
+          "assessment": {
+            "assessmentId": "3ab217cc-f1de-4bb9-aa75-e80ec1481b6b",
+            "categoryCode": "FRACTURE_BRUISE",
+            "subtypeCode": "FRACTURE_CLOSED",
+            "severityCode": "MEDIUM",
+            "confidence": 0.5,
+            "redFlags": [],
+            "call119Required": false,
+            "reasons": [
+              "유형은 확인된 손상 입력을 사용했습니다.",
+              "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다.",
+              "다친 부위 전체의 피부가 온전하다는 확인과 골절 의심 소견을 기존 폐쇄성 골절 의심 경로로 분류했습니다. 골절 확진이 아니며 실행 조건은 별도로 확인합니다."
+            ],
+            "missingInputs": [],
+            "display": {
+              "locale": "ko-KR",
+              "category": "골절 및 타박상",
+              "subtype": "폐쇄성 골절",
+              "severity": "중등도",
+              "redFlags": [],
+              "missingInputs": [],
+              "reasons": [
+                "유형은 확인된 손상 입력을 사용했습니다.",
+                "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다.",
+                "다친 부위 전체의 피부가 온전하다는 확인과 골절 의심 소견을 기존 폐쇄성 골절 의심 경로로 분류했습니다. 골절 확진이 아니며 실행 조건은 별도로 확인합니다."
+              ]
+            }
+          },
+          "guide": {
+            "categoryCode": "FRACTURE_BRUISE",
+            "dbSubtypeCode": "FRACTURE_CLOSED",
+            "routeCode": "C",
+            "call119Required": false,
+            "redFlags": [],
+            "steps": [
+              {
+                "stepId": 61,
+                "stepNo": 1,
+                "instruction": "골절이 의심됩니다. 뼈를 직접 맞추려고 하거나 다친 부위를 억지로 구부리지 마세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "frac_closed_no_touch.png",
+                "imageUrl": "http://13.125.213.48:4000/images/frac_closed_no_touch.png"
+              },
+              {
+                "stepId": 62,
+                "stepNo": 2,
+                "instruction": "고정할 도구가 전혀 없으므로, 다친 부위를 움직이지 않도록 양손으로 가볍게 지지하거나 편안한 자세를 유지하세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "frac_closed_c_hold.png",
+                "imageUrl": "http://13.125.213.48:4000/images/frac_closed_c_hold.png"
+              },
+              {
+                "stepId": 63,
+                "stepNo": 3,
+                "instruction": "무리하게 이동하면 상태가 악화될 수 있으므로, 최대한 움직임을 최소화한 상태로 119에 도움을 요청하세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "frac_closed_c_119.png",
+                "imageUrl": "http://13.125.213.48:4000/images/frac_closed_c_119.png"
+              }
+            ],
+            "dbVersion": "QA_C_ROUTE_CAPTURE_923ab2c6b0318ad6",
+            "status": "APPROVED",
+            "display": {
+              "locale": "ko-KR",
+              "category": "골절 및 타박상",
+              "subtype": "폐쇄성 골절",
+              "status": "검토 승인",
+              "redFlags": []
+            }
+          },
+          "disposition": "ACTIVE",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "category": "골절 및 타박상",
+            "disposition": "실행 계획에 포함"
+          }
+        },
+        {
+          "injuryId": "injury-2",
+          "categoryCode": "BLEEDING",
+          "confirmed": true,
+          "location": {
+            "scope": "LOCALIZED",
+            "description": "오른쪽 팔의 별도 손상 부위"
+          },
+          "observations": [
+            "QA_FACT_V1:PRESSURE_REQUIRED=NO",
+            "QA_FACT_V1:HELPER_AVAILABLE=YES",
+            "QA_FACT_V1:CLEAN_WATER_AVAILABLE=YES",
+            "QA_FACT_V1:CLEAN_CLOTH_AVAILABLE=YES",
+            "QA_FACT_V1:BLEEDING_STOPPED=YES",
+            "QA_FACT_V1:SMALL_SUPERFICIAL_WOUND=YES",
+            "QA_FACT_V1:WOUND_BITE=NO",
+            "QA_FACT_V1:WOUND_CONTAMINATION=NO",
+            "QA_FACT_V1:WOUND_INFECTION_SIGNS=NO",
+            "QA_FACT_V1:INDEPENDENT_CARE_POSSIBLE=YES",
+            "QA_FACT_V1:WOUND_CARE_STARTED=NO",
+            "QA_FACT_V1:GUIDE_ACTIONS_ALREADY_PERFORMED=NO"
+          ],
+          "questionnaire": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "B1_BLEEDING_PATTERN",
+              "answerIds": [
+                "BLEEDING_OOZING"
+              ]
+            },
+            {
+              "questionId": "B2_BLEEDING_RISKS",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ],
+          "sourceCodes": {
+            "categoryCode": "BLEEDING",
+            "subtypeCode": "BLEEDING_MILD"
+          },
+          "assessment": {
+            "assessmentId": "3b21e79e-5519-4c80-9b4e-36bcc14391fe",
+            "categoryCode": "BLEEDING",
+            "subtypeCode": "BLEEDING_MILD",
+            "severityCode": "LOW",
+            "confidence": 0.5,
+            "redFlags": [],
+            "call119Required": false,
+            "reasons": [
+              "유형은 확인된 손상 입력을 사용했습니다.",
+              "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+            ],
+            "missingInputs": [],
+            "display": {
+              "locale": "ko-KR",
+              "category": "출혈",
+              "subtype": "경증 출혈",
+              "severity": "경증",
+              "redFlags": [],
+              "missingInputs": [],
+              "reasons": [
+                "유형은 확인된 손상 입력을 사용했습니다.",
+                "사용자 관찰 문구를 SM 음성 원문과 구분해 평가했습니다."
+              ]
+            }
+          },
+          "guide": {
+            "categoryCode": "BLEEDING",
+            "dbSubtypeCode": "BLEEDING_MILD",
+            "routeCode": null,
+            "call119Required": false,
+            "redFlags": [],
+            "steps": [
+              {
+                "stepId": 1,
+                "stepNo": 1,
+                "instruction": "흐르는 깨끗한 물이나 생리식염수로 상처 부위의 이물질을 깨끗하게 씻어내세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": null,
+                "requiredItemName": null,
+                "requiredQuantity": 0,
+                "requiredSlotId": null,
+                "imageResource": "bleed_mild_clean.png",
+                "imageUrl": "http://13.125.213.48:4000/images/bleed_mild_clean.png"
+              },
+              {
+                "stepId": 2,
+                "stepNo": 2,
+                "instruction": "물기를 깨끗하게 닦아낸 후 구급함의 [반창고]를 상처 부위에 알맞게 부착하세요.",
+                "checkpointQuestion": "처치를 완료하셨나요?",
+                "requiredItemId": 5,
+                "requiredItemName": "반창고",
+                "requiredQuantity": 1,
+                "requiredSlotId": null,
+                "imageResource": "bleed_mild_band.png",
+                "imageUrl": "http://13.125.213.48:4000/images/bleed_mild_band.png"
+              }
+            ],
+            "dbVersion": "QA_C_ROUTE_CAPTURE_923ab2c6b0318ad6",
+            "status": "APPROVED",
+            "display": {
+              "locale": "ko-KR",
+              "category": "출혈",
+              "subtype": "경증 출혈",
+              "status": "검토 승인",
+              "redFlags": []
+            }
+          },
+          "disposition": "ACTIVE",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "category": "출혈",
+            "disposition": "실행 계획에 포함"
+          }
+        }
+      ],
+      "patientContext": {
+        "consciousness": "CONSCIOUS",
+        "ageGroup": "ADULT",
+        "redFlags": [],
+        "call119Required": false,
+        "display": {
+          "locale": "ko-KR",
+          "consciousness": "의식 있음",
+          "ageGroup": "성인",
+          "redFlags": []
+        }
+      },
+      "planId": "0647f4cb-63e7-4fb6-bd31-b95fad98d008",
+      "status": "COMPLETE",
+      "authority": "BACKEND",
+      "inventoryConsumptionOwner": "BACKEND",
+      "inventorySnapshotId": "f6f08b0b-b40b-45ef-9262-585cbed9859e",
+      "redFlags": [],
+      "call119Required": true,
+      "policy": {
+        "policyId": "DRAFT_C_ROUTE_CLOSED_BLEEDING_MILD",
+        "version": "draft-c-route-1",
+        "dbVersion": "QA_C_ROUTE_CAPTURE_923ab2c6b0318ad6",
+        "variantId": "DRAFT_C_ROUTE_CLOSED_BLEEDING_MILD"
+      },
+      "execution": [
+        {
+          "executionStepId": "[\"0647f4cb-63e7-4fb6-bd31-b95fad98d008\",\"role-0-step-1\"]",
+          "instruction": "골절이 의심됩니다. 뼈를 직접 맞추려고 하거나 다친 부위를 억지로 구부리지 마세요.",
+          "sources": [
+            {
+              "injuryId": "injury-1",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 61
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"0647f4cb-63e7-4fb6-bd31-b95fad98d008\",\"role-0-step-2\"]",
+          "instruction": "고정할 도구가 전혀 없으므로, 다친 부위를 움직이지 않도록 양손으로 가볍게 지지하거나 편안한 자세를 유지하세요.",
+          "sources": [
+            {
+              "injuryId": "injury-1",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 62
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"0647f4cb-63e7-4fb6-bd31-b95fad98d008\",\"role-0-step-3\"]",
+          "instruction": "무리하게 이동하면 상태가 악화될 수 있으므로, 최대한 움직임을 최소화한 상태로 119에 도움을 요청하세요.",
+          "sources": [
+            {
+              "injuryId": "injury-1",
+              "categoryCode": "FRACTURE_BRUISE",
+              "stepId": 63
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"0647f4cb-63e7-4fb6-bd31-b95fad98d008\",\"role-1-step-1\"]",
+          "instruction": "흐르는 깨끗한 물이나 생리식염수로 상처 부위의 이물질을 깨끗하게 씻어내세요.",
+          "sources": [
+            {
+              "injuryId": "injury-2",
+              "categoryCode": "BLEEDING",
+              "stepId": 1
+            }
+          ],
+          "consumptionUnits": []
+        },
+        {
+          "executionStepId": "[\"0647f4cb-63e7-4fb6-bd31-b95fad98d008\",\"role-1-step-2\"]",
+          "instruction": "물기를 깨끗하게 닦아낸 후 구급함의 [반창고]를 상처 부위에 알맞게 부착하세요.",
+          "sources": [
+            {
+              "injuryId": "injury-2",
+              "categoryCode": "BLEEDING",
+              "stepId": 2
+            }
+          ],
+          "consumptionUnits": [
+            {
+              "unitId": "role-1-step-2-supply",
+              "itemId": 5,
+              "quantity": 1
+            }
+          ]
+        }
+      ],
+      "excludedSteps": [],
+      "allocations": [
+        {
+          "itemId": 5,
+          "quantity": 1
+        }
+      ],
+      "blockedReasons": [],
+      "display": {
+        "locale": "ko-KR",
+        "status": "가이드 생성 완료",
+        "redFlags": [],
+        "blockedReasons": []
+      }
+    },
+    "schemaVersion": "2",
+    "generatedAt": "2026-10-19T03:59:15.552Z",
+    "progress": {
+      "revision": 0,
+      "status": "IN_PROGRESS",
+      "currentStepId": "[\"0647f4cb-63e7-4fb6-bd31-b95fad98d008\",\"role-0-step-1\"]",
+      "completedStepIds": [],
+      "blockedReason": null,
+      "injuries": [
+        {
+          "injuryId": "injury-1",
+          "status": "IN_PROGRESS",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "status": "처치 진행 중"
+          }
+        },
+        {
+          "injuryId": "injury-2",
+          "status": "WAITING",
+          "deferredReason": null,
+          "display": {
+            "locale": "ko-KR",
+            "status": "처치 대기"
+          }
+        }
+      ],
+      "display": {
+        "locale": "ko-KR",
+        "status": "처치 진행 중"
+      }
+    },
+    "usedSupplies": [],
+    "evidenceByInjury": {
+      "injury-1": {
+        "voice": null,
+        "image": null,
+        "images": null,
+        "questionnaire": {
+          "answers": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "F1_INJURY_STATE",
+              "answerIds": [
+                "DEFORMITY"
+              ]
+            },
+            {
+              "questionId": "F2_DISTAL_STATE",
+              "answerIds": [
+                "NORMAL_DISTAL"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ]
+        },
+        "errors": [],
+        "questionnaireValidation": {
+          "source": "SM",
+          "schemaVersion": "1.2.0"
+        }
+      },
+      "injury-2": {
+        "voice": null,
+        "image": null,
+        "images": null,
+        "questionnaire": {
+          "answers": [
+            {
+              "questionId": "Q1_IMMEDIATE_DANGER",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "B1_BLEEDING_PATTERN",
+              "answerIds": [
+                "BLEEDING_OOZING"
+              ]
+            },
+            {
+              "questionId": "B2_BLEEDING_RISKS",
+              "answerIds": [
+                "NONE"
+              ]
+            },
+            {
+              "questionId": "C1_AGE_GROUP",
+              "answerIds": [
+                "ADULT"
+              ]
+            }
+          ]
+        },
+        "errors": [],
+        "questionnaireValidation": {
+          "source": "SM",
+          "schemaVersion": "1.2.0"
+        }
+      }
+    },
+    "evidence": null,
+    "error": null,
+    "display": {
+      "locale": "ko-KR",
+      "status": "가이드 생성 완료"
+    }
+  }
+}
