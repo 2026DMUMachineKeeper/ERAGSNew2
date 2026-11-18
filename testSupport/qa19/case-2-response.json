@@ -155,7 +155,7 @@
                 "requiredQuantity": 0,
                 "requiredSlotId": null,
                 "imageResource": "bleed_mild_clean.png",
-                "imageUrl": "http://13.125.213.48:4000/images/bleed_mild_clean.png"
+                "imageUrl": "http://api.example.com/images/bleed_mild_clean.png"
               },
               {
                 "stepId": 2,
@@ -167,7 +167,7 @@
                 "requiredQuantity": 1,
                 "requiredSlotId": null,
                 "imageResource": "bleed_mild_band.png",
-                "imageUrl": "http://13.125.213.48:4000/images/bleed_mild_band.png"
+                "imageUrl": "http://api.example.com/images/bleed_mild_band.png"
               }
             ],
             "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",
@@ -281,7 +281,7 @@
                 "requiredQuantity": 0,
                 "requiredSlotId": null,
                 "imageResource": "bleed_mild_clean.png",
-                "imageUrl": "http://13.125.213.48:4000/images/bleed_mild_clean.png"
+                "imageUrl": "http://api.example.com/images/bleed_mild_clean.png"
               },
               {
                 "stepId": 2,
@@ -293,7 +293,7 @@
                 "requiredQuantity": 1,
                 "requiredSlotId": null,
                 "imageResource": "bleed_mild_band.png",
-                "imageUrl": "http://13.125.213.48:4000/images/bleed_mild_band.png"
+                "imageUrl": "http://api.example.com/images/bleed_mild_band.png"
               }
             ],
             "dbVersion": "QA_CAPTURE_e0da91b4040a4a9d",

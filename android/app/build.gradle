@@ -150,3 +150,44 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+/**
+ * release 빌드용 network_security_config.xml 을 .env 의 API_BASE_URL 로 생성합니다.
+ * 서버 주소를 저장소에 커밋하지 않기 위해 빌드 시점에 만듭니다.
+ * debug 빌드는 src/debug/res/xml/network_security_config.xml 을 그대로 사용합니다.
+ */
+def nscResDir = file("$buildDir/generated/nsc/res")
+def apiBaseUrl = (project.env?.get("API_BASE_URL") ?: "").trim()
+def apiHost = ""
+if (apiBaseUrl) {
+    try {
+        apiHost = new URI(apiBaseUrl).host ?: ""
+    } catch (ignored) {
+        logger.warn("API_BASE_URL 형식이 올바르지 않습니다: ${apiBaseUrl}")
+    }
+}
+def apiDomainConfig = apiHost && apiBaseUrl.startsWith("http://") ? """
+    <!-- TODO: 백엔드가 HTTPS로 전환되면 이 항목은 자동으로 빠집니다. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">${apiHost}</domain>
+    </domain-config>
+""" : ""
+
+new File(nscResDir, "xml").mkdirs()
+new File(nscResDir, "xml/network_security_config.xml").text = """<?xml version="1.0" encoding="utf-8"?>
+<!-- 자동 생성 파일입니다. android/app/build.gradle 을 수정하세요. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+${apiDomainConfig}
+    <!--
+      카카오맵 WebView는 http://localhost를 baseUrl로 쓰기 때문에
+      SDK가 지도 스크립트와 타일을 HTTP로 불러올 수 있습니다.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">daumcdn.net</domain>
+        <domain includeSubdomains="true">kakao.com</domain>
+    </domain-config>
+</network-security-config>
+"""
+
+android.sourceSets.release.res.srcDirs += nscResDir
